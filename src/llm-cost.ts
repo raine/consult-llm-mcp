@@ -1,5 +1,5 @@
 import { CompletionUsage } from 'openai/resources.js'
-import { SupportedChatModel } from './schema.js'
+import { type SupportedChatModel } from './schema.js'
 
 // Model pricing data
 type ModelPricing = {

@@ -1,11 +1,11 @@
 import OpenAI from 'openai'
 import { config } from './config.js'
 import { z } from 'zod/v4'
-import { SupportedChatModel } from './schema.js'
+import { SupportedChatModel, type SupportedChatModel as SupportedChatModelType } from './schema.js'
 
 const clients: { openai?: OpenAI; gemini?: OpenAI; deepseek?: OpenAI } = {}
 
-export function getClientForModel(model: SupportedChatModel | string): {
+export function getClientForModel(model: SupportedChatModelType | string): {
   client: OpenAI
 } {
   if (model.startsWith('gpt-') || model === 'o3') {
