@@ -24,16 +24,18 @@ export const ConsultLlmArgs = z.object({
 
 export const toolSchema = {
   name: 'consult_llm',
-  description:
-    'Ask a more powerful AI for help with complex problems. Write your problem description in a markdown file and pass relevant code files as context.',
+  description: `Ask a more powerful AI for help with complex problems. Write your problem description in a markdown file and pass relevant code files as context. 
+
+Be specific about what you want: code implementation, code review, bug analysis, architecture advice, etc.`,
   inputSchema: {
     type: 'object',
     properties: {
       files: {
         type: 'array',
         items: { type: 'string' },
-        description:
-          'Array of file paths to process. Markdown files (.md) become the main prompt, other files are added as context with file paths and code blocks.',
+        description: `Array of file paths to process. Markdown files (.md) become the main prompt, other files are added as context with file paths and code blocks. 
+
+In the markdown file(s), be clear about what you want the LLM to do: implement code, review code, explain concepts, analyze bugs, etc.`,
       },
       model: {
         type: 'string',
