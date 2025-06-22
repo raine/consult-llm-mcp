@@ -1,5 +1,12 @@
 import { z } from 'zod/v4'
-import { SupportedChatModel } from './llm.js'
+
+export const SupportedChatModel = z.enum([
+  'o3',
+  'gemini-2.5-pro',
+  'deepseek-reasoner',
+])
+
+export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
 export const ConsultLlmArgs = z.object({
   files: z.array(z.string()).min(1, 'At least one file is required'),

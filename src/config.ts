@@ -1,11 +1,11 @@
 import { z } from 'zod/v4'
-import { SupportedChatModel } from './llm.js'
+import { SupportedChatModel } from './schema.js'
 
 const Config = z.object({
   openaiApiKey: z.string().optional(),
   geminiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
-  defaultModel: SupportedChatModel,
+  defaultModel: SupportedChatModel.optional(),
 })
 
 export type Config = z.infer<typeof Config>
