@@ -1,27 +1,25 @@
 {
-  "name": "llmtool",
+  "name": "consult-llm-mcp",
   "version": "1.0.0",
-  "description": "CLI tool for interacting with OpenAI and Google AI APIs",
+  "description": "MCP server for consulting powerful AI models",
   "type": "module",
   "main": "dist/main.js",
   "bin": {
-    "llmtool": "./dist/main.js",
-    "llmtool-mcp": "./dist/mcp-server.js"
+    "consult-llm-mcp": "./dist/main.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/main.ts",
-    "dev:mcp": "tsx src/mcp-server.ts",
     "start": "node dist/main.js",
-    "start:mcp": "node dist/mcp-server.js",
     "format": "prettier --write .",
     "install-global": "npm run build && npm install -g ."
   },
   "keywords": [
-    "cli",
+    "mcp",
     "openai",
     "gemini",
-    "llm"
+    "llm",
+    "ai"
   ],
   "author": "",
   "license": "MIT",
