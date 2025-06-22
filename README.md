@@ -187,16 +187,3 @@ Tool call:
 }
 ```
 ````
-
-## Development
-
-```bash
-# Run in development mode
-npm run dev
-
-# Build TypeScript
-npm run build
-
-# Format code
-npm run format
-```
