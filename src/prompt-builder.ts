@@ -1,7 +1,7 @@
 export function buildPrompt(
   markdownFiles: string[],
   otherFiles: Array<{ path: string; content: string }>,
-  gitDiffOutput?: string
+  gitDiffOutput?: string,
 ): string {
   const promptParts: string[] = []
 

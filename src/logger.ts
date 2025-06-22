@@ -22,7 +22,9 @@ export function logToFile(content: string) {
 }
 
 export function logToolCall(name: string, args: unknown) {
-  logToFile(`TOOL CALL: ${name}\nArguments: ${JSON.stringify(args, null, 2)}\n${'='.repeat(80)}`)
+  logToFile(
+    `TOOL CALL: ${name}\nArguments: ${JSON.stringify(args, null, 2)}\n${'='.repeat(80)}`,
+  )
 }
 
 export function logPrompt(model: string, prompt: string) {

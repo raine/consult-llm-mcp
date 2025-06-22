@@ -1,7 +1,10 @@
 import OpenAI from 'openai'
 import { config } from './config.js'
 import { z } from 'zod/v4'
-import { SupportedChatModel, type SupportedChatModel as SupportedChatModelType } from './schema.js'
+import {
+  SupportedChatModel,
+  type SupportedChatModel as SupportedChatModelType,
+} from './schema.js'
 
 const clients: { openai?: OpenAI; gemini?: OpenAI; deepseek?: OpenAI } = {}
 

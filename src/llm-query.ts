@@ -4,10 +4,10 @@ import { calculateCost } from './llm-cost.js'
 
 export async function queryLlm(
   prompt: string,
-  model: SupportedChatModel
-): Promise<{ 
-  response: string; 
-  costInfo: string 
+  model: SupportedChatModel,
+): Promise<{
+  response: string
+  costInfo: string
 }> {
   const { client } = getClientForModel(model)
   const completion = await client.chat.completions.create({
@@ -21,7 +21,7 @@ export async function queryLlm(
   }
 
   const usage = completion.usage
-  
+
   // Calculate costs
   const { inputCost, outputCost, totalCost } = calculateCost(usage, model)
   const costInfo = usage
