@@ -139,6 +139,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === 'consult_llm') {
+    // Log the tool call with all parameters
+    logToFile(
+      `TOOL CALL: ${request.params.name}\nArguments: ${JSON.stringify(request.params.arguments, null, 2)}\n${'='.repeat(80)}`,
+    )
+
     const {
       files,
       model = config.defaultModel || 'o3',
