@@ -11,7 +11,8 @@
     "build": "tsc",
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "install-global": "npm run build && npm install -g ."
   },
   "keywords": [
     "cli",
