@@ -12,7 +12,12 @@
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
     "format": "prettier --write .",
-    "install-global": "npm run build && npm install -g ."
+    "install-global": "npm run build && npm install -g .",
+    "prepublishOnly": "npm run build",
+    "publish:dry": "npm publish --dry-run",
+    "publish:patch": "npm version patch && npm publish",
+    "publish:minor": "npm version minor && npm publish",
+    "publish:major": "npm version major && npm publish"
   },
   "keywords": [
     "mcp",
@@ -22,6 +27,21 @@
     "ai"
   ],
   "author": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raine/consult-llm-mcp.git"
+  },
+  "homepage": "https://github.com/raine/consult-llm-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/raine/consult-llm-mcp/issues"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
