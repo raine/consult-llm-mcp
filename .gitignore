@@ -1,1 +1,5 @@
 .claude
+node_modules
+dist
+tsconfig.tsbuildinfo
+test

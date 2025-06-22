@@ -1,0 +1,33 @@
+{
+  "name": "llmtool",
+  "version": "1.0.0",
+  "description": "CLI tool for interacting with OpenAI and Google AI APIs",
+  "type": "module",
+  "main": "dist/main.js",
+  "bin": {
+    "llmtool": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "cli",
+    "openai",
+    "gemini",
+    "llm"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.52.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "prettier": "^3.5.3",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.2"
+  }
+}
