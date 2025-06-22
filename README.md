@@ -90,7 +90,7 @@ models complex questions.
 
 All prompts and responses are logged to `~/.consult-llm-mcp/logs/mcp.log` with:
 
-- Timestamps
+- Tool call parameters
 - Full prompts and responses
 - Token usage and cost estimates
 
