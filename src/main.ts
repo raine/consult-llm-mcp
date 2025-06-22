@@ -26,6 +26,10 @@ const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
     inputCostPerMillion: 1.25,
     outputCostPerMillion: 10.0,
   },
+  'deepseek-reasoner': {
+    inputCostPerMillion: 0.55,
+    outputCostPerMillion: 2.19,
+  },
 }
 
 function calculateCost(
@@ -96,7 +100,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             model: {
               type: 'string',
-              enum: ['o3', 'gemini-2.5-pro'],
+              enum: ['o3', 'gemini-2.5-pro', 'deepseek-reasoner'],
               default: 'o3',
               description: 'LLM model to use',
             },

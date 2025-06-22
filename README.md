@@ -5,7 +5,8 @@ AI models with your code and questions.
 
 ## Features
 
-- Query powerful AI models (o3, Gemini 2.5 Pro) with file context
+- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
+  context
 - Automatic prompt construction from markdown and code files
 - Git diff integration to show code changes
 - Usage tracking with cost estimation
@@ -25,6 +26,7 @@ Set the following environment variables:
 
 - `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models)
+- `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 
 ## Usage with Claude Code
 
@@ -54,7 +56,7 @@ models complex questions.
 
 - **model** (optional): LLM model to use
 
-  - Options: `o3` (default), `gemini-2.5-pro`
+  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
 
 - **git_diff** (optional): Include git diff output as context
   - **files** (required): Specific files to include in diff
@@ -79,6 +81,8 @@ models complex questions.
 
 - **o3**: OpenAI's reasoning model ($2/$8 per million tokens)
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
+- **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
+  tokens)
 
 ## Logging
 

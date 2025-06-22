@@ -1,9 +1,9 @@
 import OpenAI from 'openai'
 import { config } from './config.js'
 
-const clients: { openai?: OpenAI; gemini?: OpenAI } = {}
+const clients: { openai?: OpenAI; gemini?: OpenAI; deepseek?: OpenAI } = {}
 
-export type SupportedChatModel = 'o3' | 'gemini-2.5-pro'
+export type SupportedChatModel = 'o3' | 'gemini-2.5-pro' | 'deepseek-reasoner'
 
 export function getClientForModel(model: SupportedChatModel | string): {
   client: OpenAI
@@ -23,6 +23,14 @@ export function getClientForModel(model: SupportedChatModel | string): {
       })
     }
     return { client: clients.gemini }
+  } else if (model.startsWith('deepseek-')) {
+    if (!clients.deepseek) {
+      clients.deepseek = new OpenAI({
+        apiKey: config.deepseekApiKey,
+        baseURL: 'https://api.deepseek.com',
+      })
+    }
+    return { client: clients.deepseek }
   } else {
     throw new Error(`Unable to determine LLM provider for model: ${model}`)
   }
