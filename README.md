@@ -33,13 +33,13 @@ npm install -g .
 Add the MCP server to Claude Code:
 
 ```bash
-claude mcp add consult-llm -- consult-llm-mcp
+claude mcp add consult-llm -- npx -y consult-llm-mcp
 ```
 
 Or for global availability:
 
 ```bash
-claude mcp add --scope user consult-llm -- consult-llm-mcp
+claude mcp add --scope user consult-llm -- npx -y consult-llm-mcp
 ```
 
 ## MCP Tool: consult_llm
