@@ -30,6 +30,8 @@ npm install -g .
 
 ## Usage with Claude Code
 
+### Installation
+
 Add the MCP server to Claude Code:
 
 ```bash
@@ -41,6 +43,62 @@ Or for global availability:
 ```bash
 claude mcp add --scope user consult-llm -- npx -y consult-llm-mcp
 ```
+
+### Example workflows
+
+<details>
+<summary>Explain the problem, and tell CC to consult a smarter LLM</summary>
+
+```
+  <Some long explanation of the issue here>
+
+  Consult LLM for assistance, use gemini
+
+⏺ I see the issue! The problem is that the frontend is trying to use the hint
+  for "isn't" but the server generated a hint for "isn't it" (the full phrase).
+  This is a mismatch between how the frontend segments text and how the server
+  generates hints.
+
+  Let me consult the LLM to get assistance on this segmentation mismatch issue.
+
+⏺ Write(hint-segmentation-issue.md)
+  ⎿  Wrote 53 lines to hint-segmentation-issue.md
+     # Hint Segmentation Mismatch Issue
+     ## Problem Description
+     There's a mismatch between how the frontend segments text for clickable
+     words and how the backend generates hints. This causes hint unlocking to
+     fail when the segments don't match exactly.
+     ## Example Case
+     **Original Text**: "Hello! Nice weather, isn't it?"
+     … +43 lines (ctrl+r to expand)
+
+⏺ consult-llm:consult_llm (MCP)(model: "gemini-2.5-pro", files: ["/project/hint
+                                -segmentation-issue.md","/project/web/src/compo
+                                nents/HintsText.tsx","/project/web/src/utils/hi
+                                nts.ts","/project/server/src/routes/public/hint
+                                s.ts","/project/server/src/llm/hints.ts"])
+  ⎿ An excellent analysis of the problem. The root cause has been correctly
+    identified: a race condition within the `handleConfirmGenerateHints`
+    function in `HintsText.tsx`. The component state updates in the background
+    after `await generateHints()`, but the function continues executing with a
+    stale `activeSegment` variable, causing it to request a hint for a smaller
+    text segment ( e.g., "isn't") instead of the full, newly-available hint
+    phrase (e.g., "isn't it").
+    … +607 lines (ctrl+r to expand)
+
+⏺ Perfect! The LLM identified the core issue - there's a race condition in
+  handleConfirmGenerateHints where the function uses stale state after async
+  operations. The solution is to re-target the hint key after generation to
+  find the correct matching hint.
+
+  Let me implement this solution:
+
+⏺ Update Todos
+  ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint key
+       targeting in handleConfirmGenerateHints
+```
+
+</details>
 
 ## MCP Tool: consult_llm
 
