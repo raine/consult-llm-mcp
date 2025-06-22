@@ -30,5 +30,13 @@ export function logPrompt(model: string, prompt: string) {
 }
 
 export function logResponse(model: string, response: string, costInfo: string) {
-  logToFile(`RESPONSE (model: ${model}):\n${response}\n${costInfo}\n${'='.repeat(80)}`)
+  logToFile(
+    `RESPONSE (model: ${model}):\n${response}\n${costInfo}\n${'='.repeat(80)}`,
+  )
+}
+
+export function logServerStart(version: string) {
+  logToFile(
+    `MCP SERVER STARTED - consult-llm-mcp v${version}\n${'='.repeat(80)}`,
+  )
 }

@@ -16,12 +16,26 @@ import { processFiles } from './file.js'
 import { generateGitDiff } from './git.js'
 import { buildPrompt } from './prompt-builder.js'
 import { queryLlm } from './llm-query.js'
-import { logToolCall, logPrompt, logResponse } from './logger.js'
+import {
+  logToolCall,
+  logPrompt,
+  logResponse,
+  logServerStart,
+} from './logger.js'
+import { readFileSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const packageJson = JSON.parse(
+  readFileSync(join(__dirname, '../package.json'), 'utf-8'),
+)
+const SERVER_VERSION = packageJson.version
 
 const server = new Server(
   {
     name: 'consult_llm',
-    version: '1.0.0',
+    version: SERVER_VERSION,
   },
   {
     capabilities: {
@@ -87,6 +101,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 })
 
 async function main() {
+  logServerStart(SERVER_VERSION)
+
   const transport = new StdioServerTransport()
   await server.connect(transport)
 }
