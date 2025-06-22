@@ -10,6 +10,7 @@ import { getClientForModel, SupportedChatModel } from './llm.js'
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
+import { execSync } from 'child_process'
 import { CompletionUsage } from 'openai/resources.js'
 
 // Model pricing data
@@ -101,6 +102,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               default: 'o3',
               description: 'LLM model to use',
             },
+            git_diff: {
+              type: 'object',
+              properties: {
+                repo_path: {
+                  type: 'string',
+                  description:
+                    'Path to git repository (defaults to current working directory)',
+                },
+                files: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Specific files to include in diff',
+                },
+                base_ref: {
+                  type: 'string',
+                  default: 'HEAD',
+                  description:
+                    'Git reference to compare against (e.g., "HEAD", "main", commit hash)',
+                },
+              },
+              required: ['files'],
+              description:
+                'Generate git diff output to include as context. Shows uncommitted changes by default.',
+            },
           },
           required: ['files'],
         },
@@ -111,9 +136,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === 'llm_query') {
-    const { files, model = 'o3' } = request.params.arguments as {
+    const {
+      files,
+      model = 'o3',
+      git_diff,
+    } = request.params.arguments as {
       files: string[]
       model?: SupportedChatModel
+      git_diff?: {
+        repo_path?: string
+        files: string[]
+        base_ref?: string
+      }
     }
 
     try {
@@ -143,8 +177,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       }
 
+      // Generate git diff if requested
+      let gitDiffOutput = ''
+      if (git_diff) {
+        try {
+          const repoPath = git_diff.repo_path || process.cwd()
+          const diffFiles = git_diff.files
+          const baseRef = git_diff.base_ref || 'HEAD'
+
+          // Build git diff command - always pass specific files to avoid unrelated changes
+          if (diffFiles.length === 0) {
+            throw new Error('No files specified for git diff')
+          }
+          const gitCommand = `git diff ${baseRef} -- ${diffFiles.join(' ')}`
+
+          gitDiffOutput = execSync(gitCommand, {
+            cwd: repoPath,
+            encoding: 'utf-8',
+            maxBuffer: 1024 * 1024, // 1MB max
+          })
+        } catch (error) {
+          gitDiffOutput = `Error generating git diff: ${error instanceof Error ? error.message : String(error)}`
+        }
+      }
+
       // Build prompt using same logic as CLI
       let promptParts: string[] = []
+
+      // Add git diff as context if available
+      if (gitDiffOutput.trim()) {
+        promptParts.push('## Git Diff\n')
+        promptParts.push('```diff')
+        promptParts.push(gitDiffOutput)
+        promptParts.push('```\n')
+      }
 
       // Add non-markdown files as context
       if (otherFiles.length > 0) {
