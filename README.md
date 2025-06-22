@@ -22,8 +22,6 @@ npm install -g .
 
 ## Configuration
 
-Set the following environment variables:
-
 - `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
