@@ -1,9 +1,16 @@
 import OpenAI from 'openai'
 import { config } from './config.js'
+import { z } from 'zod/v4'
 
 const clients: { openai?: OpenAI; gemini?: OpenAI; deepseek?: OpenAI } = {}
 
-export type SupportedChatModel = 'o3' | 'gemini-2.5-pro' | 'deepseek-reasoner'
+export const SupportedChatModel = z.enum([
+  'o3',
+  'gemini-2.5-pro',
+  'deepseek-reasoner',
+])
+
+export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
 export function getClientForModel(model: SupportedChatModel | string): {
   client: OpenAI

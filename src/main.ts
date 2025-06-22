@@ -6,50 +6,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js'
 import { getClientForModel, SupportedChatModel } from './llm.js'
 import { config } from './config.js'
+import { calculateCost } from './llm-cost.js'
+import { ConsultLlmArgs, toolSchema } from './schema.js'
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
 import { execSync } from 'child_process'
-import { CompletionUsage } from 'openai/resources.js'
-
-// Model pricing data
-type ModelPricing = {
-  inputCostPerMillion: number
-  outputCostPerMillion: number
-}
-
-const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
-  o3: {
-    inputCostPerMillion: 2.0,
-    outputCostPerMillion: 8.0,
-  },
-  'gemini-2.5-pro': {
-    inputCostPerMillion: 1.25,
-    outputCostPerMillion: 10.0,
-  },
-  'deepseek-reasoner': {
-    inputCostPerMillion: 0.55,
-    outputCostPerMillion: 2.19,
-  },
-}
-
-function calculateCost(
-  usage: CompletionUsage | undefined,
-  model: SupportedChatModel,
-): { inputCost: number; outputCost: number; totalCost: number } {
-  const pricing = MODEL_PRICING[model]
-  if (!pricing) {
-    return { inputCost: 0, outputCost: 0, totalCost: 0 }
-  }
-
-  const inputTokens = usage?.prompt_tokens || 0
-  const outputTokens = usage?.completion_tokens || 0
-  const inputCost = (inputTokens / 1_000_000) * pricing.inputCostPerMillion
-  const outputCost = (outputTokens / 1_000_000) * pricing.outputCostPerMillion
-  const totalCost = inputCost + outputCost
-
-  return { inputCost, outputCost, totalCost }
-}
+import { z } from 'zod/v4'
 
 // Setup logging directory
 const logDir = join(homedir(), '.consult-llm-mcp', 'logs')
@@ -85,55 +48,7 @@ const server = new Server(
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: [
-      {
-        name: 'consult_llm',
-        description:
-          'Ask a more powerful AI for help with complex problems. Write your problem description in a markdown file and pass relevant code files as context.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            files: {
-              type: 'array',
-              items: { type: 'string' },
-              description:
-                'Array of file paths to process. Markdown files (.md) become the main prompt, other files are added as context with file paths and code blocks.',
-            },
-            model: {
-              type: 'string',
-              enum: ['o3', 'gemini-2.5-pro', 'deepseek-reasoner'],
-              default: 'o3',
-              description: 'LLM model to use',
-            },
-            git_diff: {
-              type: 'object',
-              properties: {
-                repo_path: {
-                  type: 'string',
-                  description:
-                    'Path to git repository (defaults to current working directory)',
-                },
-                files: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'Specific files to include in diff',
-                },
-                base_ref: {
-                  type: 'string',
-                  default: 'HEAD',
-                  description:
-                    'Git reference to compare against (e.g., "HEAD", "main", commit hash)',
-                },
-              },
-              required: ['files'],
-              description:
-                'Generate git diff output to include as context. Shows uncommitted changes by default.',
-            },
-          },
-          required: ['files'],
-        },
-      },
-    ],
+    tools: [toolSchema],
   }
 })
 
@@ -144,19 +59,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       `TOOL CALL: ${request.params.name}\nArguments: ${JSON.stringify(request.params.arguments, null, 2)}\n${'='.repeat(80)}`,
     )
 
-    const {
-      files,
-      model = config.defaultModel || 'o3',
-      git_diff,
-    } = request.params.arguments as {
-      files: string[]
-      model?: SupportedChatModel
-      git_diff?: {
-        repo_path?: string
-        files: string[]
-        base_ref?: string
-      }
+    const parseResult = ConsultLlmArgs.safeParse(request.params.arguments)
+
+    if (!parseResult.success) {
+      const errors = parseResult.error.issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join(', ')
+      throw new Error(`Invalid request parameters: ${errors}`)
     }
+
+    const { files, git_diff } = parseResult.data
+
+    const model: SupportedChatModel =
+      parseResult.data.model ?? config.defaultModel
 
     try {
       // Validate files exist
