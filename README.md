@@ -88,6 +88,32 @@ All prompts and responses are logged to `~/.consult-llm-mcp/logs/mcp.log` with:
 - Full prompts and responses
 - Token usage and cost estimates
 
+## CLAUDE.md example
+
+To help Claude Code understand when and how to use this tool, you can add the
+following to your project's `CLAUDE.md` file:
+
+````markdown
+## consult-llm-mcp
+
+Use the `consult_llm` MCP tool to ask a more powerful AI for help with complex
+problems. Write your problem description in a markdown file with as much detail
+as possible and pass relevant code files as context. Include files to git_diff
+when asking feedback for changes.
+
+### Example
+
+\```bash echo
+"<very detailed plan or question to be reviewed by the smart LLM>" > task.md
+\```
+
+Tool call:
+
+\```json { "files": [ "server/src/db.ts", "server/src/routes/conversations.ts",
+"task.md" ], "git_diff": { "files": ["server/src/db.ts",
+"server/src/routes/conversations.ts"] } } \```
+````
+
 ## Development
 
 ```bash
