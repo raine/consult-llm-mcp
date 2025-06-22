@@ -7,8 +7,29 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { getClientForModel, SupportedChatModel } from './llm.js'
-import { readFileSync, existsSync } from 'fs'
-import { resolve } from 'path'
+import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs'
+import { resolve, join } from 'path'
+import { homedir } from 'os'
+
+// Setup logging directory
+const logDir = join(homedir(), '.llmtool', 'logs')
+const logFile = join(logDir, 'mcp.log')
+
+try {
+  mkdirSync(logDir, { recursive: true })
+} catch (error) {
+  // Directory might already exist
+}
+
+function logToFile(content: string) {
+  const timestamp = new Date().toISOString()
+  const logEntry = `[${timestamp}] ${content}\n`
+  try {
+    appendFileSync(logFile, logEntry)
+  } catch (error) {
+    console.error('Failed to write to log file:', error)
+  }
+}
 
 const server = new Server(
   {
@@ -107,6 +128,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       const prompt = promptParts.join('\n')
 
+      // Log the prompt
+      logToFile(`PROMPT (model: ${model}):\n${prompt}\n${'='.repeat(80)}`)
+
       // Send to LLM
       const { client } = getClientForModel(model)
       const completion = await client.chat.completions.create({
@@ -118,6 +142,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!response) {
         throw new Error('No response from the model')
       }
+
+      // Log the response
+      logToFile(`RESPONSE (model: ${model}):\n${response}\n${'='.repeat(80)}`)
 
       return {
         content: [
