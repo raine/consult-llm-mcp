@@ -27,6 +27,8 @@ Set the following environment variables:
 - `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
+- `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional, defaults
+  to 'o3')
 
 ## Usage with Claude Code
 

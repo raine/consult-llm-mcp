@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import { getClientForModel, SupportedChatModel } from './llm.js'
+import { config } from './config.js'
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
@@ -140,7 +141,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === 'consult_llm') {
     const {
       files,
-      model = 'o3',
+      model = config.defaultModel || 'o3',
       git_diff,
     } = request.params.arguments as {
       files: string[]
