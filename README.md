@@ -8,7 +8,7 @@ AI models with your code and questions.
 - Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
   context
 - Automatic prompt construction from markdown and code files
-- Git diff integration to show code changes
+- Git diff to feed code changes
 - Usage tracking with cost estimation
 - Comprehensive logging
 
@@ -107,17 +107,29 @@ problems. Write your problem description in a markdown file with as much detail
 as possible and pass relevant code files as context. Include files to git_diff
 when asking feedback for changes.
 
+Use Gemini 2.5 Pro.
+
 ### Example
 
-\```bash echo
-"<very detailed plan or question to be reviewed by the smart LLM>" > task.md
-\```
+```bash
+echo "<very detailed plan or question to be reviewed by the smart LLM>" > task.md
+```
 
 Tool call:
 
-\```json { "files": [ "server/src/db.ts", "server/src/routes/conversations.ts",
-"task.md" ], "git_diff": { "files": ["server/src/db.ts",
-"server/src/routes/conversations.ts"] } } \```
+```json
+{
+  "files": [
+    "server/src/db.ts",
+    "server/src/routes/conversations.ts",
+    "task.md"
+  ],
+  "git_diff": {
+    "files": ["server/src/db.ts", "server/src/routes/conversations.ts"]
+  },
+  "model": "gemini-2.5-pro"
+}
+```
 ````
 
 ## Development
