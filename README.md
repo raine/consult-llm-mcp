@@ -1,6 +1,7 @@
 # LLM Tool
 
-A simple command-line tool for interacting with OpenAI and Google Gemini APIs using the OpenAI client library.
+A simple command-line tool for interacting with OpenAI and Google Gemini APIs
+using the OpenAI client library.
 
 ## Installation
 
@@ -47,11 +48,13 @@ node dist/main.js --dry-run "What is 2+2?"
 
 ### Options
 
-- `--dry-run` - Show the formatted prompt without sending it to the LLM (useful for debugging)
+- `--dry-run` - Show the formatted prompt without sending it to the LLM (useful
+  for debugging)
 
 ### File Input Format
 
 When passing files as arguments:
+
 - Non-markdown files (.ts, .js, etc.) are included as "Relevant Files" context
 - Markdown files (.md, .markdown) are used as the main prompt
 - Files are processed in the order provided
@@ -59,8 +62,10 @@ When passing files as arguments:
 
 ## Supported Models
 
-- OpenAI models: `o3`, or any model starting with `gpt-` (e.g., `gpt-3.5-turbo`, `gpt-4`)
-- Google models: `gemini-2.5-pro`, or any model starting with `gemini-` (e.g., `gemini-1.5-flash`, `gemini-1.5-pro`)
+- OpenAI models: `o3`, or any model starting with `gpt-` (e.g., `gpt-3.5-turbo`,
+  `gpt-4`)
+- Google models: `gemini-2.5-pro`, or any model starting with `gemini-` (e.g.,
+  `gemini-1.5-flash`, `gemini-1.5-pro`)
 
 ## Development
 

@@ -6,7 +6,7 @@ import { resolve } from 'path'
 
 async function main() {
   const args = process.argv.slice(2)
-  
+
   // Check for --dry-run flag
   const dryRunIndex = args.indexOf('--dry-run')
   const isDryRun = dryRunIndex !== -1
@@ -31,29 +31,29 @@ async function main() {
   }
 
   let prompt: string
-  
+
   // Check if arguments are file paths
-  const filesExist = args.every(arg => existsSync(resolve(arg)))
-  
+  const filesExist = args.every((arg) => existsSync(resolve(arg)))
+
   if (filesExist && args.length > 0) {
     // Process files
     const markdownFiles: string[] = []
     const otherFiles: { path: string; content: string }[] = []
-    
+
     for (const arg of args) {
       const filePath = resolve(arg)
       const content = readFileSync(filePath, 'utf-8')
-      
+
       if (arg.endsWith('.md') || arg.endsWith('.markdown')) {
         markdownFiles.push(content)
       } else {
         otherFiles.push({ path: arg, content })
       }
     }
-    
+
     // Build prompt
     let promptParts: string[] = []
-    
+
     // Add non-markdown files as context
     if (otherFiles.length > 0) {
       promptParts.push('## Relevant Files\n')
@@ -64,20 +64,20 @@ async function main() {
         promptParts.push('```\n')
       }
     }
-    
+
     // Add markdown files as main prompt
     if (markdownFiles.length > 0) {
       promptParts.push(...markdownFiles)
     }
-    
+
     prompt = promptParts.join('\n')
   } else {
     // Treat as direct text prompt
     prompt = args.join(' ')
   }
-  
+
   const model = process.env.LLMTOOL_MODEL || 'o3'
-  
+
   // If dry run, just show the prompt and exit
   if (isDryRun) {
     console.log('=== DRY RUN MODE ===')
