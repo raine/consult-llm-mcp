@@ -10,6 +10,42 @@ import { getClientForModel, SupportedChatModel } from './llm.js'
 import { readFileSync, existsSync, appendFileSync, mkdirSync } from 'fs'
 import { resolve, join } from 'path'
 import { homedir } from 'os'
+import { CompletionUsage } from 'openai/resources.js'
+
+// Model pricing data
+type ModelPricing = {
+  inputCostPerMillion: number
+  outputCostPerMillion: number
+}
+
+const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
+  o3: {
+    inputCostPerMillion: 2.0,
+    outputCostPerMillion: 8.0,
+  },
+  'gemini-2.5-pro': {
+    inputCostPerMillion: 1.25,
+    outputCostPerMillion: 10.0,
+  },
+}
+
+function calculateCost(
+  usage: CompletionUsage | undefined,
+  model: SupportedChatModel,
+): { inputCost: number; outputCost: number; totalCost: number } {
+  const pricing = MODEL_PRICING[model]
+  if (!pricing) {
+    return { inputCost: 0, outputCost: 0, totalCost: 0 }
+  }
+
+  const inputTokens = usage?.prompt_tokens || 0
+  const outputTokens = usage?.completion_tokens || 0
+  const inputCost = (inputTokens / 1_000_000) * pricing.inputCostPerMillion
+  const outputCost = (outputTokens / 1_000_000) * pricing.outputCostPerMillion
+  const totalCost = inputCost + outputCost
+
+  return { inputCost, outputCost, totalCost }
+}
 
 // Setup logging directory
 const logDir = join(homedir(), '.llmtool', 'logs')
@@ -143,8 +179,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         throw new Error('No response from the model')
       }
 
-      // Log the response
-      logToFile(`RESPONSE (model: ${model}):\n${response}\n${'='.repeat(80)}`)
+      // Calculate and log pricing
+      const usage = completion.usage
+      const { inputCost, outputCost, totalCost } = calculateCost(usage, model)
+      const costInfo = usage
+        ? `Tokens: ${usage.prompt_tokens} input, ${usage.completion_tokens} output | Cost: $${totalCost.toFixed(6)} (input: $${inputCost.toFixed(6)}, output: $${outputCost.toFixed(6)})`
+        : 'Usage data not available'
+
+      // Log the response with pricing
+      logToFile(
+        `RESPONSE (model: ${model}):\n${response}\n${costInfo}\n${'='.repeat(80)}`,
+      )
 
       return {
         content: [
