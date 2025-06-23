@@ -152,6 +152,49 @@ All prompts and responses are logged to `~/.consult-llm-mcp/logs/mcp.log` with:
 - Full prompts and responses
 - Token usage and cost estimates
 
+<details>
+<summary>Example</summary>
+
+```
+[2025-06-22T20:16:04.673Z] TOOL CALL: consult_llm
+Arguments: {
+  "files": [
+    "refactor-analysis.md",
+    "src/main.ts",
+    "src/schema.ts",
+    "src/config.ts",
+    "src/llm.ts",
+    "src/llm-cost.ts"
+  ],
+  "model": "deepseek-reasoner"
+}
+================================================================================
+[2025-06-22T20:16:04.675Z] PROMPT (model: deepseek-reasoner):
+## Relevant Files
+
+### File: src/main.ts
+
+...
+
+Please provide specific suggestions for refactoring with example code structure
+where helpful.
+================================================================================
+[2025-06-22T20:19:20.632Z] RESPONSE (model: deepseek-reasoner):
+Based on the analysis, here are the key refactoring suggestions to improve
+separation of concerns and maintainability:
+
+...
+
+This refactoring maintains all existing functionality while significantly
+improving maintainability and separation of concerns. The new structure makes
+it easier to add features like new LLM providers, additional context sources,
+or alternative prompt formats.
+
+Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.012877)
+```
+
+</details>
+
 ## CLAUDE.md example
 
 To help Claude Code understand when and how to use this tool, you can add the
