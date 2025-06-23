@@ -12,14 +12,6 @@ AI models with your code and questions.
 - Usage tracking with cost estimation
 - Comprehensive logging
 
-## Installation
-
-```bash
-npm install
-npm run build
-npm install -g .
-```
-
 ## Configuration
 
 - `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
