@@ -46,6 +46,8 @@ claude mcp add --scope user consult-llm -- npx -y consult-llm-mcp
 
 ### Example workflows
 
+Click to expand.
+
 <details>
 <summary>Explain the problem, and tell CC to consult a smarter LLM</summary>
 
