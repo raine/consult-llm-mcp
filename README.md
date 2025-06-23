@@ -1,7 +1,6 @@
 # Consult LLM MCP
 
-An MCP (Model Context Protocol) server that allows you to consult more powerful
-AI models with your code and questions.
+An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
 
 ## Features
 
