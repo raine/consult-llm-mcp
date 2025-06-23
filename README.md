@@ -2,6 +2,10 @@
 
 An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
 
+<a href="https://glama.ai/mcp/servers/@raine/consult-llm-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@raine/consult-llm-mcp/badge" alt="Consult LLM MCP server" />
+</a>
+
 ## Features
 
 - Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
