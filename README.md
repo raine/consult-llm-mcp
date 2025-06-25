@@ -207,38 +207,18 @@ Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.
 
 ## CLAUDE.md example
 
-To help Claude Code understand when and how to use this tool, you can add the
-following to your project's `CLAUDE.md` file:
+While not strictly necessary, to help Claude Code understand when and how to use
+this tool, you can optionally something like the following to your project's
+`CLAUDE.md` file:
 
-````markdown
+```markdown
 ## consult-llm-mcp
 
 Use the `consult_llm` MCP tool to ask a more powerful AI for help with complex
-problems. Write your problem description in a markdown file with as much detail
-as possible and pass relevant code files as context. Include files to git_diff
-when asking feedback for changes.
+problems. Include files to git_diff when asking feedback for changes.
 
 Use Gemini 2.5 Pro.
-
-### Example
-
-```bash
-echo "<very detailed plan or question to be reviewed by the smart LLM>" > task.md
 ```
 
-Tool call:
-
-```json
-{
-  "files": [
-    "server/src/db.ts",
-    "server/src/routes/conversations.ts",
-    "task.md"
-  ],
-  "git_diff": {
-    "files": ["server/src/db.ts", "server/src/routes/conversations.ts"]
-  },
-  "model": "gemini-2.5-pro"
-}
-```
-````
+Claude Code seems to know pretty well when to use this MCP even without this
+instruction however.
