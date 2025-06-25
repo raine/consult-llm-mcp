@@ -1,12 +1,14 @@
 # Consult LLM MCP
 
-An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
+An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5
+Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
 
 ## Features
 
 - Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
   context
-- Automatic prompt construction from markdown and code files
+- Direct prompt support for simple questions or automatic prompt construction
+  from markdown and code files
 - Git diff to feed code changes
 - Usage tracking with cost estimation
 - Comprehensive logging
@@ -100,10 +102,15 @@ models complex questions.
 
 ### Parameters
 
-- **files** (required): Array of file paths to process
+- **files** (optional): Array of file paths to process
 
   - Markdown files (.md) become the main prompt
   - Other files are added as context with file paths and code blocks
+
+- **prompt** (optional): Direct prompt text for simple questions
+
+  - Alternative to using markdown files
+  - Either `files` or `prompt` must be provided
 
 - **model** (optional): LLM model to use
 
@@ -117,6 +124,8 @@ models complex questions.
 
 ### Example Usage
 
+**With files:**
+
 ```json
 {
   "files": ["src/auth.ts", "src/middleware.ts", "review.md"],
@@ -125,6 +134,16 @@ models complex questions.
     "files": ["src/auth.ts", "src/middleware.ts"],
     "base_ref": "main"
   }
+}
+```
+
+**With direct prompt:**
+
+```json
+{
+  "prompt": "Analyze the performance implications of using async/await vs Promise.then() in Node.js",
+  "files": ["src/database.ts"],
+  "model": "gemini-2.5-pro"
 }
 ```
 

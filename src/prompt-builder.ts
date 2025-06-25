@@ -1,4 +1,5 @@
 export function buildPrompt(
+  directPrompt: string | undefined,
   markdownFiles: string[],
   otherFiles: Array<{ path: string; content: string }>,
   gitDiffOutput?: string,
@@ -17,6 +18,10 @@ export function buildPrompt(
       promptParts.push(file.content)
       promptParts.push('```\n')
     }
+  }
+
+  if (directPrompt) {
+    promptParts.push(directPrompt)
   }
 
   if (markdownFiles.length > 0) {

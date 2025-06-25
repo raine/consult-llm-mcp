@@ -59,14 +59,14 @@ async function handleConsultLlm(args: unknown) {
     throw new Error(`Invalid request parameters: ${errors}`)
   }
 
-  const { files, git_diff } = parseResult.data
+  const { files, prompt: directPrompt, git_diff } = parseResult.data
   const model: SupportedChatModel =
     parseResult.data.model ?? config.defaultModel ?? 'o3'
 
   logToolCall('consult_llm', args)
 
-  // Process files
-  const { markdownFiles, otherFiles } = processFiles(files)
+  // Process files (if provided)
+  const { markdownFiles, otherFiles } = files ? processFiles(files) : { markdownFiles: [], otherFiles: [] }
 
   // Generate git diff
   const gitDiffOutput = git_diff
@@ -74,7 +74,7 @@ async function handleConsultLlm(args: unknown) {
     : undefined
 
   // Build prompt
-  const prompt = buildPrompt(markdownFiles, otherFiles, gitDiffOutput)
+  const prompt = buildPrompt(directPrompt, markdownFiles, otherFiles, gitDiffOutput)
   logPrompt(model, prompt)
 
   // Query LLM

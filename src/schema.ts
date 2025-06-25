@@ -8,19 +8,25 @@ export const SupportedChatModel = z.enum([
 
 export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
-export const ConsultLlmArgs = z.object({
-  files: z.array(z.string()).min(1, 'At least one file is required'),
-  model: SupportedChatModel.optional(),
-  git_diff: z
-    .object({
-      repo_path: z.string().optional(),
-      files: z
-        .array(z.string())
-        .min(1, 'At least one file is required for git diff'),
-      base_ref: z.string().optional().default('HEAD'),
-    })
-    .optional(),
-})
+export const ConsultLlmArgs = z
+  .object({
+    files: z.array(z.string()).optional(),
+    prompt: z.string().optional(),
+    model: SupportedChatModel.optional(),
+    git_diff: z
+      .object({
+        repo_path: z.string().optional(),
+        files: z
+          .array(z.string())
+          .min(1, 'At least one file is required for git diff'),
+        base_ref: z.string().optional().default('HEAD'),
+      })
+      .optional(),
+  })
+  .refine(
+    (data) => data.files || data.prompt,
+    'Either files or prompt must be provided',
+  )
 
 export const toolSchema = {
   name: 'consult_llm',
@@ -36,6 +42,11 @@ Be specific about what you want: code implementation, code review, bug analysis,
         description: `Array of file paths to process. Markdown files (.md) become the main prompt, other files are added as context with file paths and code blocks. 
 
 In the markdown file(s), be clear about what you want the LLM to do: implement code, review code, explain concepts, analyze bugs, etc.`,
+      },
+      prompt: {
+        type: 'string',
+        description:
+          'Direct prompt text for simple questions. Alternative to using markdown files.',
       },
       model: {
         type: 'string',
@@ -68,6 +79,6 @@ In the markdown file(s), be clear about what you want the LLM to do: implement c
           'Generate git diff output to include as context. Shows uncommitted changes by default.',
       },
     },
-    required: ['files'],
+    required: [],
   },
 } as const
