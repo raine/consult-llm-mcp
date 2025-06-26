@@ -66,7 +66,9 @@ async function handleConsultLlm(args: unknown) {
   logToolCall('consult_llm', args)
 
   // Process files (if provided)
-  const { markdownFiles, otherFiles } = files ? processFiles(files) : { markdownFiles: [], otherFiles: [] }
+  const { markdownFiles, otherFiles } = files
+    ? processFiles(files)
+    : { markdownFiles: [], otherFiles: [] }
 
   // Generate git diff
   const gitDiffOutput = git_diff
@@ -74,12 +76,17 @@ async function handleConsultLlm(args: unknown) {
     : undefined
 
   // Build prompt
-  const prompt = buildPrompt(directPrompt, markdownFiles, otherFiles, gitDiffOutput)
-  logPrompt(model, prompt)
+  const prompt = buildPrompt(
+    directPrompt,
+    markdownFiles,
+    otherFiles,
+    gitDiffOutput,
+  )
+  await logPrompt(model, prompt)
 
   // Query LLM
   const { response, costInfo } = await queryLlm(prompt, model)
-  logResponse(model, response, costInfo)
+  await logResponse(model, response, costInfo)
 
   return {
     content: [{ type: 'text', text: response }],

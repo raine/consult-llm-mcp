@@ -109,17 +109,14 @@ models complex questions.
 ### Parameters
 
 - **files** (optional): Array of file paths to process
-
   - Markdown files (.md) become the main prompt
   - Other files are added as context with file paths and code blocks
 
 - **prompt** (optional): Direct prompt text for simple questions
-
   - Alternative to using markdown files
   - Either `files` or `prompt` must be provided
 
 - **model** (optional): LLM model to use
-
   - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
 
 - **git_diff** (optional): Include git diff output as context

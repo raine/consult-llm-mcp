@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { format } from 'prettier'
 
 const logDir = join(homedir(), '.consult-llm-mcp', 'logs')
 const logFile = join(logDir, 'mcp.log')
@@ -9,6 +10,19 @@ try {
   mkdirSync(logDir, { recursive: true })
 } catch (error) {
   // Directory might already exist
+}
+
+async function formatWithPrettier(text: string): Promise<string> {
+  try {
+    return await format(text, {
+      parser: 'markdown',
+      printWidth: 80,
+      proseWrap: 'always',
+    })
+  } catch (error) {
+    // If formatting fails, return original text
+    return text
+  }
 }
 
 export function logToFile(content: string) {
@@ -27,13 +41,19 @@ export function logToolCall(name: string, args: unknown) {
   )
 }
 
-export function logPrompt(model: string, prompt: string) {
-  logToFile(`PROMPT (model: ${model}):\n${prompt}\n${'='.repeat(80)}`)
+export async function logPrompt(model: string, prompt: string) {
+  const formattedPrompt = await formatWithPrettier(prompt)
+  logToFile(`PROMPT (model: ${model}):\n${formattedPrompt}\n${'='.repeat(80)}`)
 }
 
-export function logResponse(model: string, response: string, costInfo: string) {
+export async function logResponse(
+  model: string,
+  response: string,
+  costInfo: string,
+) {
+  const formattedResponse = await formatWithPrettier(response)
   logToFile(
-    `RESPONSE (model: ${model}):\n${response}\n${costInfo}\n${'='.repeat(80)}`,
+    `RESPONSE (model: ${model}):\n${formattedResponse}\n${costInfo}\n${'='.repeat(80)}`,
   )
 }
 
