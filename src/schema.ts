@@ -32,7 +32,9 @@ export const toolSchema = {
   name: 'consult_llm',
   description: `Ask a more powerful AI for help with complex problems. Write your problem description in a markdown file and pass relevant code files as context. 
 
-Be specific about what you want: code implementation, code review, bug analysis, architecture advice, etc.`,
+Be specific about what you want: code implementation, code review, bug analysis, architecture advice, etc.
+
+IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solutions or alternatives in your prompt as this can bias the analysis. Instead of "Should I use X or Y approach?", ask "What's the best approach for this problem?" Let the consultant LLM provide unbiased recommendations.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -41,12 +43,12 @@ Be specific about what you want: code implementation, code review, bug analysis,
         items: { type: 'string' },
         description: `Array of file paths to process. Markdown files (.md) become the main prompt, other files are added as context with file paths and code blocks. 
 
-In the markdown file(s), be clear about what you want the LLM to do: implement code, review code, explain concepts, analyze bugs, etc.`,
+In the markdown file(s), be clear about what you want the LLM to do: implement code, review code, explain concepts, analyze bugs, etc. Ask open-ended questions without suggesting specific solutions to avoid biasing the analysis.`,
       },
       prompt: {
         type: 'string',
         description:
-          'Direct prompt text for simple questions. Alternative to using markdown files.',
+          'Direct prompt text for simple questions. Alternative to using markdown files. Ask neutral, open-ended questions without suggesting specific solutions.',
       },
       model: {
         type: 'string',
