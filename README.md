@@ -7,8 +7,7 @@ Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
 
 - Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
   context
-- Direct prompt support for simple questions or automatic prompt construction
-  from markdown and code files
+- Direct queries with optional file context
 - Git diff to feed code changes
 - Usage tracking with cost estimation
 - Comprehensive logging
@@ -108,15 +107,14 @@ models complex questions.
 
 ### Parameters
 
-- **files** (optional): Array of file paths to process
-  - Markdown files (.md) become the main prompt
-  - Other files are added as context with file paths and code blocks
+- **prompt** (required): Your question or request for the consultant LLM
 
-- **prompt** (optional): Direct prompt text for simple questions
-  - Alternative to using markdown files
-  - Either `files` or `prompt` must be provided
+- **files** (optional): Array of file paths to include as context
+
+  - All files are added as context with file paths and code blocks
 
 - **model** (optional): LLM model to use
+
   - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
 
 - **git_diff** (optional): Include git diff output as context
@@ -127,25 +125,34 @@ models complex questions.
 
 ### Example Usage
 
-**With files:**
+**Basic prompt:**
 
 ```json
 {
-  "files": ["src/auth.ts", "src/middleware.ts", "review.md"],
-  "model": "o3",
-  "git_diff": {
-    "files": ["src/auth.ts", "src/middleware.ts"],
-    "base_ref": "main"
-  }
+  "prompt": "What are the performance implications of using async/await vs Promise.then() in Node.js?"
 }
 ```
 
-**With direct prompt:**
+**With file context:**
 
 ```json
 {
-  "prompt": "Analyze the performance implications of using async/await vs Promise.then() in Node.js",
-  "files": ["src/database.ts"],
+  "prompt": "How can I optimize this authentication middleware?",
+  "files": ["src/auth.ts", "src/middleware.ts"],
+  "model": "o3"
+}
+```
+
+**With git diff:**
+
+```json
+{
+  "prompt": "Review these authentication changes for security issues",
+  "files": ["src/auth.ts"],
+  "git_diff": {
+    "files": ["src/auth.ts", "src/middleware.ts"],
+    "base_ref": "main"
+  },
   "model": "gemini-2.5-pro"
 }
 ```
@@ -221,6 +228,8 @@ Use the `consult_llm` MCP tool to ask a more powerful AI for help with complex
 problems. Include files to git_diff when asking feedback for changes.
 
 Use Gemini 2.5 Pro.
+
+CRITICAL: When asking, don't present options, this will bias the answer.
 ```
 
 Claude Code seems to know pretty well when to use this MCP even without this
