@@ -3,14 +3,31 @@
 An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5
 Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
 
+```
+This SQL query is timing out on large datasets. Can you help optimize it? Ask Gemini
+
+⏺ I'll examine your query and consult Gemini for database optimization strategies.
+
+⏺ consult-llm:consult_llm (MCP)(prompt: "How can I optimize this slow SQL query
+                                for better performance on large datasets?", files: ["queries/user
+                                -analytics.sql","schema/tables.sql"], model: "gemini-2.5-pro")
+  ⎿ The query has significant performance bottlenecks: missing indexes on join
+    columns, inefficient subqueries that could be CTEs, and unnecessary DISTINCT
+    operations. Add composite indexes on (user_id, created_at), replace correlated
+    subqueries with window functions, and eliminate redundant GROUP BY clauses.
+    … +287 lines (ctrl+r to expand)
+
+⏺ Great insights! I'll add the suggested indexes, refactor the subqueries to use
+  CTEs with window functions, and optimize the GROUP BY operations.
+```
+
 ## Features
 
-- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with file
-  context
+- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with relevant
+  files as context
 - Direct queries with optional file context
-- Git diff to feed code changes
-- Usage tracking with cost estimation
-- Comprehensive logging
+- Include git changes for code review and analysis
+- Comprehensive logging with cost estimation
 
 ## Configuration
 
@@ -55,47 +72,52 @@ Click to expand.
 <summary>Explain the problem, and tell CC to consult a smarter LLM</summary>
 
 ```
-
   <Some long explanation of the issue here>
 
-Consult LLM for assistance, use gemini
+  Consult LLM for assistance, use gemini
 
 ⏺ I see the issue! The problem is that the frontend is trying to use the hint
-for "isn't" but the server generated a hint for "isn't it" (the full phrase).
-This is a mismatch between how the frontend segments text and how the server
-generates hints.
+  for "isn't" but the server generated a hint for "isn't it" (the full phrase).
+  This is a mismatch between how the frontend segments text and how the server
+  generates hints.
 
-Let me consult the LLM to get assistance on this segmentation mismatch issue.
+  Let me consult the LLM to get assistance on this segmentation mismatch issue.
 
-⏺ Write(hint-segmentation-issue.md) ⎿  Wrote 53 lines to
-hint-segmentation-issue.md # Hint Segmentation Mismatch Issue ## Problem
-Description There's a mismatch between how the frontend segments text for
-clickable words and how the backend generates hints. This causes hint unlocking
-to fail when the segments don't match exactly. ## Example Case **Original
-Text**: "Hello! Nice weather, isn't it?" … +43 lines (ctrl+r to expand)
+⏺ Write(hint-segmentation-issue.md)
+  ⎿  Wrote 53 lines to hint-segmentation-issue.md
+     # Hint Segmentation Mismatch Issue
+     ## Problem Description
+     There's a mismatch between how the frontend segments text for clickable
+     words and how the backend generates hints. This causes hint unlocking to
+     fail when the segments don't match exactly.
+     ## Example Case
+     **Original Text**: "Hello! Nice weather, isn't it?"
+     … +43 lines (ctrl+r to expand)
 
 ⏺ consult-llm:consult_llm (MCP)(model: "gemini-2.5-pro", files: ["/project/hint
--segmentation-issue.md","/project/web/src/compo
-nents/HintsText.tsx","/project/web/src/utils/hi
-nts.ts","/project/server/src/routes/public/hint
-s.ts","/project/server/src/llm/hints.ts"]) ⎿ An excellent analysis of the
-problem. The root cause has been correctly identified: a race condition within
-the `handleConfirmGenerateHints` function in `HintsText.tsx`. The component
-state updates in the background after `await generateHints()`, but the function
-continues executing with a stale `activeSegment` variable, causing it to request
-a hint for a smaller text segment ( e.g., "isn't") instead of the full,
-newly-available hint phrase (e.g., "isn't it"). … +607 lines (ctrl+r to expand)
+                                -segmentation-issue.md","/project/web/src/compo
+                                nents/HintsText.tsx","/project/web/src/utils/hi
+                                nts.ts","/project/server/src/routes/public/hint
+                                s.ts","/project/server/src/llm/hints.ts"])
+  ⎿ An excellent analysis of the problem. The root cause has been correctly
+    identified: a race condition within the `handleConfirmGenerateHints`
+    function in `HintsText.tsx`. The component state updates in the background
+    after `await generateHints()`, but the function continues executing with a
+    stale `activeSegment` variable, causing it to request a hint for a smaller
+    text segment ( e.g., "isn't") instead of the full, newly-available hint
+    phrase (e.g., "isn't it").
+    … +607 lines (ctrl+r to expand)
 
 ⏺ Perfect! The LLM identified the core issue - there's a race condition in
-handleConfirmGenerateHints where the function uses stale state after async
-operations. The solution is to re-target the hint key after generation to find
-the correct matching hint.
+  handleConfirmGenerateHints where the function uses stale state after async
+  operations. The solution is to re-target the hint key after generation to
+  find the correct matching hint.
 
-Let me implement this solution:
+  Let me implement this solution:
 
-⏺ Update Todos ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint
-key targeting in handleConfirmGenerateHints
-
+⏺ Update Todos
+  ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint key
+       targeting in handleConfirmGenerateHints
 ```
 
 </details>
