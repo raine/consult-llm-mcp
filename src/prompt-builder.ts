@@ -1,7 +1,6 @@
 export function buildPrompt(
-  directPrompt: string | undefined,
-  markdownFiles: string[],
-  otherFiles: Array<{ path: string; content: string }>,
+  userPrompt: string,
+  files: Array<{ path: string; content: string }>,
   gitDiffOutput?: string,
 ): string {
   const promptParts: string[] = []
@@ -10,9 +9,9 @@ export function buildPrompt(
     promptParts.push('## Git Diff\n```diff', gitDiffOutput, '```\n')
   }
 
-  if (otherFiles.length > 0) {
+  if (files.length > 0) {
     promptParts.push('## Relevant Files\n')
-    for (const file of otherFiles) {
+    for (const file of files) {
       promptParts.push(`### File: ${file.path}`)
       promptParts.push('```')
       promptParts.push(file.content)
@@ -20,13 +19,8 @@ export function buildPrompt(
     }
   }
 
-  if (directPrompt) {
-    promptParts.push(directPrompt)
-  }
-
-  if (markdownFiles.length > 0) {
-    promptParts.push(...markdownFiles)
-  }
+  // Add user prompt last
+  promptParts.push(userPrompt)
 
   return promptParts.join('\n')
 }

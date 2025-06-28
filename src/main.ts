@@ -23,7 +23,7 @@ import {
   logServerStart,
 } from './logger.js'
 import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
+import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -59,16 +59,14 @@ async function handleConsultLlm(args: unknown) {
     throw new Error(`Invalid request parameters: ${errors}`)
   }
 
-  const { files, prompt: directPrompt, git_diff } = parseResult.data
+  const { files, prompt: userPrompt, git_diff } = parseResult.data
   const model: SupportedChatModel =
     parseResult.data.model ?? config.defaultModel ?? 'o3'
 
   logToolCall('consult_llm', args)
 
-  // Process files (if provided)
-  const { markdownFiles, otherFiles } = files
-    ? processFiles(files)
-    : { markdownFiles: [], otherFiles: [] }
+  // Process files (if provided) - all files become context
+  const contextFiles = files ? processFiles(files) : []
 
   // Generate git diff
   const gitDiffOutput = git_diff
@@ -76,12 +74,7 @@ async function handleConsultLlm(args: unknown) {
     : undefined
 
   // Build prompt
-  const prompt = buildPrompt(
-    directPrompt,
-    markdownFiles,
-    otherFiles,
-    gitDiffOutput,
-  )
+  const prompt = buildPrompt(userPrompt, contextFiles, gitDiffOutput)
   await logPrompt(model, prompt)
 
   // Query LLM
