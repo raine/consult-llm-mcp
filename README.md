@@ -66,7 +66,7 @@ claude mcp add \
 
 ### Example workflows
 
-Click to expand.
+Some real-world examples. Click to expand.
 
 <details>
 <summary>Explain the problem, and tell CC to consult a smarter LLM</summary>
