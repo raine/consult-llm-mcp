@@ -1,4 +1,4 @@
-import { getClientForModel } from './llm.js'
+import { getExecutorForModel } from './llm.js'
 import { type SupportedChatModel } from './schema.js'
 import { calculateCost } from './llm-cost.js'
 
@@ -21,36 +21,39 @@ When reviewing code changes (git diffs), prioritize:
 - Code smell and anti-patterns
 - Inconsistencies with codebase conventions
 
-Be critical and thorough. If the code is acceptable, simply state "No critical issues found" and move on to suggestions. Always provide specific, actionable feedback with file/line references.`
+Be critical and thorough. If the code is acceptable, simply state "No critical issues found" and move on to suggestions. Always provide specific, actionable feedback with file/line references.
+
+Respond in Markdown.`
 
 export async function queryLlm(
   prompt: string,
   model: SupportedChatModel,
+  filePaths?: string[],
 ): Promise<{
   response: string
   costInfo: string
 }> {
-  const { client } = getClientForModel(model)
-  const completion = await client.chat.completions.create({
+  const executor = getExecutorForModel(model)
+  const { response, usage } = await executor.execute(
+    prompt,
     model,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: prompt },
-    ],
-  })
+    SYSTEM_PROMPT,
+    filePaths,
+  )
 
-  const response = completion.choices[0]?.message?.content
   if (!response) {
     throw new Error('No response from the model')
   }
 
-  const usage = completion.usage
-
-  // Calculate costs
-  const { inputCost, outputCost, totalCost } = calculateCost(usage, model)
-  const costInfo = usage
-    ? `Tokens: ${usage.prompt_tokens} input, ${usage.completion_tokens} output | Cost: $${totalCost.toFixed(6)} (input: $${inputCost.toFixed(6)}, output: $${outputCost.toFixed(6)})`
-    : 'Usage data not available'
+  let costInfo: string
+  if (usage) {
+    // Calculate costs only if usage data is available (from API)
+    const { inputCost, outputCost, totalCost } = calculateCost(usage, model)
+    costInfo = `Tokens: ${usage.prompt_tokens} input, ${usage.completion_tokens} output | Cost: $${totalCost.toFixed(6)} (input: $${inputCost.toFixed(6)}, output: $${outputCost.toFixed(6)})`
+  } else {
+    // Handle case where usage is not available (from CLI)
+    costInfo = 'Cost data not available (using CLI mode)'
+  }
 
   return { response, costInfo }
 }

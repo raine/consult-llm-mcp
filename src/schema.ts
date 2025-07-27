@@ -8,21 +8,20 @@ export const SupportedChatModel = z.enum([
 
 export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
-export const ConsultLlmArgs = z
-  .object({
-    files: z.array(z.string()).optional(),
-    prompt: z.string(),
-    model: SupportedChatModel.optional(),
-    git_diff: z
-      .object({
-        repo_path: z.string().optional(),
-        files: z
-          .array(z.string())
-          .min(1, 'At least one file is required for git diff'),
-        base_ref: z.string().optional().default('HEAD'),
-      })
-      .optional(),
-  })
+export const ConsultLlmArgs = z.object({
+  files: z.array(z.string()).optional(),
+  prompt: z.string(),
+  model: SupportedChatModel.optional(),
+  git_diff: z
+    .object({
+      repo_path: z.string().optional(),
+      files: z
+        .array(z.string())
+        .min(1, 'At least one file is required for git diff'),
+      base_ref: z.string().optional().default('HEAD'),
+    })
+    .optional(),
+})
 
 export const toolSchema = {
   name: 'consult_llm',
@@ -37,7 +36,8 @@ IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solution
       files: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Array of file paths to include as context. All files are added as context with file paths and code blocks.',
+        description:
+          'Array of file paths to include as context. All files are added as context with file paths and code blocks.',
       },
       prompt: {
         type: 'string',

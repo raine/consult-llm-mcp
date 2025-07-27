@@ -16,6 +16,7 @@ import { processFiles } from './file.js'
 import { generateGitDiff } from './git.js'
 import { buildPrompt } from './prompt-builder.js'
 import { queryLlm } from './llm-query.js'
+import { getExecutorForModel } from './llm.js'
 import {
   logToolCall,
   logPrompt,
@@ -65,20 +66,42 @@ async function handleConsultLlm(args: unknown) {
 
   logToolCall('consult_llm', args)
 
-  // Process files (if provided) - all files become context
-  const contextFiles = files ? processFiles(files) : []
+  // Check if we're using CLI mode for Gemini
+  const isCliMode = model.startsWith('gemini-') && config.geminiMode === 'cli'
 
-  // Generate git diff
-  const gitDiffOutput = git_diff
-    ? generateGitDiff(git_diff.repo_path, git_diff.files, git_diff.base_ref)
-    : undefined
+  let prompt: string
+  let filePaths: string[] | undefined
 
-  // Build prompt
-  const prompt = buildPrompt(userPrompt, contextFiles, gitDiffOutput)
+  if (isCliMode && files) {
+    // For CLI mode, we'll pass file paths separately
+    filePaths = files.map((f) => resolve(f))
+
+    // Generate git diff if needed
+    const gitDiffOutput = git_diff
+      ? generateGitDiff(git_diff.repo_path, git_diff.files, git_diff.base_ref)
+      : undefined
+
+    // Build prompt without file contents for CLI mode
+    prompt = gitDiffOutput
+      ? `## Git Diff\n\`\`\`diff\n${gitDiffOutput}\n\`\`\`\n\n${userPrompt}`
+      : userPrompt
+  } else {
+    // For API mode, include file contents in the prompt
+    const contextFiles = files ? processFiles(files) : []
+
+    // Generate git diff
+    const gitDiffOutput = git_diff
+      ? generateGitDiff(git_diff.repo_path, git_diff.files, git_diff.base_ref)
+      : undefined
+
+    // Build prompt with file contents
+    prompt = buildPrompt(userPrompt, contextFiles, gitDiffOutput)
+  }
+
   await logPrompt(model, prompt)
 
   // Query LLM
-  const { response, costInfo } = await queryLlm(prompt, model)
+  const { response, costInfo } = await queryLlm(prompt, model, filePaths)
   await logResponse(model, response, costInfo)
 
   return {

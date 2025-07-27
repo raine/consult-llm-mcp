@@ -6,6 +6,7 @@ const Config = z.object({
   geminiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
   defaultModel: SupportedChatModel.optional(),
+  geminiMode: z.enum(['api', 'cli']).default('api'),
 })
 
 export type Config = z.infer<typeof Config>
@@ -15,6 +16,7 @@ const parsedConfig = Config.safeParse({
   geminiApiKey: process.env.GEMINI_API_KEY,
   deepseekApiKey: process.env.DEEPSEEK_API_KEY,
   defaultModel: process.env.CONSULT_LLM_DEFAULT_MODEL,
+  geminiMode: process.env.GEMINI_MODE,
 })
 
 if (!parsedConfig.success) {
