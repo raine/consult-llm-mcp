@@ -6,6 +6,7 @@ import {
   SupportedChatModel,
   type SupportedChatModel as SupportedChatModelType,
 } from './schema.js'
+import { logCliDebug } from './logger.js'
 
 // --- Executor Interface Definition ---
 export interface LlmExecutor {
@@ -62,26 +63,75 @@ class CliExecutor implements LlmExecutor {
     // Build the full prompt with system prompt prepended
     let fullPrompt = `${systemPrompt}\n\n${prompt}`
 
-    // Append file references using @ syntax
+    // Append file references using @ syntax in the prompt
     if (filePaths && filePaths.length > 0) {
-      // Escape spaces in paths for CLI
-      const fileReferences = filePaths
-        .map((path) => `@${path.replace(/ /g, '\\ ')}`)
-        .join(' ')
+      const fileReferences = filePaths.map((path) => `@${path}`).join(' ')
       fullPrompt = `${fullPrompt}\n\nFiles: ${fileReferences}`
     }
 
     const args = ['-m', model, '-p', fullPrompt]
 
     return new Promise((resolve, reject) => {
-      const child = spawn('gemini', args, { shell: false })
+      logCliDebug('Spawning gemini CLI', {
+        model,
+        promptLength: fullPrompt.length,
+        filePathsCount: filePaths?.length || 0,
+        args: args,
+        promptPreview: fullPrompt.slice(0, 300),
+      })
+
+      const child = spawn('gemini', args, {
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'], // stdin, stdout, stderr
+      })
       let stdout = ''
       let stderr = ''
+      let hasResponded = false
+      let hasStarted = false
+      const startTime = Date.now()
 
-      child.stdout.on('data', (data) => (stdout += data.toString()))
-      child.stderr.on('data', (data) => (stderr += data.toString()))
+      // Log when process actually starts
+      child.on('spawn', () => {
+        hasStarted = true
+        logCliDebug('Gemini CLI process spawned successfully')
+      })
+
+      // Add timeout to prevent hanging
+      const timeout = setTimeout(
+        () => {
+          if (!hasResponded) {
+            logCliDebug('Gemini CLI timed out after 5 minutes')
+            child.kill()
+            reject(new Error('Gemini CLI timed out after 5 minutes'))
+          }
+        },
+        5 * 60 * 1000,
+      ) // 5 minutes
+
+      child.stdout.on('data', (data) => {
+        const chunk = data.toString()
+        stdout += chunk
+      })
+
+      child.stderr.on('data', (data) => {
+        const chunk = data.toString()
+        stderr += chunk
+      })
 
       child.on('close', (code) => {
+        hasResponded = true
+        clearTimeout(timeout)
+        const duration = Date.now() - startTime
+
+        logCliDebug('Gemini CLI process closed', {
+          code,
+          duration: `${duration}ms`,
+          stdoutLength: stdout.length,
+          stderrLength: stderr.length,
+          stdoutPreview: stdout.slice(0, 200),
+          stderrPreview: stderr.slice(0, 200),
+        })
+
         if (code === 0) {
           resolve({ response: stdout.trim(), usage: null })
         } else {
@@ -103,6 +153,9 @@ class CliExecutor implements LlmExecutor {
       })
 
       child.on('error', (err) => {
+        hasResponded = true
+        clearTimeout(timeout)
+        logCliDebug('Failed to spawn Gemini CLI', { error: err.message })
         reject(
           new Error(
             `Failed to spawn Gemini CLI. Is it installed and in PATH? Error: ${err.message}`,

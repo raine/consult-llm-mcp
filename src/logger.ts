@@ -84,3 +84,10 @@ export function logConfiguration(config: Record<string, any>) {
     `CONFIGURATION:\n${JSON.stringify(redactedConfig, null, 2)}\n${'='.repeat(80)}`,
   )
 }
+
+export function logCliDebug(message: string, data?: any) {
+  const logMessage = data
+    ? `Gemini CLI: ${message}\n${JSON.stringify(data, null, 2)}`
+    : `Gemini CLI: ${message}`
+  logToFile(logMessage)
+}
