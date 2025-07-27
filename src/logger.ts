@@ -62,3 +62,25 @@ export function logServerStart(version: string) {
     `MCP SERVER STARTED - consult-llm-mcp v${version}\n${'='.repeat(80)}`,
   )
 }
+
+export function logConfiguration(config: Record<string, any>) {
+  const redactedConfig = Object.entries(config).reduce(
+    (acc, [key, value]) => {
+      // Redact API keys and other sensitive values
+      if (
+        key.toLowerCase().includes('key') ||
+        key.toLowerCase().includes('secret')
+      ) {
+        acc[key] = value ? '[REDACTED]' : undefined
+      } else {
+        acc[key] = value
+      }
+      return acc
+    },
+    {} as Record<string, any>,
+  )
+
+  logToFile(
+    `CONFIGURATION:\n${JSON.stringify(redactedConfig, null, 2)}\n${'='.repeat(80)}`,
+  )
+}

@@ -22,6 +22,7 @@ import {
   logPrompt,
   logResponse,
   logServerStart,
+  logConfiguration,
 } from './logger.js'
 import { readFileSync } from 'fs'
 import { dirname, join, resolve } from 'path'
@@ -125,6 +126,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   logServerStart(SERVER_VERSION)
+  logConfiguration(config)
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
