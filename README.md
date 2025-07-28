@@ -28,7 +28,9 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
-- Use Gemini via API or CLI (`gemini`)
+- Gemini can be used via
+  [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
+  [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
 
 ## Configuration
 
@@ -66,6 +68,7 @@ claude mcp add \
   -e OPENAI_API_KEY=your_openai_key \
   -e GEMINI_API_KEY=your_gemini_key \
   -e DEEPSEEK_API_KEY=your_deepseek_key \
+  -e GEMINI_MODE=cli \
     consult-llm -- npx -y consult-llm-mcp
 ```
 
