@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { spawn } from 'child_process'
+import { relative } from 'path'
 import { config } from './config.js'
 import { z } from 'zod/v4'
 import {
@@ -65,7 +66,9 @@ class CliExecutor implements LlmExecutor {
 
     // Append file references using @ syntax in the prompt
     if (filePaths && filePaths.length > 0) {
-      const fileReferences = filePaths.map((path) => `@${path}`).join(' ')
+      const fileReferences = filePaths
+        .map((path) => `@${relative(process.cwd(), path)}`)
+        .join(' ')
       fullPrompt = `${fullPrompt}\n\nFiles: ${fileReferences}`
     }
 
