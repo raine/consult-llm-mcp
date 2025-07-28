@@ -34,18 +34,6 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
 - Simple: provides just one MCP tool
 
-## Configuration
-
-- `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
-- `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models in API
-  mode)
-- `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
-- `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
-- `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
-  - Options: `api` (default), `cli`
-  - CLI mode uses the system-installed `gemini` CLI tool
-
 ## Usage with Claude Code
 
 ### Installation
@@ -201,6 +189,18 @@ Some real-world examples. Click to expand.
 ````
 
 </details>
+
+## Configuration
+
+- `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
+- `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models in API
+  mode)
+- `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
+- `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
+  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
+- `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
+  - Options: `api` (default), `cli`
+  - CLI mode uses the system-installed `gemini` CLI tool
 
 ## MCP Tool: consult_llm
 
