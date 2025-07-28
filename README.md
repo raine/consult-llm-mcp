@@ -1,7 +1,8 @@
 # Consult LLM MCP
 
-An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5
-Pro, DeepSeek Reasoner) when you need deeper analysis on complex problems.
+An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.
+Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need to
+bring in the heavy artillery.
 
 ```
 This SQL query is timing out on large datasets. Can you help optimize it? Ask Gemini
@@ -31,6 +32,7 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Gemini can be used via
   [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
+- Simple: provides just one MCP tool
 
 ## Configuration
 
