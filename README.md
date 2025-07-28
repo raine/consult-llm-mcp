@@ -225,40 +225,6 @@ models complex questions.
     directory)
   - **base_ref** (optional): Git reference to compare against (defaults to HEAD)
 
-### Example Usage
-
-**Basic prompt:**
-
-```json
-{
-  "prompt": "What are the performance implications of using async/await vs Promise.then() in Node.js?"
-}
-```
-
-**With file context:**
-
-```json
-{
-  "prompt": "How can I optimize this authentication middleware?",
-  "files": ["src/auth.ts", "src/middleware.ts"],
-  "model": "o3"
-}
-```
-
-**With git diff:**
-
-```json
-{
-  "prompt": "Review these authentication changes for security issues",
-  "files": ["src/auth.ts"],
-  "git_diff": {
-    "files": ["src/auth.ts", "src/middleware.ts"],
-    "base_ref": "main"
-  },
-  "model": "gemini-2.5-pro"
-}
-```
-
 ## Supported Models
 
 - **o3**: OpenAI's reasoning model ($2/$8 per million tokens)
