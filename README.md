@@ -54,12 +54,12 @@ Optionally you can provide environment variables directly in the MCP
 configuration:
 
 ```bash
-claude mcp add \
+claude mcp add consult-llm \
   -e OPENAI_API_KEY=your_openai_key \
   -e GEMINI_API_KEY=your_gemini_key \
   -e DEEPSEEK_API_KEY=your_deepseek_key \
   -e GEMINI_MODE=cli \
-    consult-llm -- npx -y consult-llm-mcp
+  -- npx -y consult-llm-mcp
 ```
 
 ### Example workflows
