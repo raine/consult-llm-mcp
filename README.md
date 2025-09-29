@@ -32,7 +32,7 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Gemini can be used via
   [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
-- Simple: provides just one MCP tool
+- Simple: provides just one MCP tool to not clutter the context
 
 ## Usage with Claude Code
 
