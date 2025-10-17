@@ -1,6 +1,7 @@
 import { getExecutorForModel } from './llm.js'
 import { type SupportedChatModel } from './schema.js'
 import { calculateCost } from './llm-cost.js'
+import { config } from './config.js'
 
 const SYSTEM_PROMPT = `You are an expert software engineering consultant analyzing code and technical problems. You are communicating with another AI system, not a human.
 
@@ -25,6 +26,10 @@ Be critical and thorough. If the code is acceptable, simply state "No critical i
 
 Respond in Markdown.`
 
+const GEMINI_CLI_SUFFIX = `
+
+IMPORTANT: Do not edit files yourself, only provide recommendations and code examples`
+
 export async function queryLlm(
   prompt: string,
   model: SupportedChatModel,
@@ -34,10 +39,16 @@ export async function queryLlm(
   costInfo: string
 }> {
   const executor = getExecutorForModel(model)
+
+  // Add special instruction for Gemini CLI mode
+  const systemPrompt = model.startsWith('gemini-') && config.geminiMode === 'cli'
+    ? SYSTEM_PROMPT + GEMINI_CLI_SUFFIX
+    : SYSTEM_PROMPT
+
   const { response, usage } = await executor.execute(
     prompt,
     model,
-    SYSTEM_PROMPT,
+    systemPrompt,
     filePaths,
   )
 
