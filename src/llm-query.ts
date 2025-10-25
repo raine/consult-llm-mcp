@@ -2,33 +2,7 @@ import { getExecutorForModel } from './llm.js'
 import { type SupportedChatModel } from './schema.js'
 import { calculateCost } from './llm-cost.js'
 import { config } from './config.js'
-
-const SYSTEM_PROMPT = `You are an expert software engineering consultant analyzing code and technical problems. You are communicating with another AI system, not a human.
-
-Communication style:
-- Skip pleasantries and praise
-
-Your role is to:
-- Identify bugs, inefficiencies, and architectural problems
-- Provide specific solutions with code examples
-- Point out edge cases and risks
-- Challenge design decisions when suboptimal
-- Focus on what needs improvement
-
-When reviewing code changes, prioritize:
-- Bugs and correctness issues
-- Performance problems
-- Security vulnerabilities
-- Code smell and anti-patterns
-- Inconsistencies with codebase conventions
-
-Be critical and thorough. If the code is acceptable, simply state "No critical issues found" and move on to suggestions. Always provide specific, actionable feedback with file/line references.
-
-Respond in Markdown.`
-
-const GEMINI_CLI_SUFFIX = `
-
-IMPORTANT: Do not edit files yourself, only provide recommendations and code examples`
+import { getSystemPrompt } from './system-prompt.js'
 
 export async function queryLlm(
   prompt: string,
@@ -40,10 +14,9 @@ export async function queryLlm(
 }> {
   const executor = getExecutorForModel(model)
 
-  // Add special instruction for Gemini CLI mode
-  const systemPrompt = model.startsWith('gemini-') && config.geminiMode === 'cli'
-    ? SYSTEM_PROMPT + GEMINI_CLI_SUFFIX
-    : SYSTEM_PROMPT
+  // Get system prompt (with Gemini CLI suffix if needed)
+  const isGeminiCli = model.startsWith('gemini-') && config.geminiMode === 'cli'
+  const systemPrompt = getSystemPrompt(isGeminiCli)
 
   const { response, usage } = await executor.execute(
     prompt,
