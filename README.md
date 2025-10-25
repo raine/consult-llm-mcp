@@ -192,6 +192,8 @@ Some real-world examples. Click to expand.
 
 ## Configuration
 
+### Environment Variables
+
 - `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models in API
   mode)
@@ -201,6 +203,21 @@ Some real-world examples. Click to expand.
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `gemini` CLI tool
+
+### Custom System Prompt
+
+You can customize the system prompt used when consulting LLMs by creating a
+`SYSTEM_PROMPT.md` file in `~/.consult-llm-mcp/`:
+
+```bash
+consult-llm-mcp init-prompt
+```
+
+This creates a placeholder file with the default system prompt that you can edit
+to customize how the consultant LLM behaves. The custom prompt is read on every
+request, so changes take effect immediately without restarting the server.
+
+To revert to the default prompt, simply delete the `SYSTEM_PROMPT.md` file.
 
 ## MCP Tool: consult_llm
 
