@@ -23,9 +23,11 @@ import {
   logServerStart,
   logConfiguration,
 } from './logger.js'
-import { readFileSync } from 'fs'
+import { DEFAULT_SYSTEM_PROMPT } from './system-prompt.js'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
+import { homedir } from 'os'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageJson = JSON.parse(
@@ -123,10 +125,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error(`Unknown tool: ${request.params.name}`)
 })
 
+function initSystemPrompt() {
+  const configDir = join(homedir(), '.consult-llm-mcp')
+  const promptPath = join(configDir, 'SYSTEM_PROMPT.md')
+
+  if (existsSync(promptPath)) {
+    console.error(`System prompt already exists at: ${promptPath}`)
+    console.error('Remove it first if you want to reinitialize.')
+    process.exit(1)
+  }
+
+  // Create config directory if it doesn't exist
+  if (!existsSync(configDir)) {
+    mkdirSync(configDir, { recursive: true })
+  }
+
+  // Write the default system prompt
+  writeFileSync(promptPath, DEFAULT_SYSTEM_PROMPT, 'utf-8')
+  console.log(`Created system prompt at: ${promptPath}`)
+  console.log('You can now edit this file to customize the system prompt.')
+  process.exit(0)
+}
+
 async function main() {
   if (process.argv.includes('--version') || process.argv.includes('-v')) {
     console.log(SERVER_VERSION)
     process.exit(0)
+  }
+
+  if (process.argv.includes('init-prompt')) {
+    initSystemPrompt()
+    return
   }
 
   logServerStart(SERVER_VERSION)
