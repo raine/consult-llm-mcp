@@ -2,11 +2,7 @@ import OpenAI from 'openai'
 import { spawn } from 'child_process'
 import { relative } from 'path'
 import { config } from './config.js'
-import { z } from 'zod/v4'
-import {
-  SupportedChatModel,
-  type SupportedChatModel as SupportedChatModelType,
-} from './schema.js'
+import { type SupportedChatModel as SupportedChatModelType } from './schema.js'
 import { logCliDebug } from './logger.js'
 
 // --- Executor Interface Definition ---
@@ -34,7 +30,6 @@ class ApiExecutor implements LlmExecutor {
     prompt: string,
     model: SupportedChatModelType,
     systemPrompt: string,
-    filePaths?: string[],
   ): Promise<{ response: string; usage: OpenAI.CompletionUsage | null }> {
     const completion = await this.client.chat.completions.create({
       model,
@@ -90,12 +85,10 @@ class CliExecutor implements LlmExecutor {
       let stdout = ''
       let stderr = ''
       let hasResponded = false
-      let hasStarted = false
       const startTime = Date.now()
 
       // Log when process actually starts
       child.on('spawn', () => {
-        hasStarted = true
         logCliDebug('Gemini CLI process spawned successfully')
       })
 
@@ -111,12 +104,12 @@ class CliExecutor implements LlmExecutor {
         5 * 60 * 1000,
       ) // 5 minutes
 
-      child.stdout.on('data', (data) => {
+      child.stdout.on('data', (data: Buffer) => {
         const chunk = data.toString()
         stdout += chunk
       })
 
-      child.stderr.on('data', (data) => {
+      child.stderr.on('data', (data: Buffer) => {
         const chunk = data.toString()
         stderr += chunk
       })

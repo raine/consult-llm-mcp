@@ -16,7 +16,6 @@ import { processFiles } from './file.js'
 import { generateGitDiff } from './git.js'
 import { buildPrompt } from './prompt-builder.js'
 import { queryLlm } from './llm-query.js'
-import { getExecutorForModel } from './llm.js'
 import {
   logToolCall,
   logPrompt,
@@ -31,7 +30,7 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '../package.json'), 'utf-8'),
-)
+) as { version: string }
 const SERVER_VERSION = packageJson.version
 
 const server = new Server(
@@ -46,7 +45,7 @@ const server = new Server(
   },
 )
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
+server.setRequestHandler(ListToolsRequestSchema, () => {
   return {
     tools: [toolSchema],
   }

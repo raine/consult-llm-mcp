@@ -8,7 +8,7 @@ const logFile = join(logDir, 'mcp.log')
 
 try {
   mkdirSync(logDir, { recursive: true })
-} catch (error) {
+} catch {
   // Directory might already exist
 }
 
@@ -19,7 +19,7 @@ async function formatWithPrettier(text: string): Promise<string> {
       printWidth: 80,
       proseWrap: 'always',
     })
-  } catch (error) {
+  } catch {
     // If formatting fails, return original text
     return text
   }
@@ -63,7 +63,7 @@ export function logServerStart(version: string) {
   )
 }
 
-export function logConfiguration(config: Record<string, any>) {
+export function logConfiguration(config: Record<string, unknown>) {
   const redactedConfig = Object.entries(config).reduce(
     (acc, [key, value]) => {
       // Redact API keys and other sensitive values
@@ -73,11 +73,11 @@ export function logConfiguration(config: Record<string, any>) {
       ) {
         acc[key] = value ? '[REDACTED]' : undefined
       } else {
-        acc[key] = value
+        acc[key] = value as string | undefined
       }
       return acc
     },
-    {} as Record<string, any>,
+    {} as Record<string, string | undefined>,
   )
 
   logToFile(
@@ -85,7 +85,7 @@ export function logConfiguration(config: Record<string, any>) {
   )
 }
 
-export function logCliDebug(message: string, data?: any) {
+export function logCliDebug(message: string, data?: unknown) {
   const logMessage = data
     ? `Gemini CLI: ${message}\n${JSON.stringify(data, null, 2)}`
     : `Gemini CLI: ${message}`
