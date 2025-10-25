@@ -125,6 +125,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 })
 
 async function main() {
+  if (process.argv.includes('--version') || process.argv.includes('-v')) {
+    console.log(SERVER_VERSION)
+    process.exit(0)
+  }
+
   logServerStart(SERVER_VERSION)
   logConfiguration(config)
 
