@@ -25,7 +25,7 @@ export const ConsultLlmArgs = z.object({
 
 export const toolSchema = {
   name: 'consult_llm',
-  description: `Ask a more powerful AI for help with complex problems. Provide your question in the prompt field and optionally include relevant code files as context.
+  description: `Ask a more powerful AI for help with complex problems. Provide your question in the prompt field and always include relevant code files as context.
 
 Be specific about what you want: code implementation, code review, bug analysis, architecture advice, etc.
 
