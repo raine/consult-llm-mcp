@@ -302,3 +302,52 @@ CRITICAL: When asking, don't present options, this will bias the answer.
 
 Claude Code seems to know pretty well when to use this MCP even without this
 instruction however.
+
+## Development
+
+To work on the MCP server locally and use your development version:
+
+1. Clone the repository and install dependencies:
+
+   ```bash
+   git clone https://github.com/yourusername/consult-llm-mcp.git
+   cd consult-llm-mcp
+   npm install
+   ```
+
+2. Build the project:
+
+   ```bash
+   npm run build
+   ```
+
+3. Install globally from the local directory:
+
+   ```bash
+   npm link
+   ```
+
+4. Add the MCP server to Claude Code using the global command:
+   ```bash
+   claude mcp add consult-llm -- consult-llm-mcp
+   ```
+
+Now when you make changes:
+
+1. Rebuild: `npm run build`
+2. Restart Claude Code to pick up the changes
+
+Alternatively, you can use the dev script for development without building:
+
+```bash
+claude mcp add consult-llm -- npm run dev
+```
+
+This runs the TypeScript source directly with `tsx`, allowing faster iteration
+without rebuilding.
+
+To unlink the global version later:
+
+```bash
+npm unlink -g
+```
