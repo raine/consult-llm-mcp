@@ -12,8 +12,12 @@
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
     "format": "prettier --write .",
+    "check": "concurrently \"pnpm:check:*\"",
+    "check:types": "tsc --noEmit",
+    "check:format": "prettier --write .",
+    "check:lint": "eslint .",
     "install-global": "npm run build && npm install -g .",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "pnpm run check && npm run build",
     "publish:dry": "npm publish --dry-run",
     "publish:patch": "npm version patch && npm publish",
     "publish:minor": "npm version minor && npm publish",
@@ -50,8 +54,12 @@
     "zod": "^3.25.67"
   },
   "devDependencies": {
+    "@eslint/js": "^9.38.0",
     "@types/node": "^24.0.3",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.38.0",
     "tsx": "^4.20.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.46.2"
   }
 }
