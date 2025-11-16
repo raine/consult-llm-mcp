@@ -32,6 +32,7 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Gemini can be used via
   [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
+- Web mode: Copy formatted prompts to clipboard for browser-based LLM services
 - Simple: provides just one MCP tool to not clutter the context
 
 ## Usage with Claude Code
@@ -117,6 +118,53 @@ Some real-world examples. Click to expand.
   ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint key
        targeting in handleConfirmGenerateHints
 ```
+
+</details>
+
+<details>
+<summary>Using web mode to copy prompts to clipboard for browser-based LLMs</summary>
+
+```
+> I need help implementing a -b/--background flag for my Rust CLI. Use consult LLM with web mode
+
+⏺ I'll use web mode to copy the formatted prompt to your clipboard so you can
+  paste it into any browser-based LLM service.
+
+⏺ consult-llm:consult_llm (MCP)(prompt: "What is the best approach to implement a
+                                 -b/--background flag for the \"workmux add\" command that
+                                 creates a tmux window in the background without switching to
+                                 it?\n\nThe current implementation automatically switches to
+                                 the newly created window via `tmux::select_window()` in the
+                                 `setup_environment()` function. I need to make this behavior
+                                 conditional based on a flag passed from the
+                                 CLI.\n\nConsider:\n1. Where should the background flag be
+                                 threaded through the call chain?\n2. Should I modify the
+                                 existing SetupOptions struct or add a parameter?\n3. What's
+                                 the most maintainable approach given the codebase
+                                 structure?\n4. Are there any edge cases to consider (e.g.,
+                                 should select_pane also be conditional)?", files:
+                                 ["src/cli.rs","src/workflow.rs","src/tmux.rs"], web_mode:
+                                 true)
+  ⎿  ✓ Prompt copied to clipboard!
+
+     Please paste it into your browser-based LLM service and share the response
+     here before I proceed with any implementation.
+
+     Note: File paths were included:
+       - src/cli.rs
+       - src/workflow.rs
+       - src/tmux.rs
+
+> [User pastes the response from the external LLM]
+
+⏺ Thank you! Based on the recommendations, I'll now implement the solution...
+```
+
+This is useful when:
+
+- You want to use a free browser-based LLM service instead of API credits
+- You prefer a specific LLM's web interface
+- You want to review the full prompt before submitting it
 
 </details>
 
@@ -235,6 +283,13 @@ models complex questions.
 - **model** (optional): LLM model to use
 
   - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
+
+- **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
+
+  - Default: `false`
+  - When `true`, the formatted prompt (including system prompt and file
+    contents) is copied to clipboard for manual pasting into browser-based LLM
+    services
 
 - **git_diff** (optional): Include git diff output as context
   - **files** (required): Specific files to include in diff

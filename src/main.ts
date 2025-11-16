@@ -23,7 +23,8 @@ import {
   logServerStart,
   logConfiguration,
 } from './logger.js'
-import { DEFAULT_SYSTEM_PROMPT } from './system-prompt.js'
+import { DEFAULT_SYSTEM_PROMPT, getSystemPrompt } from './system-prompt.js'
+import { copyToClipboard } from './clipboard.js'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
@@ -62,7 +63,7 @@ async function handleConsultLlm(args: unknown) {
     throw new Error(`Invalid request parameters: ${errors}`)
   }
 
-  const { files, prompt: userPrompt, git_diff } = parseResult.data
+  const { files, prompt: userPrompt, git_diff, web_mode } = parseResult.data
   const model: SupportedChatModel =
     parseResult.data.model ?? config.defaultModel ?? 'o3'
 
@@ -101,6 +102,32 @@ async function handleConsultLlm(args: unknown) {
   }
 
   await logPrompt(model, prompt)
+
+  // Handle web mode - copy prompt to clipboard instead of querying LLM
+  if (web_mode) {
+    const systemPrompt = getSystemPrompt(isCliMode)
+    const fullPrompt = `# System Prompt
+
+${systemPrompt}
+
+# User Prompt
+
+${prompt}`
+
+    await copyToClipboard(fullPrompt)
+
+    let responseMessage = '✓ Prompt copied to clipboard!\n\n'
+    responseMessage +=
+      'Please paste it into your browser-based LLM service and share the response here before I proceed with any implementation.'
+
+    if (filePaths && filePaths.length > 0) {
+      responseMessage += `\n\nNote: File paths were included:\n${filePaths.map((p) => `  - ${p}`).join('\n')}`
+    }
+
+    return {
+      content: [{ type: 'text', text: responseMessage }],
+    }
+  }
 
   // Query LLM
   const { response, costInfo } = await queryLlm(prompt, model, filePaths)

@@ -12,6 +12,7 @@ export const ConsultLlmArgs = z.object({
   files: z.array(z.string()).optional(),
   prompt: z.string(),
   model: SupportedChatModel.optional(),
+  web_mode: z.boolean().optional().default(false),
   git_diff: z
     .object({
       repo_path: z.string().optional(),
@@ -49,6 +50,12 @@ IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solution
         enum: ['o3', 'gemini-2.5-pro', 'deepseek-reasoner'],
         default: 'o3',
         description: 'LLM model to use',
+      },
+      web_mode: {
+        type: 'boolean',
+        default: false,
+        description:
+          "Copy the formatted prompt to clipboard instead of querying the LLM. Use this to paste the prompt into browser-based LLM services. IMPORTANT: When true, wait for the user to provide the external LLM's response before proceeding with any implementation.",
       },
       git_diff: {
         type: 'object',
