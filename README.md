@@ -29,8 +29,7 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
-- Gemini can be used via
-  [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
+- [Gemini CLI mode](#gemini-cli-mode): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
@@ -259,6 +258,29 @@ wherever you like.
 
 See the "Using web mode..." example above for a concrete transcript of this
 flow.
+
+## Gemini CLI Mode
+
+Use Gemini's local CLI when you want to take advantage of Google's free quota or
+keep prompts off the API by enabling CLI mode so consult-llm spawns the `gemini`
+binary locally rather than sending the prompt through the API.
+
+- **When to use**: you have the Gemini CLI installed and authenticated, want to
+  stay within the CLI's free allowance.
+- **Requirements**:
+  1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and
+     ensure the `gemini` command is on your `$PATH`.
+  2. Authenticate via `gemini login` (and any other setup the CLI requires).
+- **Workflow**:
+  1. When adding the MCP server, set `GEMINI_MODE=cli`:
+     ```bash
+     claude mcp add consult-llm \
+       -e GEMINI_MODE=cli \
+       -- npx -y consult-llm-mcp
+     ```
+  2. Ask Claude Code to "consult Gemini" (or whichever phrasing you normally
+     use). It will call `consult_llm` with the Gemini model, assemble the
+     prompt, and shell out to the CLI automatically.
 
 ## Configuration
 
