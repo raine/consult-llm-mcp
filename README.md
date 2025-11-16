@@ -32,7 +32,8 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 - Gemini can be used via
   [Gemini CLI](https://github.com/google-gemini/gemini-cli) to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
-- Web mode: Copy formatted prompts to clipboard for browser-based LLM services
+- [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
+  LLM services
 - Simple: provides just one MCP tool to not clutter the context
 
 ## Usage with Claude Code
@@ -237,6 +238,27 @@ This is useful when:
 ````
 
 </details>
+
+## Web Mode
+
+When you want Claude Code to prepare the prompt but send it through an LLM web
+UI yourself (ChatGPT, Claude.ai, Gemini, etc.), ask it to "use consult LLM with
+web mode." Claude will pass `web_mode: true` to `consult_llm`, the MCP will
+assemble the full prompt (system prompt + files + git diff), and instead of
+hitting an API it copies that text to your clipboard so you can paste it
+wherever you like.
+
+- **When to use**: prefer a specific web UI, want to review the prompt first, or
+  do not have API keys configured.
+- **Workflow**:
+  1. Tell Claude Code (or your MCP-aware agent) to "use consult LLM with web
+     mode" so it invokes the tool with `web_mode: true`.
+  2. Paste the copied prompt into your browser-based LLM and wait for its
+     response.
+  3. Paste that response back into Claude Code so it can continue.
+
+See the "Using web mode..." example above for a concrete transcript of this
+flow.
 
 ## Configuration
 
