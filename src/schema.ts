@@ -55,7 +55,7 @@ IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solution
         type: 'boolean',
         default: false,
         description:
-          "Copy the formatted prompt to clipboard instead of querying the LLM. Use this to paste the prompt into browser-based LLM services. IMPORTANT: When true, wait for the user to provide the external LLM's response before proceeding with any implementation.",
+          "Copy the formatted prompt to clipboard instead of querying the LLM. Use this to paste the prompt into browser-based LLM services. IMPORTANT: Only use this when the user specifically requests it. When true, wait for the user to provide the external LLM's response before proceeding with any implementation.",
       },
       git_diff: {
         type: 'object',
