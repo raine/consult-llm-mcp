@@ -9,19 +9,53 @@ export const SupportedChatModel = z.enum([
 export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
 export const ConsultLlmArgs = z.object({
-  files: z.array(z.string()).optional(),
-  prompt: z.string(),
-  model: SupportedChatModel.optional(),
-  web_mode: z.boolean().optional().default(false),
+  files: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Array of file paths to include as context. All files are added as context with file paths and code blocks.',
+    ),
+  prompt: z
+    .string()
+    .describe(
+      'Your question or request for the consultant LLM. Ask neutral, open-ended questions without suggesting specific solutions to avoid biasing the analysis.',
+    ),
+  model: SupportedChatModel.optional()
+    .default('o3')
+    .describe(
+      'LLM model to use. This parameter is ignored when `web_mode` is `true`.',
+    ),
+  web_mode: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      "If true, copy the formatted prompt to the clipboard instead of querying an LLM. When true, the `model` parameter is ignored. Use this to paste the prompt into browser-based LLM services. IMPORTANT: Only use this when the user specifically requests it. When true, wait for the user to provide the external LLM's response before proceeding with any implementation.",
+    ),
   git_diff: z
     .object({
-      repo_path: z.string().optional(),
+      repo_path: z
+        .string()
+        .optional()
+        .describe(
+          'Path to git repository (defaults to current working directory)',
+        ),
       files: z
         .array(z.string())
-        .min(1, 'At least one file is required for git diff'),
-      base_ref: z.string().optional().default('HEAD'),
+        .min(1, 'At least one file is required for git diff')
+        .describe('Specific files to include in diff'),
+      base_ref: z
+        .string()
+        .optional()
+        .default('HEAD')
+        .describe(
+          'Git reference to compare against (e.g., "HEAD", "main", commit hash)',
+        ),
     })
-    .optional(),
+    .optional()
+    .describe(
+      'Generate git diff output to include as context. Shows uncommitted changes by default.',
+    ),
 })
 
 export const toolSchema = {
