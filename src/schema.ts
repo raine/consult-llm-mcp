@@ -4,6 +4,9 @@ export const SupportedChatModel = z.enum([
   'o3',
   'gemini-2.5-pro',
   'deepseek-reasoner',
+  'gpt-5.1-codex',
+  'gpt-5.1-codex-mini',
+  'gpt-5.1',
 ])
 
 export type SupportedChatModel = z.infer<typeof SupportedChatModel>

@@ -25,11 +25,11 @@ Be critical and thorough. If the code is acceptable, simply state "No critical i
 
 Respond in Markdown.`
 
-const GEMINI_CLI_SUFFIX = `
+const CLI_MODE_SUFFIX = `
 
 IMPORTANT: Do not edit files yourself, only provide recommendations and code examples`
 
-export function getSystemPrompt(isGeminiCli: boolean): string {
+export function getSystemPrompt(isCliMode: boolean): string {
   const customPromptPath = join(
     homedir(),
     '.consult-llm-mcp',
@@ -51,5 +51,5 @@ export function getSystemPrompt(isGeminiCli: boolean): string {
     systemPrompt = DEFAULT_SYSTEM_PROMPT
   }
 
-  return isGeminiCli ? systemPrompt + GEMINI_CLI_SUFFIX : systemPrompt
+  return isCliMode ? systemPrompt + CLI_MODE_SUFFIX : systemPrompt
 }

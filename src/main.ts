@@ -54,6 +54,19 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
   }
 })
 
+function isCliExecution(model: SupportedChatModel): boolean {
+  if (model.startsWith('gemini-') && config.geminiMode === 'cli') {
+    return true
+  }
+  if (
+    (model.startsWith('gpt-') || model === 'o3') &&
+    config.openaiMode === 'cli'
+  ) {
+    return true
+  }
+  return false
+}
+
 async function handleConsultLlm(args: unknown) {
   const parseResult = ConsultLlmArgs.safeParse(args)
   if (!parseResult.success) {
@@ -69,8 +82,8 @@ async function handleConsultLlm(args: unknown) {
 
   logToolCall('consult_llm', args)
 
-  // Check if we're using CLI mode for Gemini
-  const isCliMode = model.startsWith('gemini-') && config.geminiMode === 'cli'
+  // Check if we're using CLI mode
+  const isCliMode = isCliExecution(model)
 
   let prompt: string
   let filePaths: string[] | undefined

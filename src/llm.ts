@@ -48,18 +48,23 @@ class ApiExecutor implements LlmExecutor {
   }
 }
 
-// --- CLI Executor Implementation ---
-class CliExecutor implements LlmExecutor {
-  async execute(
-    prompt: string,
+// --- Base CLI Executor Implementation ---
+abstract class BaseCliExecutor implements LlmExecutor {
+  protected abstract getCliName(): string
+  protected abstract buildArgs(
     model: SupportedChatModelType,
+    fullPrompt: string,
+  ): string[]
+  protected abstract handleNonZeroExit(code: number, stderr: string): Error
+
+  protected buildFullPrompt(
+    prompt: string,
     systemPrompt: string,
     filePaths?: string[],
-  ): Promise<{ response: string; usage: OpenAI.CompletionUsage | null }> {
-    // Build the full prompt with system prompt prepended
+  ): string {
     let fullPrompt = `${systemPrompt}\n\n${prompt}`
 
-    // Append file references using @ syntax in the prompt
+    // Append file references using @ syntax
     if (filePaths && filePaths.length > 0) {
       const fileReferences = filePaths
         .map((path) => `@${relative(process.cwd(), path)}`)
@@ -67,10 +72,21 @@ class CliExecutor implements LlmExecutor {
       fullPrompt = `${fullPrompt}\n\nFiles: ${fileReferences}`
     }
 
-    const args = ['-m', model, '-p', fullPrompt]
+    return fullPrompt
+  }
+
+  async execute(
+    prompt: string,
+    model: SupportedChatModelType,
+    systemPrompt: string,
+    filePaths?: string[],
+  ): Promise<{ response: string; usage: OpenAI.CompletionUsage | null }> {
+    const fullPrompt = this.buildFullPrompt(prompt, systemPrompt, filePaths)
+    const args = this.buildArgs(model, fullPrompt)
+    const cliName = this.getCliName()
 
     return new Promise((resolve, reject) => {
-      logCliDebug('Spawning gemini CLI', {
+      logCliDebug(`Spawning ${cliName} CLI`, {
         model,
         promptLength: fullPrompt.length,
         filePathsCount: filePaths?.length || 0,
@@ -78,40 +94,36 @@ class CliExecutor implements LlmExecutor {
         promptPreview: fullPrompt.slice(0, 300),
       })
 
-      const child = spawn('gemini', args, {
+      const child = spawn(cliName, args, {
         shell: false,
-        stdio: ['ignore', 'pipe', 'pipe'], // stdin, stdout, stderr
+        stdio: ['ignore', 'pipe', 'pipe'],
       })
       let stdout = ''
       let stderr = ''
       let hasResponded = false
       const startTime = Date.now()
 
-      // Log when process actually starts
       child.on('spawn', () => {
-        logCliDebug('Gemini CLI process spawned successfully')
+        logCliDebug(`${cliName} CLI process spawned successfully`)
       })
 
-      // Add timeout to prevent hanging
       const timeout = setTimeout(
         () => {
           if (!hasResponded) {
-            logCliDebug('Gemini CLI timed out after 5 minutes')
+            logCliDebug(`${cliName} CLI timed out after 5 minutes`)
             child.kill()
-            reject(new Error('Gemini CLI timed out after 5 minutes'))
+            reject(new Error(`${cliName} CLI timed out after 5 minutes`))
           }
         },
         5 * 60 * 1000,
-      ) // 5 minutes
+      )
 
       child.stdout.on('data', (data: Buffer) => {
-        const chunk = data.toString()
-        stdout += chunk
+        stdout += data.toString()
       })
 
       child.stderr.on('data', (data: Buffer) => {
-        const chunk = data.toString()
-        stderr += chunk
+        stderr += data.toString()
       })
 
       child.on('close', (code) => {
@@ -119,42 +131,27 @@ class CliExecutor implements LlmExecutor {
         clearTimeout(timeout)
         const duration = Date.now() - startTime
 
-        logCliDebug('Gemini CLI process closed', {
+        logCliDebug(`${cliName} CLI process closed`, {
           code,
           duration: `${duration}ms`,
           stdoutLength: stdout.length,
           stderrLength: stderr.length,
-          stdoutPreview: stdout.slice(0, 200),
-          stderrPreview: stderr.slice(0, 200),
         })
 
         if (code === 0) {
           resolve({ response: stdout.trim(), usage: null })
         } else {
-          // Check for quota exceeded error
-          if (stderr.includes('RESOURCE_EXHAUSTED')) {
-            reject(
-              new Error(
-                `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
-              ),
-            )
-          } else {
-            reject(
-              new Error(
-                `Gemini CLI exited with code ${code}. Error: ${stderr.trim()}`,
-              ),
-            )
-          }
+          reject(this.handleNonZeroExit(code ?? -1, stderr))
         }
       })
 
       child.on('error', (err) => {
         hasResponded = true
         clearTimeout(timeout)
-        logCliDebug('Failed to spawn Gemini CLI', { error: err.message })
+        logCliDebug(`Failed to spawn ${cliName} CLI`, { error: err.message })
         reject(
           new Error(
-            `Failed to spawn Gemini CLI. Is it installed and in PATH? Error: ${err.message}`,
+            `Failed to spawn ${cliName} CLI. Is it installed and in PATH? Error: ${err.message}`,
           ),
         )
       })
@@ -162,18 +159,78 @@ class CliExecutor implements LlmExecutor {
   }
 }
 
+// --- Gemini CLI Executor Implementation ---
+class GeminiCliExecutor extends BaseCliExecutor {
+  protected getCliName(): string {
+    return 'gemini'
+  }
+
+  protected buildArgs(
+    model: SupportedChatModelType,
+    fullPrompt: string,
+  ): string[] {
+    return ['-m', model, '-p', fullPrompt]
+  }
+
+  protected handleNonZeroExit(code: number, stderr: string): Error {
+    if (stderr.includes('RESOURCE_EXHAUSTED')) {
+      return new Error(
+        `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
+      )
+    }
+    return new Error(
+      `Gemini CLI exited with code ${code}. Error: ${stderr.trim()}`,
+    )
+  }
+}
+
+// --- Codex CLI Executor Implementation ---
+class CodexCliExecutor extends BaseCliExecutor {
+  protected getCliName(): string {
+    return 'codex'
+  }
+
+  protected buildArgs(
+    model: SupportedChatModelType,
+    fullPrompt: string,
+  ): string[] {
+    // Per documentation: `codex -m <model> [PROMPT]`
+    // The prompt is a positional argument, not behind a flag
+    return ['-m', model, fullPrompt]
+  }
+
+  protected handleNonZeroExit(code: number, stderr: string): Error {
+    // Generic error handling. Codex may have specific errors
+    // to parse, like rate limits, which should be added here
+    // after observing its behavior.
+    return new Error(
+      `Codex CLI exited with code ${code}. Error: ${stderr.trim()}`,
+    )
+  }
+}
+
 // --- Client Cache and Executor Factory ---
 const clients: { openai?: OpenAI; geminiApi?: OpenAI; deepseek?: OpenAI } = {}
-let geminiCliExecutor: CliExecutor | undefined
+let geminiCliExecutor: GeminiCliExecutor | undefined
+let codexCliExecutor: CodexCliExecutor | undefined
 
 export function getExecutorForModel(
   model: SupportedChatModelType,
 ): LlmExecutor {
   if (model.startsWith('gpt-') || model === 'o3') {
+    // Check for CLI mode for OpenAI models
+    if (config.openaiMode === 'cli') {
+      if (!codexCliExecutor) {
+        codexCliExecutor = new CodexCliExecutor()
+      }
+      return codexCliExecutor
+    }
+
+    // Fallback to API mode
     if (!clients.openai) {
       if (!config.openaiApiKey) {
         throw new Error(
-          'OPENAI_API_KEY environment variable is required for OpenAI models',
+          'OPENAI_API_KEY environment variable is required for OpenAI models in API mode',
         )
       }
       clients.openai = new OpenAI({
@@ -202,7 +259,7 @@ export function getExecutorForModel(
     // Check if CLI mode is enabled
     if (config.geminiMode === 'cli') {
       if (!geminiCliExecutor) {
-        geminiCliExecutor = new CliExecutor()
+        geminiCliExecutor = new GeminiCliExecutor()
       }
       return geminiCliExecutor
     }

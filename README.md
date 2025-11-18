@@ -1,8 +1,8 @@
 # Consult LLM MCP
 
-An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.
-Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need to
-bring in the heavy artillery.
+An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5
+Pro, DeepSeek Reasoner, GPT-5.1 Codex) when Sonnet has you running in circles
+and you need to bring in the heavy artillery.
 
 ```
 This SQL query is timing out on large datasets. Can you help optimize it? Ask Gemini
@@ -24,13 +24,14 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 
 ## Features
 
-- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner) with relevant
-  files as context
+- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner, GPT-5.1
+  Codex) with relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
 - [Gemini CLI mode](#gemini-cli-mode): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
+- [Codex CLI mode](#codex-cli-mode): Use the `codex` CLI for OpenAI models
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
 - Simple: provides just one MCP tool to not clutter the context
@@ -282,19 +283,45 @@ binary locally rather than sending the prompt through the API.
      use). It will call `consult_llm` with the Gemini model, assemble the
      prompt, and shell out to the CLI automatically.
 
+## Codex CLI Mode
+
+Use OpenAI's Codex CLI when you want to use OpenAI models locally through the
+CLI instead of making API calls.
+
+- **When to use**: you have the Codex CLI installed and authenticated, prefer to
+  use the CLI interface for OpenAI models.
+- **Requirements**:
+  1. Install the Codex CLI and ensure the `codex` command is on your `$PATH`.
+  2. Authenticate via `codex login` (and any other setup the CLI requires).
+- **Workflow**:
+  1. When adding the MCP server, set `OPENAI_MODE=cli`:
+     ```bash
+     claude mcp add consult-llm \
+       -e OPENAI_MODE=cli \
+       -- npx -y consult-llm-mcp
+     ```
+  2. Ask Claude Code to consult an OpenAI model (like `gpt-5.1-codex`). It will
+     call `consult_llm` with the specified model, assemble the prompt, and shell
+     out to the Codex CLI automatically.
+
 ## Configuration
 
 ### Environment Variables
 
-- `OPENAI_API_KEY` - Your OpenAI API key (required for o3)
+- `OPENAI_API_KEY` - Your OpenAI API key (required for OpenAI models in API
+  mode)
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models in API
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
+  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
+    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `gemini` CLI tool
+- `OPENAI_MODE` - Choose between API or CLI mode for OpenAI models (optional)
+  - Options: `api` (default), `cli`
+  - CLI mode uses the system-installed `codex` CLI tool
 
 ### Custom System Prompt
 
@@ -326,7 +353,8 @@ models complex questions.
 
 - **model** (optional): LLM model to use
 
-  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`
+  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
+    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
 
@@ -347,6 +375,9 @@ models complex questions.
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
 - **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
   tokens)
+- **gpt-5.1-codex**: OpenAI's Codex model optimized for coding
+- **gpt-5.1-codex-mini**: Lighter, faster version of gpt-5.1-codex
+- **gpt-5.1**: Broad world knowledge with strong general reasoning
 
 ## Logging
 
