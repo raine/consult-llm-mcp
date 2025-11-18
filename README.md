@@ -450,6 +450,64 @@ CRITICAL: When asking, don't present options, this will bias the answer.
 Claude Code seems to know pretty well when to use this MCP even without this
 instruction however.
 
+## Example Skill
+
+Here's an example
+[Claude Code skill](https://docs.claude.com/claude-code/skills) that uses the
+`consult_llm` MCP tool to create a "ask gemini" command:
+
+```markdown
+---
+name: gemini-consultant
+description:
+  Use it when the user asks to "ask gemini" or "consult llm in web mode"
+allowed-tools: Read, Glob, Grep, mcp__consult-llm__consult_llm
+---
+
+When consulting with Gemini:
+
+**1. Gather Context First**:
+
+- Use Glob/Grep to find relevant files
+- Read key files to understand their relevance
+- Select files directly related to the question
+
+**2. Determine Mode**:
+
+- **Web mode**: Use if user says "web mode"
+- **API mode**: Default for direct Gemini API calls
+
+**3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
+
+- **For API mode**:
+
+  - `model`: "gemini-2.5-pro"
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+
+- **For web mode**:
+  - `web_mode`: true
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+  - (model parameter is ignored in web mode)
+
+**4. Present Results**:
+
+- **API mode**: Summarize key insights, recommendations, and considerations from
+  the response
+- **Web mode**: Inform user the prompt was copied to clipboard and ask them to
+  paste it into their browser-based LLM and share the response back
+
+**Critical Rules**:
+
+- ALWAYS gather file context before consulting
+- Ask neutral, open-ended questions to avoid bias
+- Provide focused, relevant files (quality over quantity)
+```
+
+Save this as `~/.claude/skills/gemini-consultant/SKILL.md` and you can then use
+it by typing "ask gemini about X" in Claude Code.
+
 ## Development
 
 To work on the MCP server locally and use your development version:
