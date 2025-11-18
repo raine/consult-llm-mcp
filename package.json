@@ -52,7 +52,7 @@
     "clipboardy": "^5.0.0",
     "openai": "^5.6.0",
     "prettier": "^3.5.3",
-    "zod": "^3.25.67"
+    "zod": "4.2.0-canary.20251118T063547"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
