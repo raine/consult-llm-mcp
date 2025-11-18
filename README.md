@@ -472,7 +472,7 @@ When consulting with Gemini:
 
 **2. Determine Mode**:
 
-- **Web mode**: Use if user says "in browser" or similar phrasing
+- **Web mode**: Use if user says "ask in browser" or "consult in browser"
 - **API mode**: Default for direct Gemini API calls
 
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
