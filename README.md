@@ -458,8 +458,7 @@ that uses the `consult_llm` MCP tool to create a "ask gemini" command:
 ```markdown
 ---
 name: gemini-consultant
-description:
-  Use it when the user asks to "ask gemini" or "consult llm in web mode"
+description: Use it when the user asks to "ask gemini" or "ask in browser"
 allowed-tools: Read, Glob, Grep, mcp__consult-llm__consult_llm
 ---
 
@@ -473,7 +472,7 @@ When consulting with Gemini:
 
 **2. Determine Mode**:
 
-- **Web mode**: Use if user says "web mode"
+- **Web mode**: Use if user says "in browser" or similar phrasing
 - **API mode**: Default for direct Gemini API calls
 
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
