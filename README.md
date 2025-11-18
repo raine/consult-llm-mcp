@@ -452,9 +452,8 @@ instruction however.
 
 ## Example Skill
 
-Here's an example
-[Claude Code skill](https://docs.claude.com/claude-code/skills) that uses the
-`consult_llm` MCP tool to create a "ask gemini" command:
+Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
+that uses the `consult_llm` MCP tool to create a "ask gemini" command:
 
 ```markdown
 ---
