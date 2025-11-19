@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { writeFileSync, mkdirSync, rmSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { writeFileSync, mkdirSync, rmSync, readFileSync, chmodSync } from 'fs'
+import { join, relative } from 'path'
 import { tmpdir } from 'os'
 import { processFiles } from './file.js'
 import { buildPrompt } from './prompt-builder.js'
@@ -54,6 +54,27 @@ describe('processFiles', () => {
 
     expect(() => processFiles([nonExistentFile])).toThrow('Files not found')
   })
+
+  it('preserves provided relative paths in the output metadata', () => {
+    const relativePath = relative(process.cwd(), testFile1)
+    const files = processFiles([relativePath])
+    expect(files[0]).toMatchObject({ path: relativePath })
+  })
+
+  it('includes duplicate entries when the same file is listed twice', () => {
+    const files = processFiles([testFile1, testFile1])
+    expect(files).toHaveLength(2)
+    expect(files[0]?.content).toBe(files[1]?.content)
+  })
+
+  it('surfaces read errors (such as permission issues)', () => {
+    try {
+      chmodSync(testFile1, 0o000)
+      expect(() => processFiles([testFile1])).toThrow()
+    } finally {
+      chmodSync(testFile1, 0o600)
+    }
+  })
 })
 
 describe('buildPrompt', () => {
@@ -95,5 +116,23 @@ describe('buildPrompt', () => {
     expect(prompt).toContain('## Git Diff')
     expect(prompt).toContain('## Relevant Files')
     expect(prompt).toContain('Test prompt')
+  })
+
+  it('returns user prompt when no files or git diff exist', () => {
+    const prompt = buildPrompt('Solo prompt', [])
+    expect(prompt).toBe('Solo prompt')
+  })
+
+  it('ignores empty git diff output', () => {
+    const prompt = buildPrompt('Prompt only', [], '   \n  ')
+    expect(prompt).not.toContain('## Git Diff')
+  })
+
+  it('keeps complex file contents intact', () => {
+    const trickyContent = 'const tmpl = `Example ``` snippet```;'
+    writeFileSync(testFile, trickyContent)
+    const files = processFiles([testFile])
+    const prompt = buildPrompt('Prompt', files)
+    expect(prompt).toContain(trickyContent)
   })
 })
