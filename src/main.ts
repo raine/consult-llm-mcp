@@ -88,9 +88,21 @@ async function handleConsultLlm(args: unknown) {
   let prompt: string
   let filePaths: string[] | undefined
 
-  if (isCliMode && files) {
-    // For CLI mode, we'll pass file paths separately
-    filePaths = files.map((f) => resolve(f))
+  // In web_mode, always inline files since they'll be pasted into a browser
+  if (web_mode || !isCliMode) {
+    // For web mode or API mode, include file contents in the prompt
+    const contextFiles = files ? processFiles(files) : []
+
+    // Generate git diff
+    const gitDiffOutput = git_diff
+      ? generateGitDiff(git_diff.repo_path, git_diff.files, git_diff.base_ref)
+      : undefined
+
+    // Build prompt with file contents
+    prompt = buildPrompt(userPrompt, contextFiles, gitDiffOutput)
+  } else {
+    // For CLI mode (non-web), we'll pass file paths separately
+    filePaths = files ? files.map((f) => resolve(f)) : undefined
 
     // Generate git diff if needed
     const gitDiffOutput = git_diff
@@ -101,17 +113,6 @@ async function handleConsultLlm(args: unknown) {
     prompt = gitDiffOutput
       ? `## Git Diff\n\`\`\`diff\n${gitDiffOutput}\n\`\`\`\n\n${userPrompt}`
       : userPrompt
-  } else {
-    // For API mode, include file contents in the prompt
-    const contextFiles = files ? processFiles(files) : []
-
-    // Generate git diff
-    const gitDiffOutput = git_diff
-      ? generateGitDiff(git_diff.repo_path, git_diff.files, git_diff.base_ref)
-      : undefined
-
-    // Build prompt with file contents
-    prompt = buildPrompt(userPrompt, contextFiles, gitDiffOutput)
   }
 
   await logPrompt(model, prompt)
