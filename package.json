@@ -50,9 +50,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.0",
     "clipboardy": "^5.0.0",
-    "openai": "^5.6.0",
+    "openai": "^6.9.1",
     "prettier": "^3.5.3",
-    "zod": "4.2.0-canary.20251118T063547"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
