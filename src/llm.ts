@@ -186,7 +186,7 @@ const geminiCliConfig: CliConfig = {
 
 const codexCliConfig: CliConfig = {
   cliName: 'codex',
-  buildArgs: (model, fullPrompt) => ['-m', model, fullPrompt],
+  buildArgs: (model, fullPrompt) => ['exec', '-m', model, fullPrompt],
   handleNonZeroExit: (code, stderr) =>
     new Error(`Codex CLI exited with code ${code}. Error: ${stderr.trim()}`),
 }

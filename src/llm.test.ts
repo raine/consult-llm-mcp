@@ -147,11 +147,12 @@ describe('CLI executor', () => {
     const args = spawnMock.mock.calls[0]
     expect(args?.[0]).toBe('codex')
     const cliArgs = args?.[1] as string[]
-    expect(cliArgs[0]).toBe('-m')
-    expect(cliArgs[1]).toBe('gpt-5.1')
-    expect(cliArgs[2]).toContain('system')
-    expect(cliArgs[2]).toContain('user')
-    expect(cliArgs[2]).toContain('Files: @')
+    expect(cliArgs[0]).toBe('exec')
+    expect(cliArgs[1]).toBe('-m')
+    expect(cliArgs[2]).toBe('gpt-5.1')
+    expect(cliArgs[3]).toContain('system')
+    expect(cliArgs[3]).toContain('user')
+    expect(cliArgs[3]).toContain('Files: @')
 
     const result = await promise
     expect(result.response).toBe('result')
