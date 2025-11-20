@@ -54,7 +54,7 @@
     "@modelcontextprotocol/sdk": "^1.13.0",
     "clipboardy": "^5.0.0",
     "openai": "^6.9.1",
-    "prettier": "^3.5.3",
+    "prettier": "^3.6.2",
     "zod": "^4.1.12"
   },
   "devDependencies": {
