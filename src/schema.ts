@@ -4,6 +4,7 @@ export const SupportedChatModel = z.enum([
   'o3',
   'gemini-2.5-pro',
   'deepseek-reasoner',
+  'gpt-5.1-codex-max',
   'gpt-5.1-codex',
   'gpt-5.1-codex-mini',
   'gpt-5.1',
@@ -26,7 +27,7 @@ export const ConsultLlmArgs = z.object({
   model: SupportedChatModel.optional()
     .default('o3')
     .describe(
-      'LLM model to use. This parameter is ignored when `web_mode` is `true`.',
+      'LLM model to use. Prefer gpt-5.1-codex-max when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
     ),
   web_mode: z
     .boolean()
