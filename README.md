@@ -471,16 +471,18 @@ instruction however.
 ## Example Skill
 
 Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
-that uses the `consult_llm` MCP tool to create a "ask gemini" command:
+that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
+"ask codex":
 
 ```markdown
 ---
-name: gemini-consultant
-description: Use it when the user asks to "ask gemini" or "ask in browser"
+name: consult-llm
+description:
+  Use it when the user asks to "ask gemini", "ask codex", or "ask in browser"
 allowed-tools: Read, Glob, Grep, mcp__consult-llm__consult_llm
 ---
 
-When consulting with Gemini:
+When consulting with external LLMs:
 
 **1. Gather Context First**:
 
@@ -488,15 +490,21 @@ When consulting with Gemini:
 - Read key files to understand their relevance
 - Select files directly related to the question
 
-**2. Determine Mode**:
+**2. Determine Mode and Model**:
 
 - **Web mode**: Use if user says "ask in browser" or "consult in browser"
-- **API mode**: Default for direct Gemini API calls
+- **Codex mode**: Use if user says "ask codex" → use model "gpt-5.1-codex-max"
+- **Gemini mode**: Default for "ask gemini" → use model "gemini-2.5-pro"
 
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
 
-- **For API mode**:
+- **For API mode (Gemini)**:
   - `model`: "gemini-2.5-pro"
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+
+- **For API mode (Codex)**:
+  - `model`: "gpt-5.1-codex-max"
   - `prompt`: Clear, neutral question without suggesting solutions
   - `files`: Array of relevant file paths
 
@@ -520,8 +528,8 @@ When consulting with Gemini:
 - Provide focused, relevant files (quality over quantity)
 ```
 
-Save this as `~/.claude/skills/gemini-consultant/SKILL.md` and you can then use
-it by typing "ask gemini about X" in Claude Code.
+Save this as `~/.claude/skills/consult-llm/SKILL.md` and you can then use it by
+typing "ask gemini about X" or "ask codex about X" in Claude Code.
 
 ## Development
 
