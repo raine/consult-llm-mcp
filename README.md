@@ -348,16 +348,13 @@ models complex questions.
 - **prompt** (required): Your question or request for the consultant LLM
 
 - **files** (optional): Array of file paths to include as context
-
   - All files are added as context with file paths and code blocks
 
 - **model** (optional): LLM model to use
-
   - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
     `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
-
   - Default: `false`
   - When `true`, the formatted prompt (including system prompt and file
     contents) is copied to clipboard for manual pasting into browser-based LLM
@@ -478,7 +475,6 @@ When consulting with Gemini:
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
 
 - **For API mode**:
-
   - `model`: "gemini-2.5-pro"
   - `prompt`: Clear, neutral question without suggesting solutions
   - `files`: Array of relevant file paths
