@@ -304,6 +304,25 @@ CLI instead of making API calls.
      call `consult_llm` with the specified model, assemble the prompt, and shell
      out to the Codex CLI automatically.
 
+### Configuring Reasoning Effort
+
+When using Codex CLI mode, you can control the reasoning effort level using the
+`CODEX_REASONING_EFFORT` environment variable:
+
+```bash
+claude mcp add consult-llm \
+  -e OPENAI_MODE=cli \
+  -e CODEX_REASONING_EFFORT=xhigh \
+  -- npx -y consult-llm-mcp
+```
+
+Available reasoning effort levels: `none`, `minimal`, `low`, `medium`, `high`,
+`xhigh`
+
+Higher reasoning effort levels may provide more thorough analysis but take
+longer to complete. This is passed to the Codex CLI as
+`-c model_reasoning_effort="<level>"`.
+
 ## Configuration
 
 ### Environment Variables
@@ -315,13 +334,15 @@ CLI instead of making API calls.
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
   - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+    `gpt-5.1-codex-max`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `gemini` CLI tool
 - `OPENAI_MODE` - Choose between API or CLI mode for OpenAI models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `codex` CLI tool
+- `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
+  - See [Codex CLI Mode](#codex-cli-mode) for details and available options
 
 ### Custom System Prompt
 

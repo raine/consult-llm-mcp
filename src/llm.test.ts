@@ -17,6 +17,7 @@ const mockConfig = vi.hoisted(
       openaiMode: 'api',
       geminiMode: 'api',
       defaultModel: undefined,
+      codexReasoningEffort: undefined,
     }) as Config,
 )
 
@@ -172,6 +173,26 @@ describe('CLI executor', () => {
     await expect(promise).rejects.toThrow(
       'Codex CLI exited with code 2. Error: boom',
     )
+  })
+
+  it('includes reasoning effort config when set', async () => {
+    mockConfig.openaiMode = 'cli'
+    mockConfig.codexReasoningEffort = 'xhigh'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.1')
+    const promise = executor.execute('user', 'gpt-5.1', 'system')
+
+    resolveCliExecution(child, { stdout: 'result', code: 0 })
+
+    const args = spawnMock.mock.calls[0]
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs).toContain('-c')
+    expect(cliArgs).toContain('model_reasoning_effort="xhigh"')
+
+    await promise
+    mockConfig.codexReasoningEffort = undefined // reset for other tests
   })
 
   it('wraps gemini quota errors specially', async () => {

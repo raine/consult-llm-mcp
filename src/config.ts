@@ -8,6 +8,9 @@ const Config = z.object({
   defaultModel: SupportedChatModel.optional(),
   geminiMode: z.enum(['api', 'cli']).default('api'),
   openaiMode: z.enum(['api', 'cli']).default('api'),
+  codexReasoningEffort: z
+    .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
+    .optional(),
 })
 
 export type Config = z.infer<typeof Config>
@@ -19,6 +22,7 @@ const parsedConfig = Config.safeParse({
   defaultModel: process.env.CONSULT_LLM_DEFAULT_MODEL,
   geminiMode: process.env.GEMINI_MODE,
   openaiMode: process.env.OPENAI_MODE,
+  codexReasoningEffort: process.env.CODEX_REASONING_EFFORT,
 })
 
 if (!parsedConfig.success) {
