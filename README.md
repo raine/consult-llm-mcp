@@ -239,7 +239,7 @@ This is useful when:
 
 </details>
 
-## Web Mode
+## Web mode
 
 When you want Claude Code to prepare the prompt but send it through an LLM web
 UI yourself (ChatGPT, Claude.ai, Gemini, etc.), ask it to "use consult LLM with
@@ -260,7 +260,7 @@ wherever you like.
 See the "Using web mode..." example above for a concrete transcript of this
 flow.
 
-## Gemini CLI Mode
+## Gemini CLI mode
 
 Use Gemini's local CLI when you want to take advantage of Google's free quota or
 keep prompts off the API by enabling CLI mode so consult-llm spawns the `gemini`
@@ -283,7 +283,7 @@ binary locally rather than sending the prompt through the API.
      use). It will call `consult_llm` with the Gemini model, assemble the
      prompt, and shell out to the CLI automatically.
 
-## Codex CLI Mode
+## Codex CLI mode
 
 Use OpenAI's Codex CLI when you want to use OpenAI models locally through the
 CLI instead of making API calls.
@@ -304,7 +304,7 @@ CLI instead of making API calls.
      call `consult_llm` with the specified model, assemble the prompt, and shell
      out to the Codex CLI automatically.
 
-### Configuring Reasoning Effort
+### Configuring reasoning effort
 
 When using Codex CLI mode, you can control the reasoning effort level using the
 `CODEX_REASONING_EFFORT` environment variable:
@@ -325,7 +325,7 @@ longer to complete. This is passed to the Codex CLI as
 
 ## Configuration
 
-### Environment Variables
+### Environment variables
 
 - `OPENAI_API_KEY` - Your OpenAI API key (required for OpenAI models in API
   mode)
@@ -344,7 +344,7 @@ longer to complete. This is passed to the Codex CLI as
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI Mode](#codex-cli-mode) for details and available options
 
-### Custom System Prompt
+### Custom system prompt
 
 You can customize the system prompt used when consulting LLMs by creating a
 `SYSTEM_PROMPT.md` file in `~/.consult-llm-mcp/`:
@@ -359,7 +359,7 @@ request, so changes take effect immediately without restarting the server.
 
 To revert to the default prompt, simply delete the `SYSTEM_PROMPT.md` file.
 
-## MCP Tool: consult_llm
+## MCP tool: consult_llm
 
 The server provides a single tool called `consult_llm` for asking powerful AI
 models complex questions.
@@ -387,7 +387,7 @@ models complex questions.
     directory)
   - **base_ref** (optional): Git reference to compare against (defaults to HEAD)
 
-## Supported Models
+## Supported models
 
 - **o3**: OpenAI's reasoning model ($2/$8 per million tokens)
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
@@ -468,7 +468,7 @@ CRITICAL: When asking, don't present options, this will bias the answer.
 Claude Code seems to know pretty well when to use this MCP even without this
 instruction however.
 
-## Example Skill
+## Example skill
 
 Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
 that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
@@ -530,6 +530,10 @@ When consulting with external LLMs:
 
 Save this as `~/.claude/skills/consult-llm/SKILL.md` and you can then use it by
 typing "ask gemini about X" or "ask codex about X" in Claude Code.
+
+This one is not strictly necessary either, Claude (or other agent) can infer
+from the schema that "Ask gemini" should call this MCP, but it might be helpful
+in case you want to have more precise control over how the agent calls this MCP.
 
 ## Development
 
