@@ -187,7 +187,7 @@ const geminiCliConfig: CliConfig = {
 const codexCliConfig: CliConfig = {
   cliName: 'codex',
   buildArgs: (model, fullPrompt) => {
-    const args = ['exec', '-m', model]
+    const args = ['exec', '--skip-git-repo-check', '-m', model]
     if (config.codexReasoningEffort) {
       args.push('-c', `model_reasoning_effort="${config.codexReasoningEffort}"`)
     }

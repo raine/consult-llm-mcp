@@ -149,11 +149,12 @@ describe('CLI executor', () => {
     expect(args?.[0]).toBe('codex')
     const cliArgs = args?.[1] as string[]
     expect(cliArgs[0]).toBe('exec')
-    expect(cliArgs[1]).toBe('-m')
-    expect(cliArgs[2]).toBe('gpt-5.1')
-    expect(cliArgs[3]).toContain('system')
-    expect(cliArgs[3]).toContain('user')
-    expect(cliArgs[3]).toContain('Files: @')
+    expect(cliArgs[1]).toBe('--skip-git-repo-check')
+    expect(cliArgs[2]).toBe('-m')
+    expect(cliArgs[3]).toBe('gpt-5.1')
+    expect(cliArgs[4]).toContain('system')
+    expect(cliArgs[4]).toContain('user')
+    expect(cliArgs[4]).toContain('Files: @')
 
     const result = await promise
     expect(result.response).toBe('result')
