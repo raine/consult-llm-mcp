@@ -239,6 +239,59 @@ This is useful when:
 
 </details>
 
+<details>
+<summary>Using slash command to consult multiple LLMs for comparison</summary>
+
+```
+> /consult The branch completions should dynamic. Git should be called only when
+using tab to autocomplete. Ask gemini and codex
+
+⏺ I'll consult both Gemini and Codex about making the branch completions dynamic (only
+  calling git when tab-completing). Let me gather the relevant context first.
+
+⏺ consult-llm - consult_llm (MCP)(prompt: "I have a Rust CLI tool using clap that needs dynamic shell completions. Currently, the branch completions are generated at completion script
+                                 generation time via `possible_values()`. Instead, I need the git operations to only run when the user presses TAB to autocomplete.\n\nCurrent setup:\n1.
+                                 `WorktreeBranchParser` implements `TypedValueParser` with `possible_values()` that calls git\n2. Shell completions are generated via clap_complete's
+                                 `generate()` function\n3. The completions are sourced at shell startup: `source <(workmux completions zsh)`\n\nThe problem: Running `workmux completions
+                                 zsh` takes ~210ms because it runs git operations during completion generation, not during actual tab completion.\n\nHow can I implement truly dynamic
+                                 completions where git is only called when the user presses TAB? What's the best approach with clap and clap_complete for zsh?", model:
+                                 "gemini-3-pro-preview", files: ["/Users/raine/code/workmux/src/cli.rs","/Users/raine/code/workmux/src/git.rs"], web_mode: false)
+  ⎿ The root cause of the slow startup (~210ms) is that `clap_complete::generate()` executes your `possible_values()` logic (git operations) *while generating the script*. This bake
+    s the *current* branches into the static script, which is both slow (happens every time you `source` it) and incorrect (branches become stale).
+    … +116 lines (ctrl+o to expand)
+
+
+⏺ consult-llm - consult_llm (MCP)(prompt: "I have a Rust CLI tool using clap that needs dynamic shell completions. Currently, the branch completions are generated at completion script
+                                 generation time via `possible_values()`. Instead, I need the git operations to only run when the user presses TAB to autocomplete.\n\nCurrent setup:\n1.
+                                 `WorktreeBranchParser` implements `TypedValueParser` with `possible_values()` that calls git\n2. Shell completions are generated via clap_complete's
+                                 `generate()` function\n3. The completions are sourced at shell startup: `source <(workmux completions zsh)`\n\nThe problem: Running `workmux completions
+                                 zsh` takes ~210ms because it runs git operations during completion generation, not during actual tab completion.\n\nHow can I implement truly dynamic
+                                 completions where git is only called when the user presses TAB? What's the best approach with clap and clap_complete for zsh?", model:
+                                 "gpt-5.1-codex-max", files: ["/Users/raine/code/workmux/src/cli.rs","/Users/raine/code/workmux/src/git.rs"], web_mode: false)
+  ⎿ **Findings**
+    - `WorktreeBranchParser::possible_values` (`cli.rs:41-72`) runs git during script generation, so `workmux completions zsh` always pays the git cost (~210ms) even though the resu
+    lt is only needed at tab time.
+    … +77 lines (ctrl+o to expand)
+
+
+⏺ Summary from Gemini and Codex
+
+  Both agree on the same solution:
+
+  Root Cause
+
+  clap_complete::generate() calls possible_values() during script generation, not at tab-completion time. This means git runs every shell startup.
+
+...
+```
+
+This example shows using the `/consult` slash command to ask multiple LLMs
+(Gemini and Codex) about the same problem **in parallel** and compare their
+responses. Both LLMs independently arrived at the same solution, providing
+confidence in the approach.
+
+</details>
+
 ## Web mode
 
 When you want Claude Code to prepare the prompt but send it through an LLM web
@@ -451,25 +504,59 @@ Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.
 
 </details>
 
-## CLAUDE.md example
+## Activation methods
 
-While not strictly necessary, to help Claude Code understand when and how to use
-this tool, you can optionally something like the following to your project's
-`CLAUDE.md` file:
+You have three ways to activate the Consult LLM MCP in Claude Code:
 
-```markdown
-## consult-llm-mcp
+### 1. No custom activation (simplest)
 
-Use the `consult_llm` MCP tool to ask a more powerful AI for help with complex
-problems. Include files to git_diff when asking feedback for changes.
+Rely on Claude to use the MCP correctly based on the tool schema defined in
+[`schema.ts`](src/schema.ts). Claude can infer when to call the MCP from natural
+language (e.g., "ask gemini about...") without any additional configuration.
 
-Use Gemini 2.5 Pro.
+**Pros:**
 
-CRITICAL: When asking, don't present options, this will bias the answer.
-```
+- No setup required
+- Natural language interaction
+- Works out of the box
 
-Claude Code seems to know pretty well when to use this MCP even without this
-instruction however.
+**Cons:**
+
+- Less control over how the MCP is invoked. Claude will do it's best to figure
+  out how you want to call the MCP
+
+### 2. Slash commands (most reliable)
+
+Explicitly invoke the MCP with `/consult ask gemini about X`. See the
+[example slash command](#example-slash-command) below.
+
+**Pros:**
+
+- Guaranteed activation every time
+- Full control over custom instructions
+- Predictable behavior
+
+**Cons:**
+
+- Requires explicit invocation syntax
+- Less convenient than natural language
+
+### 3. Skills (automatic but unreliable)
+
+Automatically trigger when Claude detects matching user intent. See the
+[example skill](#example-skill) below.
+
+**Pros:**
+
+- Natural language interaction
+- Custom instructions when triggered
+
+**Cons:**
+
+- Not reliably triggered, even with exact trigger words
+
+**Recommendation:** Start with no custom activation for simplicity. Use slash
+commands if you need reliability and custom instructions.
 
 ## Example skill
 
@@ -537,6 +624,66 @@ typing "ask gemini about X" or "ask codex about X" in Claude Code.
 This one is not strictly necessary either, Claude (or other agent) can infer
 from the schema that "Ask gemini" should call this MCP, but it might be helpful
 in case you want to have more precise control over how the agent calls this MCP.
+
+## Example slash command
+
+Here's an example
+[Claude Code slash command](https://code.claude.com/docs/en/slash-commands) that
+uses the `consult_llm` MCP tool:
+
+```markdown
+Consult an external LLM with the user's query.
+
+User query: $ARGUMENTS
+
+When consulting with external LLMs:
+
+**1. Gather Context First**:
+
+- Use Glob/Grep to find relevant files
+- Read key files to understand their relevance
+- Select files directly related to the question
+
+**2. Determine Mode and Model**:
+
+- **Web mode**: Use if user says "ask in browser" or "consult in browser"
+- **Codex mode**: Use if user says "ask codex" → use model "gpt-5.1-codex-max"
+- **Gemini mode**: Default for "ask gemini" → use model "gemini-3-pro-preview"
+
+**3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
+
+- **For API/CLI mode (Gemini)**:
+  - `model`: "gemini-3-pro-preview"
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+
+- **For API/CLI mode (Codex)**:
+  - `model`: "gpt-5.1-codex-max"
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+
+- **For web mode**:
+  - `web_mode`: true
+  - `prompt`: Clear, neutral question without suggesting solutions
+  - `files`: Array of relevant file paths
+  - (model parameter is ignored in web mode)
+
+**4. Present Results**:
+
+- **API mode**: Summarize key insights, recommendations, and considerations from
+  the response
+- **Web mode**: Inform user the prompt was copied to clipboard and ask them to
+  paste it into their browser-based LLM and share the response back
+
+**Critical Rules**:
+
+- ALWAYS gather file context before consulting
+- Ask neutral, open-ended questions to avoid bias
+- Provide focused, relevant files (quality over quantity)
+```
+
+Save this as `~/.claude/commands/consult.md` and you can then use it by typing
+`/consult ask gemini about X` or `/consult ask codex about X` in Claude Code.
 
 ## Development
 
