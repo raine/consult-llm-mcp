@@ -477,11 +477,11 @@ Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
 that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
 "ask codex":
 
+<!-- prettier-ignore -->
 ```markdown
 ---
 name: consult-llm
-description:
-  Use it when the user asks to "ask gemini", "ask codex", or "ask in browser"
+description: Use it when the user asks to "ask gemini", "ask codex", or "ask in browser"
 allowed-tools: Read, Glob, Grep, mcp__consult-llm__consult_llm
 ---
 
