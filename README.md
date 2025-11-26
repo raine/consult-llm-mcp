@@ -24,8 +24,8 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 
 ## Features
 
-- Query powerful AI models (o3, Gemini 2.5 Pro, DeepSeek Reasoner, GPT-5.1
-  Codex) with relevant files as context
+- Query powerful AI models (o3, Gemini 2.5 Pro, Gemini 3 Pro Preview, DeepSeek
+  Reasoner, GPT-5.1 Codex) with relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
@@ -333,8 +333,9 @@ longer to complete. This is passed to the Codex CLI as
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
-    `gpt-5.1-codex-max`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+  - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
+    `deepseek-reasoner`, `gpt-5.1-codex-max`, `gpt-5.1-codex`,
+    `gpt-5.1-codex-mini`, `gpt-5.1`
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `gemini` CLI tool
@@ -372,8 +373,8 @@ models complex questions.
   - All files are added as context with file paths and code blocks
 
 - **model** (optional): LLM model to use
-  - Options: `o3` (default), `gemini-2.5-pro`, `deepseek-reasoner`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+  - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
+    `deepseek-reasoner`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`
@@ -391,6 +392,8 @@ models complex questions.
 
 - **o3**: OpenAI's reasoning model ($2/$8 per million tokens)
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
+- **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview ($2/$12 per million
+  tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
 - **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
   tokens)
 - **gpt-5.1-codex**: OpenAI's Codex model optimized for coding

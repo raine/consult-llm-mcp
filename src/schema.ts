@@ -3,6 +3,7 @@ import { z } from 'zod/v4'
 export const SupportedChatModel = z.enum([
   'o3',
   'gemini-2.5-pro',
+  'gemini-3-pro-preview',
   'deepseek-reasoner',
   'gpt-5.1-codex-max',
   'gpt-5.1-codex',
