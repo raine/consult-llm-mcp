@@ -409,7 +409,7 @@ You can customize the system prompt used when consulting LLMs by creating a
 `SYSTEM_PROMPT.md` file in `~/.consult-llm-mcp/`:
 
 ```bash
-consult-llm-mcp init-prompt
+npx consult-llm-mcp init-prompt
 ```
 
 This creates a placeholder file with the default system prompt that you can edit
