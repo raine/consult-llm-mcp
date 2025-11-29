@@ -516,9 +516,8 @@ language (e.g., "ask gemini about...") without any additional configuration.
 
 **Pros:**
 
-- No setup required
+- No setup required, works out of the box
 - Natural language interaction
-- Works out of the box
 
 **Cons:**
 
