@@ -5,21 +5,21 @@ Pro, DeepSeek Reasoner, GPT-5.1 Codex) when Sonnet has you running in circles
 and you need to bring in the heavy artillery.
 
 ```
-This SQL query is timing out on large datasets. Can you help optimize it? Ask Gemini
+> Still getting this error after your fix. Ask gemini
+  E5108: Error executing lua: attempt to call method 'child' (a nil value)
 
-⏺ I'll examine your query and consult Gemini for database optimization strategies.
+⏺ Let me consult Gemini to understand the Neovim treesitter API changes:
 
-⏺ consult-llm:consult_llm (MCP)(prompt: "How can I optimize this slow SQL query
-                                for better performance on large datasets?", files: ["queries/user
-                                -analytics.sql","schema/tables.sql"], model: "gemini-2.5-pro")
-  ⎿ The query has significant performance bottlenecks: missing indexes on join
-    columns, inefficient subqueries that could be CTEs, and unnecessary DISTINCT
-    operations. Add composite indexes on (user_id, created_at), replace correlated
-    subqueries with window functions, and eliminate redundant GROUP BY clauses.
-    … +287 lines (ctrl+r to expand)
+⏺ consult-llm:consult_llm (MCP)(prompt: "Neovim plugin broken due to treesitter
+                                API changes...", files: ["lua/testonly.lua"],
+                                model: "gemini-2.5-pro")
+  ⎿ The issue is that iter_matches() can return nil nodes in newer Neovim
+    versions. Switch to iter_captures() which never returns nil nodes, and use
+    named_child(0) instead of child(0) to get only meaningful syntax nodes.
+    … +93 lines (ctrl+r to expand)
 
-⏺ Great insights! I'll add the suggested indexes, refactor the subqueries to use
-  CTEs with window functions, and optimize the GROUP BY operations.
+⏺ The LLM identified the issue - iter_matches() API changed. Switching to
+  iter_captures() approach now.
 ```
 
 ## Features
@@ -46,7 +46,13 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
 
    _Also supports `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`._
 
-2. **Ask a question**:
+2. **Start Claude Code and verify the MCP is connected** with `/mcp`:
+
+   ```
+   ❯ 1. consult-llm            ✔ connected
+   ```
+
+3. **Ask a question**:
    > "Consult Gemini about how to fix the race condition in server.ts"
 
 ## Usage with Claude Code
