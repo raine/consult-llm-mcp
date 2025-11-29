@@ -44,9 +44,23 @@ and you need to bring in the heavy artillery.
    claude mcp add consult-llm -e GEMINI_API_KEY=your_key -- npx -y consult-llm-mcp
    ```
 
-   _Also supports `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`._
+   For global availability across projects, add `--scope user`.
 
-2. **Start Claude Code and verify the MCP is connected** with `/mcp`:
+   <details>
+   <summary>Using multiple API keys or CLI mode</summary>
+
+   ```bash
+   claude mcp add consult-llm \
+     -e OPENAI_API_KEY=your_openai_key \
+     -e GEMINI_API_KEY=your_gemini_key \
+     -e DEEPSEEK_API_KEY=your_deepseek_key \
+     -e GEMINI_MODE=cli \
+     -- npx -y consult-llm-mcp
+   ```
+
+   </details>
+
+2. **Verify connection** with `/mcp`:
 
    ```
    ❯ 1. consult-llm            ✔ connected
@@ -55,35 +69,7 @@ and you need to bring in the heavy artillery.
 3. **Ask a question**:
    > "Consult Gemini about how to fix the race condition in server.ts"
 
-## Usage with Claude Code
-
-### Installation
-
-Add the MCP server to Claude Code:
-
-```bash
-claude mcp add consult-llm -- npx -y consult-llm-mcp
-```
-
-Or for global availability:
-
-```bash
-claude mcp add --scope user consult-llm -- npx -y consult-llm-mcp
-```
-
-Optionally you can provide environment variables directly in the MCP
-configuration:
-
-```bash
-claude mcp add consult-llm \
-  -e OPENAI_API_KEY=your_openai_key \
-  -e GEMINI_API_KEY=your_gemini_key \
-  -e DEEPSEEK_API_KEY=your_deepseek_key \
-  -e GEMINI_MODE=cli \
-  -- npx -y consult-llm-mcp
-```
-
-### Example workflows
+## Example workflows
 
 Some real-world examples. Click to expand.
 
