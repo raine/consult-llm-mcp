@@ -733,3 +733,9 @@ To unlink the global version later:
 ```bash
 npm unlink -g
 ```
+
+## Related projects
+
+- [workmux](https://github.com/raine/workmux) — Git worktrees + tmux windows for parallel AI agent workflows
+- [claude-history](https://github.com/raine/claude-history) — Search and view Claude Code conversation history with fzf
+- [tmux-file-picker](https://github.com/raine/tmux-file-picker) — Pop up fzf in tmux to quickly insert file paths, perfect for AI coding assistants
