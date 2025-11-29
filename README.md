@@ -29,9 +29,9 @@ and you need to bring in the heavy artillery.
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
-- [Gemini CLI mode](#gemini-cli-mode): Use the `gemini` CLI to take advantage of
+- [Gemini CLI mode](#gemini-cli): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
-- [Codex CLI mode](#codex-cli-mode): Use the `codex` CLI for OpenAI models
+- [Codex CLI mode](#codex-cli): Use the `codex` CLI for OpenAI models
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
 - Simple: provides just one MCP tool to not clutter the context
@@ -297,89 +297,78 @@ confidence in the approach.
 
 </details>
 
-## Web mode
+## Modes
 
-When you want Claude Code to prepare the prompt but send it through an LLM web
-UI yourself (ChatGPT, Claude.ai, Gemini, etc.), ask it to "use consult LLM with
-web mode." Claude will pass `web_mode: true` to `consult_llm`, the MCP will
-assemble the full prompt (system prompt + files + git diff), and instead of
-hitting an API it copies that text to your clipboard so you can paste it
-wherever you like.
+consult-llm-mcp supports three modes of operation:
 
-- **When to use**: prefer a specific web UI, want to review the prompt first, or
-  do not have API keys configured.
-- **Workflow**:
-  1. Tell Claude Code (or your MCP-aware agent) to "use consult LLM with web
-     mode" so it invokes the tool with `web_mode: true`.
-  2. Paste the copied prompt into your browser-based LLM and wait for its
-     response.
-  3. Paste that response back into Claude Code so it can continue.
+| Mode    | Description                   | When to use                                                      |
+| ------- | ----------------------------- | ---------------------------------------------------------------- |
+| **API** | Queries LLM APIs directly     | You have API keys and want the simplest setup                    |
+| **CLI** | Shells out to local CLI tools | Free quota (Gemini), existing subscriptions, or prefer CLI tools |
+| **Web** | Copies prompt to clipboard    | You prefer browser UIs or want to review prompts                 |
 
-See the "Using web mode..." example above for a concrete transcript of this
-flow.
+### API mode (default)
 
-## Gemini CLI mode
+The default mode. Requires API keys configured via environment variables. See
+[Configuration](#configuration) for details.
 
-Use Gemini's local CLI when you want to take advantage of Google's free quota or
-keep prompts off the API by enabling CLI mode so consult-llm spawns the `gemini`
-binary locally rather than sending the prompt through the API.
+### CLI mode
 
-- **When to use**: you have the Gemini CLI installed and authenticated, want to
-  stay within the CLI's free allowance.
-- **Requirements**:
-  1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and
-     ensure the `gemini` command is on your `$PATH`.
-  2. Authenticate via `gemini login` (and any other setup the CLI requires).
-- **Workflow**:
-  1. When adding the MCP server, set `GEMINI_MODE=cli`:
-     ```bash
-     claude mcp add consult-llm \
-       -e GEMINI_MODE=cli \
-       -- npx -y consult-llm-mcp
-     ```
-  2. Ask Claude Code to "consult Gemini" (or whichever phrasing you normally
-     use). It will call `consult_llm` with the Gemini model, assemble the
-     prompt, and shell out to the CLI automatically.
+Instead of making API calls, shell out to local CLI tools. The CLI agents can
+explore the codebase themselves, so you don't need to pass all relevant files as
+context, but it helps.
 
-## Codex CLI mode
+#### Gemini CLI
 
-Use OpenAI's Codex CLI when you want to use OpenAI models locally through the
-CLI instead of making API calls.
+Use Gemini's local CLI to take advantage of Google's
+[free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli).
 
-- **When to use**: you have the Codex CLI installed and authenticated, prefer to
-  use the CLI interface for OpenAI models.
-- **Requirements**:
-  1. Install the Codex CLI and ensure the `codex` command is on your `$PATH`.
-  2. Authenticate via `codex login` (and any other setup the CLI requires).
-- **Workflow**:
-  1. When adding the MCP server, set `OPENAI_MODE=cli`:
-     ```bash
-     claude mcp add consult-llm \
-       -e OPENAI_MODE=cli \
-       -- npx -y consult-llm-mcp
-     ```
-  2. Ask Claude Code to consult an OpenAI model (like `gpt-5.1-codex`). It will
-     call `consult_llm` with the specified model, assemble the prompt, and shell
-     out to the Codex CLI automatically.
+**Requirements:**
 
-### Configuring reasoning effort
+1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli)
+2. Authenticate via `gemini login`
 
-When using Codex CLI mode, you can control the reasoning effort level using the
-`CODEX_REASONING_EFFORT` environment variable:
+**Setup:**
 
 ```bash
-claude mcp add consult-llm \
-  -e OPENAI_MODE=cli \
-  -e CODEX_REASONING_EFFORT=xhigh \
-  -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e GEMINI_MODE=cli -- npx -y consult-llm-mcp
 ```
 
-Available reasoning effort levels: `none`, `minimal`, `low`, `medium`, `high`,
-`xhigh`
+#### Codex CLI
 
-Higher reasoning effort levels may provide more thorough analysis but take
-longer to complete. This is passed to the Codex CLI as
-`-c model_reasoning_effort="<level>"`.
+Use OpenAI's Codex CLI for OpenAI models.
+
+**Requirements:**
+
+1. Install the Codex CLI
+2. Authenticate via `codex login`
+
+**Setup:**
+
+```bash
+claude mcp add consult-llm -e OPENAI_MODE=cli -- npx -y consult-llm-mcp
+```
+
+<!-- prettier-ignore -->
+> [!TIP]
+> Set reasoning effort with `-e CODEX_REASONING_EFFORT=high`. Options:
+> `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (gpt-5.1-codex-max only).
+
+### Web mode
+
+Copies the formatted prompt to clipboard instead of querying an LLM. Paste into
+any browser-based LLM (ChatGPT, Claude.ai, Gemini, etc.).
+
+**When to use:** Prefer a specific web UI, want to review the prompt first, or
+don't have API keys.
+
+**Workflow:**
+
+1. Ask Claude to "use consult LLM with web mode"
+2. Paste into your browser-based LLM
+3. Paste the response back into Claude Code
+
+See the "Using web mode..." example above for a concrete transcript.
 
 ## Configuration
 
@@ -401,7 +390,7 @@ longer to complete. This is passed to the Codex CLI as
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `codex` CLI tool
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
-  - See [Codex CLI Mode](#codex-cli-mode) for details and available options
+  - See [Codex CLI](#codex-cli) for details and available options
 
 ### Custom system prompt
 
