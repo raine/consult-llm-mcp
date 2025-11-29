@@ -506,56 +506,29 @@ Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.
 
 ## Activation methods
 
-You have three ways to activate the Consult LLM MCP in Claude Code:
-
 ### 1. No custom activation (simplest)
 
-Rely on Claude to use the MCP correctly based on the tool schema defined in
-[`schema.ts`](src/schema.ts). Claude can infer when to call the MCP from natural
-language (e.g., "ask gemini about...") without any additional configuration.
-
-**Pros:**
-
-- No setup required, works out of the box
-- Natural language interaction
-
-**Cons:**
-
-- Less control over how the MCP is invoked. Claude will do it's best to figure
-  out how you want to call the MCP
+When you add an MCP to Claude Code, the tool's schema is injected into the
+agent's context. This allows Claude to infer when to call the MCP from natural
+language (e.g., "ask gemini about..."). Works out of the box, but you have less
+control over how the MCP is invoked.
 
 ### 2. Slash commands (most reliable)
 
-Explicitly invoke the MCP with `/consult ask gemini about X`. See the
+Explicitly invoke with `/consult ask gemini about X`. Guaranteed activation with
+full control over custom instructions, but requires the explicit syntax. For
+example, you can instruct Claude to always find related files and pass them as
+context via the `files` parameter. See the
 [example slash command](#example-slash-command) below.
 
-**Pros:**
+### 3. Skills
 
-- Guaranteed activation every time
-- Full control over custom instructions
-- Predictable behavior
+Automatically triggers when Claude detects matching intent. Like slash commands,
+supports custom instructions (e.g., always gathering relevant files), but not
+always reliably triggered. See the [example skill](#example-skill) below.
 
-**Cons:**
-
-- Requires explicit invocation syntax
-- Less convenient than natural language
-
-### 3. Skills (automatic but unreliable)
-
-Automatically trigger when Claude detects matching user intent. See the
-[example skill](#example-skill) below.
-
-**Pros:**
-
-- Natural language interaction
-- Custom instructions when triggered
-
-**Cons:**
-
-- Not reliably triggered, even with exact trigger words
-
-**Recommendation:** Start with no custom activation for simplicity. Use slash
-commands if you need reliability and custom instructions.
+**Recommendation:** Start with no custom activation. Use slash commands if you
+need reliability or custom instructions.
 
 ## Example skill
 
@@ -735,6 +708,9 @@ npm unlink -g
 
 ## Related projects
 
-- [workmux](https://github.com/raine/workmux) — Git worktrees + tmux windows for parallel AI agent workflows
-- [claude-history](https://github.com/raine/claude-history) — Search and view Claude Code conversation history with fzf
-- [tmux-file-picker](https://github.com/raine/tmux-file-picker) — Pop up fzf in tmux to quickly insert file paths, perfect for AI coding assistants
+- [workmux](https://github.com/raine/workmux) — Git worktrees + tmux windows for
+  parallel AI agent workflows
+- [claude-history](https://github.com/raine/claude-history) — Search and view
+  Claude Code conversation history with fzf
+- [tmux-file-picker](https://github.com/raine/tmux-file-picker) — Pop up fzf in
+  tmux to quickly insert file paths, perfect for AI coding assistants
