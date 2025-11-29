@@ -36,6 +36,19 @@ This SQL query is timing out on large datasets. Can you help optimize it? Ask Ge
   LLM services
 - Simple: provides just one MCP tool to not clutter the context
 
+## Quick start
+
+1. **Add to Claude Code**:
+
+   ```bash
+   claude mcp add consult-llm -e GEMINI_API_KEY=your_key -- npx -y consult-llm-mcp
+   ```
+
+   _Also supports `OPENAI_API_KEY` and `DEEPSEEK_API_KEY`._
+
+2. **Ask a question**:
+   > "Consult Gemini about how to fix the race condition in server.ts"
+
 ## Usage with Claude Code
 
 ### Installation
