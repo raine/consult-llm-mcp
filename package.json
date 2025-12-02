@@ -1,6 +1,6 @@
 {
   "name": "consult-llm-mcp",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "MCP server for consulting powerful AI models",
   "type": "module",
   "main": "dist/main.js",
