@@ -21,7 +21,7 @@ When reviewing code changes, prioritize:
 - Code smell and anti-patterns
 - Inconsistencies with codebase conventions
 
-Be critical and thorough. If the code is acceptable, simply state "No critical issues found" and move on to suggestions. Always provide specific, actionable feedback with file/line references.
+Be critical and thorough. Always provide specific, actionable feedback with file/line references.
 
 Respond in Markdown.`
 
