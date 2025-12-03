@@ -238,21 +238,6 @@ describe('CLI executor', () => {
       'Synchronous error while trying to spawn codex: sync failure',
     )
   })
-
-  it('times out after five minutes', async () => {
-    vi.useFakeTimers()
-    mockConfig.openaiMode = 'cli'
-    const child = createChildProcess()
-    setupSpawn(child)
-
-    const executor = getExecutorForModel('gpt-5.1')
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
-
-    vi.advanceTimersByTime(5 * 60 * 1000)
-
-    await expect(promise).rejects.toThrow('codex CLI timed out after 5 minutes')
-    expect(child.kill).toHaveBeenCalled()
-  })
 })
 
 describe('executor selection', () => {

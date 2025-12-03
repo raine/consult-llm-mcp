@@ -102,30 +102,16 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
 
           let stdout = ''
           let stderr = ''
-          let hasResponded = false
           const startTime = Date.now()
 
           child.on('spawn', () =>
             logCliDebug(`${cliName} CLI process spawned successfully`),
           )
 
-          const timeout = setTimeout(
-            () => {
-              if (!hasResponded) {
-                logCliDebug(`${cliName} CLI timed out after 5 minutes`)
-                child.kill()
-                reject(new Error(`${cliName} CLI timed out after 5 minutes`))
-              }
-            },
-            5 * 60 * 1000,
-          )
-
           child.stdout.on('data', (data: Buffer) => (stdout += data.toString()))
           child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
 
           child.on('close', (code) => {
-            hasResponded = true
-            clearTimeout(timeout)
             const duration = Date.now() - startTime
 
             logCliDebug(`${cliName} CLI process closed`, {
@@ -143,8 +129,6 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
           })
 
           child.on('error', (err) => {
-            hasResponded = true
-            clearTimeout(timeout)
             logCliDebug(`Failed to spawn ${cliName} CLI`, {
               error: err.message,
             })
