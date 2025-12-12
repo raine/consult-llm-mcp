@@ -5,6 +5,7 @@ export const SupportedChatModel = z.enum([
   'gemini-2.5-pro',
   'gemini-3-pro-preview',
   'deepseek-reasoner',
+  'gpt-5.2',
   'gpt-5.1-codex-max',
   'gpt-5.1-codex',
   'gpt-5.1-codex-mini',

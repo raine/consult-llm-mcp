@@ -12,6 +12,10 @@ const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
     inputCostPerMillion: 2.0,
     outputCostPerMillion: 8.0,
   },
+  'gpt-5.2': {
+    inputCostPerMillion: 1.75,
+    outputCostPerMillion: 14.0,
+  },
   'gemini-2.5-pro': {
     inputCostPerMillion: 1.25,
     outputCostPerMillion: 10.0,
