@@ -381,7 +381,7 @@ See the "Using web mode..." example above for a concrete transcript.
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
   - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.1-codex-max`, `gpt-5.1-codex`,
+    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.1-codex-max`, `gpt-5.1-codex`,
     `gpt-5.1-codex-mini`, `gpt-5.1`
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
@@ -424,7 +424,7 @@ models complex questions.
 
 - **model** (optional): LLM model to use
   - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`
@@ -446,6 +446,7 @@ models complex questions.
   tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
 - **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
   tokens)
+- **gpt-5.2**: OpenAI's latest GPT model
 - **gpt-5.1-codex**: OpenAI's Codex model optimized for coding
 - **gpt-5.1-codex-mini**: Lighter, faster version of gpt-5.1-codex
 - **gpt-5.1**: Broad world knowledge with strong general reasoning
