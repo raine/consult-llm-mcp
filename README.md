@@ -391,6 +391,9 @@ See the "Using web mode..." example above for a concrete transcript.
   - CLI mode uses the system-installed `codex` CLI tool
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
+- `CONSULT_LLM_ALLOWED_MODELS` - List of allowed models (optional)
+  - Comma-separated list, e.g., `o3,gemini-3-pro-preview`
+  - If not set, all models are available in MCP schema
 
 ### Custom system prompt
 
