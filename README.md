@@ -1,8 +1,8 @@
 # Consult LLM MCP
 
-An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 2.5
-Pro, DeepSeek Reasoner, GPT-5.1 Codex) when Sonnet has you running in circles
-and you need to bring in the heavy artillery.
+An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 3.0
+Pro, DeepSeek Reasoner, GPT-5.2) when Sonnet has you running in circles and you
+need to bring in the heavy artillery.
 
 ```
 > Still getting this error after your fix. Ask gemini
@@ -24,8 +24,8 @@ and you need to bring in the heavy artillery.
 
 ## Features
 
-- Query powerful AI models (o3, Gemini 2.5 Pro, Gemini 3 Pro Preview, DeepSeek
-  Reasoner, GPT-5.1 Codex) with relevant files as context
+- Query powerful AI models (o3, Gemini 3.0 Pro, DeepSeek Reasoner, GPT-5.2) with
+  relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
