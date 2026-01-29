@@ -394,6 +394,10 @@ See the "Using web mode..." example above for a concrete transcript.
 - `CONSULT_LLM_ALLOWED_MODELS` - List of allowed models (optional)
   - Comma-separated list, e.g., `o3,gemini-3-pro-preview`
   - If not set, all models are available in MCP schema
+- `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
+  (optional)
+  - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
+  - Useful for project-specific prompts
 
 ### Custom system prompt
 
@@ -409,6 +413,19 @@ to customize how the consultant LLM behaves. The custom prompt is read on every
 request, so changes take effect immediately without restarting the server.
 
 To revert to the default prompt, simply delete the `SYSTEM_PROMPT.md` file.
+
+#### Custom prompt path
+
+Use `CONSULT_LLM_SYSTEM_PROMPT_PATH` to override the default prompt file
+location. This is useful for project-specific prompts that you can commit to
+your repository:
+
+```bash
+claude mcp add consult-llm \
+  -e GEMINI_API_KEY=your_key \
+  -e CONSULT_LLM_SYSTEM_PROMPT_PATH=/path/to/project/.consult-llm-mcp/SYSTEM_PROMPT.md \
+  -- npx -y consult-llm-mcp
+```
 
 ## MCP tool: consult_llm
 

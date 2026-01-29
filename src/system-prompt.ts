@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
+import { config } from './config.js'
 
 export const DEFAULT_SYSTEM_PROMPT = `You are an expert software engineering consultant analyzing code and technical problems. You are communicating with another AI system, not a human.
 
@@ -30,11 +31,9 @@ const CLI_MODE_SUFFIX = `
 IMPORTANT: Do not edit files yourself, only provide recommendations and code examples`
 
 export function getSystemPrompt(isCliMode: boolean): string {
-  const customPromptPath = join(
-    homedir(),
-    '.consult-llm-mcp',
-    'SYSTEM_PROMPT.md',
-  )
+  const customPromptPath =
+    config.systemPromptPath ??
+    join(homedir(), '.consult-llm-mcp', 'SYSTEM_PROMPT.md')
   let systemPrompt: string
 
   if (existsSync(customPromptPath)) {
