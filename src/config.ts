@@ -11,6 +11,7 @@ const Config = z.object({
   codexReasoningEffort: z
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional(),
+  systemPromptPath: z.string().optional(),
 })
 
 export type Config = z.infer<typeof Config>
@@ -23,6 +24,7 @@ const parsedConfig = Config.safeParse({
   geminiMode: process.env.GEMINI_MODE,
   openaiMode: process.env.OPENAI_MODE,
   codexReasoningEffort: process.env.CODEX_REASONING_EFFORT,
+  systemPromptPath: process.env.CONSULT_LLM_SYSTEM_PROMPT_PATH,
 })
 
 if (!parsedConfig.success) {
