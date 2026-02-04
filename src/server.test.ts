@@ -74,7 +74,7 @@ describe('isCliExecution', () => {
 
     mockConfig.openaiMode = 'cli'
     expect(isCliExecution('gpt-5.1')).toBe(true)
-    expect(isCliExecution('o3')).toBe(true)
+    expect(isCliExecution('gpt-5.2')).toBe(true)
     mockConfig.openaiMode = 'api'
     expect(isCliExecution('gpt-5.1')).toBe(false)
   })
@@ -116,8 +116,12 @@ describe('handleConsultLlm', () => {
 
   it('uses explicit model even when config default exists', async () => {
     mockConfig.defaultModel = 'gpt-5.1' as SupportedChatModel
-    await handleConsultLlm({ prompt: 'hello', model: 'o3' })
-    expect(queryLlmMock).toHaveBeenCalledWith('BUILT PROMPT', 'o3', undefined)
+    await handleConsultLlm({ prompt: 'hello', model: 'gpt-5.2' })
+    expect(queryLlmMock).toHaveBeenCalledWith(
+      'BUILT PROMPT',
+      'gpt-5.2',
+      undefined,
+    )
   })
 
   it('builds CLI prompts without file contents', async () => {
@@ -143,7 +147,7 @@ describe('handleConsultLlm', () => {
 
       cli prompt"
     `)
-    expect(model).toBe('o3')
+    expect(model).toBe('gpt-5.2')
     expect(filePaths).toEqual([resolve('./foo.ts')])
   })
 

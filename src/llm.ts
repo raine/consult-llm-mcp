@@ -232,9 +232,7 @@ const createExecutorProvider = () => {
     // Create cache key that includes mode for models that support CLI
     const cacheKey =
       model +
-      (model.startsWith('gpt-') || model === 'o3'
-        ? `-${config.openaiMode}`
-        : '') +
+      (model.startsWith('gpt-') ? `-${config.openaiMode}` : '') +
       (model.startsWith('gemini-') ? `-${config.geminiMode}` : '')
 
     if (executorCache.has(cacheKey)) {
@@ -243,7 +241,7 @@ const createExecutorProvider = () => {
 
     let executor: LlmExecutor
 
-    if (model.startsWith('gpt-') || model === 'o3') {
+    if (model.startsWith('gpt-')) {
       executor =
         config.openaiMode === 'cli'
           ? createCliExecutor(codexCliConfig)

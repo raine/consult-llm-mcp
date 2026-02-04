@@ -56,10 +56,7 @@ export function isCliExecution(model: SupportedChatModel): boolean {
   if (model.startsWith('gemini-') && config.geminiMode === 'cli') {
     return true
   }
-  if (
-    (model.startsWith('gpt-') || model === 'o3') &&
-    config.openaiMode === 'cli'
-  ) {
+  if (model.startsWith('gpt-') && config.openaiMode === 'cli') {
     return true
   }
   return false

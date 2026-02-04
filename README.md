@@ -1,8 +1,8 @@
 # Consult LLM MCP
 
-An MCP server that lets Claude Code consult stronger AI models (o3, Gemini 3.0
-Pro, DeepSeek Reasoner, GPT-5.2) when Sonnet has you running in circles and you
-need to bring in the heavy artillery.
+An MCP server that lets Claude Code consult stronger AI models (GPT-5.2, Gemini
+3.0 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
+to bring in the heavy artillery.
 
 ```
 > Still getting this error after your fix. Ask gemini
@@ -24,7 +24,7 @@ need to bring in the heavy artillery.
 
 ## Features
 
-- Query powerful AI models (o3, Gemini 3.0 Pro, DeepSeek Reasoner, GPT-5.2) with
+- Query powerful AI models (GPT-5.2, Gemini 3.0 Pro, DeepSeek Reasoner) with
   relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
@@ -380,9 +380,9 @@ See the "Using web mode..." example above for a concrete transcript.
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+  - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
+    `deepseek-reasoner`, `gpt-5.2-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex`,
+    `gpt-5.1-codex-mini`, `gpt-5.1`
 - `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
   - Options: `api` (default), `cli`
   - CLI mode uses the system-installed `gemini` CLI tool
@@ -392,7 +392,7 @@ See the "Using web mode..." example above for a concrete transcript.
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
 - `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
-  - Comma-separated list, e.g., `o3,gemini-3-pro-preview`
+  - Comma-separated list, e.g., `gpt-5.2,gemini-3-pro-preview`
   - When set, only these models appear in the tool schema
   - If `CONSULT_LLM_DEFAULT_MODEL` is set, it must be in this list
   - See [Tips](#controlling-which-models-claude-uses) for usage examples
@@ -473,9 +473,9 @@ models complex questions.
   - All files are added as context with file paths and code blocks
 
 - **model** (optional): LLM model to use
-  - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+  - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
+    `deepseek-reasoner`, `gpt-5.2-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex`,
+    `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`
@@ -491,7 +491,6 @@ models complex questions.
 
 ## Supported models
 
-- **o3**: OpenAI's reasoning model ($2/$8 per million tokens)
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
 - **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview ($2/$12 per million
   tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)

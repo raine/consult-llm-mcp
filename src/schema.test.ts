@@ -3,13 +3,13 @@ import { ConsultLlmArgs, SupportedChatModel, ALL_MODELS } from './schema.js'
 
 describe('SupportedChatModel', () => {
   it('accepts known models and rejects unsupported ones', () => {
-    expect(SupportedChatModel.safeParse('o3').success).toBe(true)
+    expect(SupportedChatModel.safeParse('gpt-5.2').success).toBe(true)
     expect(SupportedChatModel.safeParse('gpt-5.1-codex-max').success).toBe(true)
     expect(SupportedChatModel.safeParse('gpt-3.5').success).toBe(false)
   })
 
   it('ALL_MODELS contains all available models', () => {
-    expect(ALL_MODELS).toContain('o3')
+    expect(ALL_MODELS).toContain('gpt-5.2')
     expect(ALL_MODELS).toContain('gemini-2.5-pro')
     expect(ALL_MODELS).toContain('gemini-3-pro-preview')
     expect(ALL_MODELS.length).toBeGreaterThan(0)

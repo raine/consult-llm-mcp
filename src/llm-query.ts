@@ -17,8 +17,7 @@ export async function queryLlm(
   // Get system prompt (with CLI suffix if needed)
   const isCliMode =
     (model.startsWith('gemini-') && config.geminiMode === 'cli') ||
-    ((model.startsWith('gpt-') || model === 'o3') &&
-      config.openaiMode === 'cli')
+    (model.startsWith('gpt-') && config.openaiMode === 'cli')
   const systemPrompt = getSystemPrompt(isCliMode)
 
   const { response, usage } = await executor.execute(

@@ -1,7 +1,6 @@
 import { z } from 'zod/v4'
 
 export const ALL_MODELS = [
-  'o3',
   'gemini-2.5-pro',
   'gemini-3-pro-preview',
   'deepseek-reasoner',
@@ -40,8 +39,10 @@ export const SupportedChatModel = z.enum(
 
 export type SupportedChatModel = z.infer<typeof SupportedChatModel>
 
-// Determine a safe default model (prefer 'o3' if available)
-const defaultModel = ENABLED_MODELS.includes('o3') ? 'o3' : ENABLED_MODELS[0]
+// Determine a safe default model (prefer 'gpt-5.2' if available)
+const defaultModel = ENABLED_MODELS.includes('gpt-5.2')
+  ? 'gpt-5.2'
+  : ENABLED_MODELS[0]
 
 export const ConsultLlmArgs = z.object({
   files: z
