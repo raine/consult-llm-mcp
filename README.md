@@ -391,9 +391,11 @@ See the "Using web mode..." example above for a concrete transcript.
   - CLI mode uses the system-installed `codex` CLI tool
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
-- `CONSULT_LLM_ALLOWED_MODELS` - List of allowed models (optional)
+- `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
   - Comma-separated list, e.g., `o3,gemini-3-pro-preview`
-  - If not set, all models are available in MCP schema
+  - When set, only these models appear in the tool schema
+  - If `CONSULT_LLM_DEFAULT_MODEL` is set, it must be in this list
+  - See [Tips](#controlling-which-models-claude-uses) for usage examples
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
@@ -427,6 +429,37 @@ claude mcp add consult-llm \
   -- npx -y consult-llm-mcp
 ```
 
+## Tips
+
+### Controlling which models Claude uses
+
+When you ask Claude to "consult an LLM" without specifying a model, it picks one
+from the available options in the tool schema. The `CONSULT_LLM_DEFAULT_MODEL`
+only affects the fallback when no model is specified in the tool call.
+
+To control which models Claude can choose from, use
+`CONSULT_LLM_ALLOWED_MODELS`:
+
+```bash
+claude mcp add consult-llm \
+  -e GEMINI_API_KEY=your_key \
+  -e CONSULT_LLM_ALLOWED_MODELS='gemini-3-pro-preview,gpt-5.2-codex' \
+  -- npx -y consult-llm-mcp
+```
+
+This restricts the tool schema to only advertise these models. For example, to
+ensure Claude always uses Gemini 3 Pro:
+
+```bash
+claude mcp add consult-llm \
+  -e GEMINI_API_KEY=your_key \
+  -e CONSULT_LLM_ALLOWED_MODELS='gemini-3-pro-preview' \
+  -- npx -y consult-llm-mcp
+```
+
+Alternatively, use a [slash command](#example-slash-command) with hardcoded
+model names for guaranteed model selection.
+
 ## MCP tool: consult_llm
 
 The server provides a single tool called `consult_llm` for asking powerful AI
@@ -441,8 +474,8 @@ models complex questions.
 
 - **model** (optional): LLM model to use
   - Options: `o3` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.1-codex`,
-    `gpt-5.1-codex-mini`, `gpt-5.1`
+    `deepseek-reasoner`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
+    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`
@@ -466,6 +499,7 @@ models complex questions.
   tokens)
 - **gpt-5.2**: OpenAI's latest GPT model
 - **gpt-5.2-codex**: OpenAI's Codex model based on GPT-5.2
+- **gpt-5.1-codex-max**: Strongest OpenAI Codex model
 - **gpt-5.1-codex**: OpenAI's Codex model optimized for coding
 - **gpt-5.1-codex-mini**: Lighter, faster version of gpt-5.1-codex
 - **gpt-5.1**: Broad world knowledge with strong general reasoning
