@@ -505,7 +505,9 @@ models complex questions.
 
 ## Logging
 
-All prompts and responses are logged to `~/.consult-llm-mcp/logs/mcp.log` with:
+All prompts and responses are logged to
+`$XDG_STATE_HOME/consult-llm-mcp/mcp.log` (defaults to
+`~/.local/state/consult-llm-mcp/mcp.log`) with:
 
 - Tool call parameters
 - Full prompts and responses

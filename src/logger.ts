@@ -3,7 +3,9 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { format } from 'prettier'
 
-const logDir = join(homedir(), '.consult-llm-mcp', 'logs')
+const xdgStateHome =
+  process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state')
+const logDir = join(xdgStateHome, 'consult-llm-mcp')
 const logFile = join(logDir, 'mcp.log')
 
 try {
