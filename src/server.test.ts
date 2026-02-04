@@ -27,7 +27,13 @@ const mockConfig = vi.hoisted(
     }) as Config,
 )
 
-vi.mock('./config.js', () => ({ config: mockConfig }))
+vi.mock('./config.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./config.js')>()
+  return {
+    ...actual,
+    config: mockConfig,
+  }
+})
 vi.mock('./file.js', () => ({ processFiles: processFilesMock }))
 vi.mock('./git.js', () => ({ generateGitDiff: generateGitDiffMock }))
 vi.mock('./prompt-builder.js', () => ({ buildPrompt: buildPromptMock }))

@@ -1,48 +1,10 @@
 import { z } from 'zod/v4'
+import { ALL_MODELS } from './models.js'
+import { SupportedChatModel, fallbackModel } from './config.js'
 
-export const ALL_MODELS = [
-  'gemini-2.5-pro',
-  'gemini-3-pro-preview',
-  'deepseek-reasoner',
-  'gpt-5.2',
-  'gpt-5.2-codex',
-  'gpt-5.1-codex-max',
-  'gpt-5.1-codex',
-  'gpt-5.1-codex-mini',
-  'gpt-5.1',
-] as const
-
-// Parse allowed models from environment variable (whitelist)
-// If not set, all models are allowed
-const allowedModels = (process.env.CONSULT_LLM_ALLOWED_MODELS || '')
-  .split(',')
-  .map((m) => m.trim())
-  .filter((m) => m.length > 0)
-
-// Filter available models
-const ENABLED_MODELS =
-  allowedModels.length > 0
-    ? ALL_MODELS.filter((m) => allowedModels.includes(m))
-    : [...ALL_MODELS]
-
-// Ensure at least one model is enabled
-if (ENABLED_MODELS.length === 0) {
-  throw new Error(
-    'No chat models enabled. Check CONSULT_LLM_ALLOWED_MODELS environment variable.',
-  )
-}
-
-// Create the Zod enum dynamically
-export const SupportedChatModel = z.enum(
-  ENABLED_MODELS as [string, ...string[]],
-)
-
-export type SupportedChatModel = z.infer<typeof SupportedChatModel>
-
-// Determine a safe default model (prefer 'gpt-5.2' if available)
-const defaultModel = ENABLED_MODELS.includes('gpt-5.2')
-  ? 'gpt-5.2'
-  : ENABLED_MODELS[0]
+// Re-export for consumers
+export { ALL_MODELS, SupportedChatModel }
+export type { SupportedChatModel as SupportedChatModelType }
 
 export const ConsultLlmArgs = z.object({
   files: z
@@ -57,7 +19,7 @@ export const ConsultLlmArgs = z.object({
       'Your question or request for the consultant LLM. Ask neutral, open-ended questions without suggesting specific solutions to avoid biasing the analysis.',
     ),
   model: SupportedChatModel.optional()
-    .default(defaultModel)
+    .default(fallbackModel)
     .describe(
       'LLM model to use. Prefer gpt-5.1-codex-max when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
     ),
