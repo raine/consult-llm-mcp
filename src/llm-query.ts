@@ -8,9 +8,11 @@ export async function queryLlm(
   prompt: string,
   model: SupportedChatModel,
   filePaths?: string[],
+  threadId?: string,
 ): Promise<{
   response: string
   costInfo: string
+  threadId?: string
 }> {
   const executor = getExecutorForModel(model)
 
@@ -20,12 +22,11 @@ export async function queryLlm(
     (model.startsWith('gpt-') && config.openaiMode === 'cli')
   const systemPrompt = getSystemPrompt(isCliMode)
 
-  const { response, usage } = await executor.execute(
-    prompt,
-    model,
-    systemPrompt,
-    filePaths,
-  )
+  const {
+    response,
+    usage,
+    threadId: returnedThreadId,
+  } = await executor.execute(prompt, model, systemPrompt, filePaths, threadId)
 
   if (!response) {
     throw new Error('No response from the model')
@@ -41,5 +42,5 @@ export async function queryLlm(
     costInfo = 'Cost data not available (using CLI mode)'
   }
 
-  return { response, costInfo }
+  return { response, costInfo, threadId: returnedThreadId }
 }

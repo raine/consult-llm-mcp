@@ -77,6 +77,7 @@ export async function handleConsultLlm(args: unknown) {
     git_diff,
     web_mode,
     model: parsedModel,
+    thread_id: threadId,
   } = parseResult.data
 
   const providedModel =
@@ -94,6 +95,12 @@ export async function handleConsultLlm(args: unknown) {
   logToolCall('consult_llm', args)
 
   const isCliMode = isCliExecution(model)
+
+  if (threadId && !(model.startsWith('gpt-') && config.openaiMode === 'cli')) {
+    throw new Error(
+      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
+    )
+  }
 
   let prompt: string
   let filePaths: string[] | undefined
@@ -145,11 +152,19 @@ ${prompt}`
     }
   }
 
-  const { response, costInfo } = await queryLlm(prompt, model, filePaths)
+  const {
+    response,
+    costInfo,
+    threadId: returnedThreadId,
+  } = await queryLlm(prompt, model, filePaths, threadId)
   await logResponse(model, response, costInfo)
 
+  const responseText = returnedThreadId
+    ? `[thread_id:${returnedThreadId}]\n\n${response}`
+    : response
+
   return {
-    content: [{ type: 'text', text: response }],
+    content: [{ type: 'text', text: responseText }],
   }
 }
 

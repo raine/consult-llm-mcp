@@ -30,6 +30,12 @@ export const ConsultLlmArgs = z.object({
     .describe(
       "If true, copy the formatted prompt to the clipboard instead of querying an LLM. When true, the `model` parameter is ignored. Use this to paste the prompt into browser-based LLM services. IMPORTANT: Only use this when the user specifically requests it. When true, wait for the user to provide the external LLM's response before proceeding with any implementation.",
     ),
+  thread_id: z
+    .string()
+    .optional()
+    .describe(
+      'Thread ID for resuming a Codex conversation. Only works with Codex CLI models (gpt-*) in CLI mode. Returned in the response prefix as [thread_id:xxx].',
+    ),
   git_diff: z
     .object({
       repo_path: z
@@ -66,6 +72,8 @@ export const toolSchema = {
 
 Be specific about what you want: code implementation, code review, bug analysis, architecture advice, etc.
 
-IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solutions or alternatives in your prompt as this can bias the analysis. Instead of "Should I use X or Y approach?", ask "What's the best approach for this problem?" Let the consultant LLM provide unbiased recommendations.`,
+IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solutions or alternatives in your prompt as this can bias the analysis. Instead of "Should I use X or Y approach?", ask "What's the best approach for this problem?" Let the consultant LLM provide unbiased recommendations.
+
+For multi-turn conversations with Codex models, the response includes a [thread_id:xxx] prefix. Extract this ID and pass it as the thread_id parameter in follow-up requests to maintain conversation context.`,
   inputSchema: consultLlmInputSchema,
 } as const

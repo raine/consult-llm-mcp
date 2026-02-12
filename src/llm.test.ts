@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import type { Config } from './config.js'
 import type { SupportedChatModel } from './schema.js'
-import { getExecutorForModel } from './llm.js'
+import { getExecutorForModel, parseCodexJsonl } from './llm.js'
 
 const createCompletionMock = vi.hoisted(() => vi.fn())
 const spawnMock = vi.hoisted(() => vi.fn())
@@ -128,12 +128,84 @@ describe('API executor', () => {
   })
 })
 
-describe('CLI executor', () => {
+const codexJsonlOutput = (threadId: string, text: string) =>
+  [
+    JSON.stringify({ type: 'thread.started', thread_id: threadId }),
+    JSON.stringify({
+      type: 'item.completed',
+      item: { type: 'agent_message', text },
+    }),
+  ].join('\n')
+
+describe('parseCodexJsonl', () => {
+  it('extracts thread_id and agent_message text', () => {
+    const output = codexJsonlOutput('thread_abc', 'hello world')
+    const result = parseCodexJsonl(output)
+    expect(result.threadId).toBe('thread_abc')
+    expect(result.response).toBe('hello world')
+  })
+
+  it('concatenates multiple agent_message items', () => {
+    const output = [
+      JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'first' },
+      }),
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'second' },
+      }),
+    ].join('\n')
+    const result = parseCodexJsonl(output)
+    expect(result.response).toBe('first\nsecond')
+  })
+
+  it('skips reasoning items', () => {
+    const output = [
+      JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'reasoning', text: 'thinking...' },
+      }),
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'answer' },
+      }),
+    ].join('\n')
+    const result = parseCodexJsonl(output)
+    expect(result.response).toBe('answer')
+  })
+
+  it('skips non-JSON lines', () => {
+    const output = [
+      'ERROR: some log line',
+      JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+      'another garbage line',
+      JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'result' },
+      }),
+    ].join('\n')
+    const result = parseCodexJsonl(output)
+    expect(result.threadId).toBe('t1')
+    expect(result.response).toBe('result')
+  })
+
+  it('returns empty response when no agent_message found', () => {
+    const output = JSON.stringify({ type: 'thread.started', thread_id: 't1' })
+    const result = parseCodexJsonl(output)
+    expect(result.threadId).toBe('t1')
+    expect(result.response).toBe('')
+  })
+})
+
+describe('Codex CLI executor', () => {
   const setupSpawn = (child: FakeChildProcess) => {
     spawnMock.mockReturnValue(child)
   }
 
-  it('spawns codex CLI with combined prompt and files', async () => {
+  it('spawns codex CLI with --json and parses JSONL output', async () => {
     mockConfig.openaiMode = 'cli'
     const child = createChildProcess()
     setupSpawn(child)
@@ -143,22 +215,83 @@ describe('CLI executor', () => {
       '/absolute/path/to/file.ts',
     ])
 
-    resolveCliExecution(child, { stdout: 'result', code: 0 })
+    resolveCliExecution(child, {
+      stdout: codexJsonlOutput('thread_123', 'result'),
+      code: 0,
+    })
 
     const args = spawnMock.mock.calls[0]
     expect(args?.[0]).toBe('codex')
     const cliArgs = args?.[1] as string[]
     expect(cliArgs[0]).toBe('exec')
-    expect(cliArgs[1]).toBe('--skip-git-repo-check')
-    expect(cliArgs[2]).toBe('-m')
-    expect(cliArgs[3]).toBe('gpt-5.1')
-    expect(cliArgs[4]).toContain('system')
-    expect(cliArgs[4]).toContain('user')
-    expect(cliArgs[4]).toContain('Files: @')
+    expect(cliArgs[1]).toBe('--json')
+    expect(cliArgs[2]).toBe('--skip-git-repo-check')
+    expect(cliArgs).toContain('-m')
+    expect(cliArgs).toContain('gpt-5.1')
+    // Last arg is the prompt with system + user + files
+    const promptArg = cliArgs[cliArgs.length - 1]
+    expect(promptArg).toContain('system')
+    expect(promptArg).toContain('user')
+    expect(promptArg).toContain('Files: @')
 
     const result = await promise
     expect(result.response).toBe('result')
     expect(result.usage).toBeNull()
+    expect(result.threadId).toBe('thread_123')
+  })
+
+  it('resumes a session with thread_id', async () => {
+    mockConfig.openaiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.1')
+    const promise = executor.execute(
+      'follow up question',
+      'gpt-5.1',
+      'system',
+      undefined,
+      'thread_abc',
+    )
+
+    resolveCliExecution(child, {
+      stdout: codexJsonlOutput('thread_abc', 'follow up answer'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs[0]).toBe('exec')
+    expect(cliArgs[1]).toBe('resume')
+    expect(cliArgs[2]).toBe('--json')
+    expect(cliArgs[3]).toBe('--skip-git-repo-check')
+    expect(cliArgs).toContain('thread_abc')
+    // Prompt should NOT contain system prompt on resume
+    const promptArg = cliArgs[cliArgs.length - 1]
+    expect(promptArg).toBe('follow up question')
+    expect(promptArg).not.toContain('system')
+
+    const result = await promise
+    expect(result.response).toBe('follow up answer')
+    expect(result.threadId).toBe('thread_abc')
+  })
+
+  it('rejects when no agent_message in JSONL output', async () => {
+    mockConfig.openaiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.1')
+    const promise = executor.execute('user', 'gpt-5.1', 'system')
+
+    resolveCliExecution(child, {
+      stdout: JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
+      code: 0,
+    })
+
+    await expect(promise).rejects.toThrow(
+      'No agent_message found in Codex JSONL output',
+    )
   })
 
   it('rejects with codex errors on non-zero exit', async () => {
@@ -185,7 +318,10 @@ describe('CLI executor', () => {
     const executor = getExecutorForModel('gpt-5.1')
     const promise = executor.execute('user', 'gpt-5.1', 'system')
 
-    resolveCliExecution(child, { stdout: 'result', code: 0 })
+    resolveCliExecution(child, {
+      stdout: codexJsonlOutput('t1', 'result'),
+      code: 0,
+    })
 
     const args = spawnMock.mock.calls[0]
     const cliArgs = args?.[1] as string[]
@@ -193,23 +329,7 @@ describe('CLI executor', () => {
     expect(cliArgs).toContain('model_reasoning_effort="xhigh"')
 
     await promise
-    mockConfig.codexReasoningEffort = undefined // reset for other tests
-  })
-
-  it('wraps gemini quota errors specially', async () => {
-    mockConfig.geminiMode = 'cli'
-    const child = createChildProcess()
-    setupSpawn(child)
-
-    const executor = getExecutorForModel('gemini-2.5-pro')
-    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
-
-    resolveCliExecution(child, {
-      stderr: 'RESOURCE_EXHAUSTED: quota exceeded',
-      code: 1,
-    })
-
-    await expect(promise).rejects.toThrow('Gemini quota exceeded')
+    mockConfig.codexReasoningEffort = undefined
   })
 
   it('handles spawn error events with friendly message', async () => {
@@ -237,6 +357,28 @@ describe('CLI executor', () => {
     await expect(executor.execute('user', 'gpt-5.1', 'system')).rejects.toThrow(
       'Synchronous error while trying to spawn codex: sync failure',
     )
+  })
+})
+
+describe('Gemini CLI executor', () => {
+  const setupSpawn = (child: FakeChildProcess) => {
+    spawnMock.mockReturnValue(child)
+  }
+
+  it('wraps gemini quota errors specially', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
+
+    resolveCliExecution(child, {
+      stderr: 'RESOURCE_EXHAUSTED: quota exceeded',
+      code: 1,
+    })
+
+    await expect(promise).rejects.toThrow('Gemini quota exceeded')
   })
 })
 

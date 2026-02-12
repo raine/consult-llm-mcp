@@ -50,6 +50,17 @@ describe('ConsultLlmArgs', () => {
     expect(ALL_MODELS).toContain(parsed.model)
   })
 
+  it('accepts optional thread_id as string', () => {
+    const withThread = ConsultLlmArgs.parse({
+      prompt: 'follow up',
+      thread_id: 'thread_abc',
+    })
+    expect(withThread.thread_id).toBe('thread_abc')
+
+    const withoutThread = ConsultLlmArgs.parse({ prompt: 'no thread' })
+    expect(withoutThread.thread_id).toBeUndefined()
+  })
+
   it('defaults web_mode to false but honors explicit value', () => {
     const parsedDefault = ConsultLlmArgs.parse({ prompt: 'default case' })
     expect(parsedDefault.web_mode).toBe(false)

@@ -116,6 +116,7 @@ describe('handleConsultLlm', () => {
       'BUILT PROMPT',
       'gpt-5.1',
       undefined,
+      undefined,
     )
     expect(result.content[0]?.text).toBe('ok')
   })
@@ -126,6 +127,7 @@ describe('handleConsultLlm', () => {
     expect(queryLlmMock).toHaveBeenCalledWith(
       'BUILT PROMPT',
       'gpt-5.2',
+      undefined,
       undefined,
     )
   })
@@ -177,6 +179,60 @@ describe('handleConsultLlm', () => {
     `)
     expect(queryLlmMock).not.toHaveBeenCalled()
     expect(result.content[0]?.text).toContain('Prompt copied to clipboard')
+  })
+
+  it('passes thread_id to queryLlm for Codex CLI models', async () => {
+    mockConfig.openaiMode = 'cli'
+    await handleConsultLlm({
+      prompt: 'follow up',
+      model: 'gpt-5.2',
+      thread_id: 'thread_abc',
+    })
+
+    const callArgs = queryLlmMock.mock.calls[0] as unknown[]
+    expect(callArgs[3]).toBe('thread_abc')
+  })
+
+  it('prefixes response with thread_id when returned', async () => {
+    mockConfig.openaiMode = 'cli'
+    queryLlmMock.mockResolvedValueOnce({
+      response: 'answer',
+      costInfo: null,
+      threadId: 'thread_xyz',
+    })
+
+    const result = await handleConsultLlm({
+      prompt: 'question',
+      model: 'gpt-5.2',
+    })
+
+    expect(result.content[0]?.text).toBe('[thread_id:thread_xyz]\n\nanswer')
+  })
+
+  it('rejects thread_id with non-CLI model', async () => {
+    mockConfig.openaiMode = 'api'
+    await expect(
+      handleConsultLlm({
+        prompt: 'hello',
+        model: 'gpt-5.2',
+        thread_id: 'thread_abc',
+      }),
+    ).rejects.toThrow(
+      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
+    )
+  })
+
+  it('rejects thread_id with Gemini model', async () => {
+    mockConfig.geminiMode = 'cli'
+    await expect(
+      handleConsultLlm({
+        prompt: 'hello',
+        model: 'gemini-2.5-pro',
+        thread_id: 'thread_abc',
+      }),
+    ).rejects.toThrow(
+      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
+    )
   })
 
   it('propagates query errors', async () => {
