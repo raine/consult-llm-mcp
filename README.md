@@ -378,6 +378,10 @@ uses thread IDs, but both are passed through the same `thread_id` parameter.
      Rain has high upside, high annoyance depending on context. ...
 ```
 
+See [skills/debate/SKILL.md](skills/debate/SKILL.md) for a skill where the agent
+debates an opponent LLM through multiple turns, then synthesizes and implements
+the result.
+
 ### Web mode
 
 Copies the formatted prompt to clipboard instead of querying an LLM. Paste into
@@ -616,7 +620,8 @@ need reliability or custom instructions.
 
 Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
 that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
-"ask codex". See [examples/SKILL.md](examples/SKILL.md) for the full content.
+"ask codex". See [skills/consult/SKILL.md](skills/consult/SKILL.md) for the
+full content.
 
 Save it as `~/.claude/skills/consult-llm/SKILL.md` and you can then use it by
 typing "ask gemini about X" or "ask codex about X" in Claude Code.
