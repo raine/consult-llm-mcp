@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.0 (2026-02-12)
+
+- Added multi-turn conversation support for CLI modes via `thread_id` parameter
+  - Codex CLI: uses `--json` output and `exec resume` for session continuity
+  - Gemini CLI: uses `-o json` output and `-r` flag for session resume
+  - Responses include a `[thread_id:xxx]` prefix for follow-up requests
+- Replaced generic CLI executor with dedicated Codex and Gemini executors
+- Added debate skill example (`skills/debate/SKILL.md`) showcasing multi-turn
+  conversations
+
 ## v2.0.1 (2026-02-05)
 
 - Added gpt-5.3-codex model support

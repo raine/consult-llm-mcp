@@ -22,8 +22,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
   iter_captures() approach now.
 ```
 
-[Features](#features) · [Quick start](#quick-start) ·
-[Configuration](#configuration) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Configuration](#configuration) · [Changelog](CHANGELOG.md)
 
 ## Features
 
