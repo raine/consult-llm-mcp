@@ -96,9 +96,9 @@ export async function handleConsultLlm(args: unknown) {
 
   const isCliMode = isCliExecution(model)
 
-  if (threadId && !(model.startsWith('gpt-') && config.openaiMode === 'cli')) {
+  if (threadId && !isCliMode) {
     throw new Error(
-      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
+      'thread_id is only supported with CLI mode models (Codex or Gemini CLI)',
     )
   }
 

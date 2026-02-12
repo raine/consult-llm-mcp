@@ -209,6 +209,18 @@ describe('handleConsultLlm', () => {
     expect(result.content[0]?.text).toBe('[thread_id:thread_xyz]\n\nanswer')
   })
 
+  it('passes thread_id to queryLlm for Gemini CLI models', async () => {
+    mockConfig.geminiMode = 'cli'
+    await handleConsultLlm({
+      prompt: 'follow up',
+      model: 'gemini-2.5-pro',
+      thread_id: 'sess_abc',
+    })
+
+    const callArgs = queryLlmMock.mock.calls[0] as unknown[]
+    expect(callArgs[3]).toBe('sess_abc')
+  })
+
   it('rejects thread_id with non-CLI model', async () => {
     mockConfig.openaiMode = 'api'
     await expect(
@@ -217,22 +229,18 @@ describe('handleConsultLlm', () => {
         model: 'gpt-5.2',
         thread_id: 'thread_abc',
       }),
-    ).rejects.toThrow(
-      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
-    )
+    ).rejects.toThrow('thread_id is only supported with CLI mode models')
   })
 
-  it('rejects thread_id with Gemini model', async () => {
-    mockConfig.geminiMode = 'cli'
+  it('rejects thread_id with Gemini API model', async () => {
+    mockConfig.geminiMode = 'api'
     await expect(
       handleConsultLlm({
         prompt: 'hello',
         model: 'gemini-2.5-pro',
-        thread_id: 'thread_abc',
+        thread_id: 'sess_abc',
       }),
-    ).rejects.toThrow(
-      'thread_id is only supported with Codex CLI models (gpt-*) in CLI mode',
-    )
+    ).rejects.toThrow('thread_id is only supported with CLI mode models')
   })
 
   it('propagates query errors', async () => {

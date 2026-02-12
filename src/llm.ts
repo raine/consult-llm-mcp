@@ -53,19 +53,23 @@ function createApiExecutor(client: OpenAI): LlmExecutor {
   }
 }
 
-/**
- * Configuration for a command-line tool executor.
- */
-type CliConfig = {
-  cliName: string
-  buildArgs: (model: SupportedChatModelType, fullPrompt: string) => string[]
-  handleNonZeroExit: (code: number, stderr: string) => Error
+// --- CLI Executors ---
+
+export function parseGeminiJson(output: string): {
+  sessionId: string | undefined
+  response: string
+} {
+  const parsed = JSON.parse(output) as {
+    session_id?: string
+    response?: string
+  }
+  return {
+    sessionId: parsed.session_id,
+    response: parsed.response ?? '',
+  }
 }
 
-/**
- * Creates an executor that delegates to a command-line tool.
- */
-function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
+function createGeminiExecutor(): LlmExecutor {
   const buildFullPrompt = (
     prompt: string,
     systemPrompt: string,
@@ -82,22 +86,27 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
   }
 
   return {
-    async execute(prompt, model, systemPrompt, filePaths) {
-      const fullPrompt = buildFullPrompt(prompt, systemPrompt, filePaths)
-      const args = cliConfig.buildArgs(model, fullPrompt)
-      const { cliName } = cliConfig
+    async execute(prompt, model, systemPrompt, filePaths, threadId) {
+      const message = threadId
+        ? prompt
+        : buildFullPrompt(prompt, systemPrompt, filePaths)
+
+      const args: string[] = ['-m', model, '-o', 'json']
+      if (threadId) {
+        args.push('-r', threadId)
+      }
+      args.push('-p', message)
 
       return new Promise((resolve, reject) => {
         try {
-          logCliDebug(`Spawning ${cliName} CLI`, {
+          logCliDebug('Spawning gemini CLI', {
             model,
-            promptLength: fullPrompt.length,
-            filePathsCount: filePaths?.length || 0,
-            args: args,
-            promptPreview: fullPrompt.slice(0, 300),
+            promptLength: message.length,
+            threadId,
+            args,
           })
 
-          const child = spawn(cliName, args, {
+          const child = spawn('gemini', args, {
             shell: false,
             stdio: ['ignore', 'pipe', 'pipe'],
           })
@@ -107,16 +116,14 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
           const startTime = Date.now()
 
           child.on('spawn', () =>
-            logCliDebug(`${cliName} CLI process spawned successfully`),
+            logCliDebug('gemini CLI process spawned successfully'),
           )
-
           child.stdout.on('data', (data: Buffer) => (stdout += data.toString()))
           child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
 
           child.on('close', (code) => {
             const duration = Date.now() - startTime
-
-            logCliDebug(`${cliName} CLI process closed`, {
+            logCliDebug('gemini CLI process closed', {
               code,
               duration: `${duration}ms`,
               stdoutLength: stdout.length,
@@ -124,26 +131,53 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
             })
 
             if (code === 0) {
-              resolve({ response: stdout.trim(), usage: null })
+              try {
+                const parsed = parseGeminiJson(stdout)
+                if (!parsed.response) {
+                  reject(new Error('No response found in Gemini JSON output'))
+                  return
+                }
+                resolve({
+                  response: parsed.response,
+                  usage: null,
+                  threadId: parsed.sessionId,
+                })
+              } catch {
+                reject(
+                  new Error(
+                    `Failed to parse Gemini JSON output: ${stdout.slice(0, 200)}`,
+                  ),
+                )
+              }
             } else {
-              reject(cliConfig.handleNonZeroExit(code ?? -1, stderr))
+              if (stderr.includes('RESOURCE_EXHAUSTED')) {
+                reject(
+                  new Error(
+                    `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
+                  ),
+                )
+              } else {
+                reject(
+                  new Error(
+                    `Gemini CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
+                  ),
+                )
+              }
             }
           })
 
           child.on('error', (err) => {
-            logCliDebug(`Failed to spawn ${cliName} CLI`, {
-              error: err.message,
-            })
+            logCliDebug('Failed to spawn gemini CLI', { error: err.message })
             reject(
               new Error(
-                `Failed to spawn ${cliName} CLI. Is it installed and in PATH? Error: ${err.message}`,
+                `Failed to spawn gemini CLI. Is it installed and in PATH? Error: ${err.message}`,
               ),
             )
           })
         } catch (err) {
           reject(
             new Error(
-              `Synchronous error while trying to spawn ${cliName}: ${
+              `Synchronous error while trying to spawn gemini: ${
                 err instanceof Error ? err.message : String(err)
               }`,
             ),
@@ -152,22 +186,6 @@ function createCliExecutor(cliConfig: CliConfig): LlmExecutor {
       })
     },
   }
-}
-
-// --- CLI Configurations ---
-const geminiCliConfig: CliConfig = {
-  cliName: 'gemini',
-  buildArgs: (model, fullPrompt) => ['-m', model, '-p', fullPrompt],
-  handleNonZeroExit: (code, stderr) => {
-    if (stderr.includes('RESOURCE_EXHAUSTED')) {
-      return new Error(
-        `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
-      )
-    }
-    return new Error(
-      `Gemini CLI exited with code ${code}. Error: ${stderr.trim()}`,
-    )
-  },
 }
 
 export function parseCodexJsonl(output: string): {
@@ -386,7 +404,7 @@ const createExecutorProvider = () => {
     } else if (model.startsWith('gemini-')) {
       executor =
         config.geminiMode === 'cli'
-          ? createCliExecutor(geminiCliConfig)
+          ? createGeminiExecutor()
           : createApiExecutor(getGeminiApiClient())
     } else {
       throw new Error(`Unable to determine LLM provider for model: ${model}`)

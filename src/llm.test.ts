@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import type { Config } from './config.js'
 import type { SupportedChatModel } from './schema.js'
-import { getExecutorForModel, parseCodexJsonl } from './llm.js'
+import { getExecutorForModel, parseCodexJsonl, parseGeminiJson } from './llm.js'
 
 const createCompletionMock = vi.hoisted(() => vi.fn())
 const spawnMock = vi.hoisted(() => vi.fn())
@@ -360,10 +360,120 @@ describe('Codex CLI executor', () => {
   })
 })
 
+const geminiJsonOutput = (sessionId: string, response: string) =>
+  JSON.stringify({ session_id: sessionId, response, stats: {} })
+
+describe('parseGeminiJson', () => {
+  it('extracts session_id and response', () => {
+    const output = geminiJsonOutput('sess_abc', 'hello world')
+    const result = parseGeminiJson(output)
+    expect(result.sessionId).toBe('sess_abc')
+    expect(result.response).toBe('hello world')
+  })
+
+  it('returns empty response when response is missing', () => {
+    const output = JSON.stringify({ session_id: 's1' })
+    const result = parseGeminiJson(output)
+    expect(result.sessionId).toBe('s1')
+    expect(result.response).toBe('')
+  })
+})
+
 describe('Gemini CLI executor', () => {
   const setupSpawn = (child: FakeChildProcess) => {
     spawnMock.mockReturnValue(child)
   }
+
+  it('spawns gemini CLI with -o json and parses JSON output', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute('user prompt', 'gemini-2.5-pro', 'system')
+
+    resolveCliExecution(child, {
+      stdout: geminiJsonOutput('sess_123', 'result'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    expect(args?.[0]).toBe('gemini')
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs).toContain('-m')
+    expect(cliArgs).toContain('gemini-2.5-pro')
+    expect(cliArgs).toContain('-o')
+    expect(cliArgs).toContain('json')
+    expect(cliArgs).toContain('-p')
+
+    const result = await promise
+    expect(result.response).toBe('result')
+    expect(result.usage).toBeNull()
+    expect(result.threadId).toBe('sess_123')
+  })
+
+  it('resumes a session with thread_id', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute(
+      'follow up',
+      'gemini-2.5-pro',
+      'system',
+      undefined,
+      'sess_abc',
+    )
+
+    resolveCliExecution(child, {
+      stdout: geminiJsonOutput('sess_abc', 'follow up answer'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs).toContain('-r')
+    expect(cliArgs).toContain('sess_abc')
+    // Prompt should NOT contain system prompt on resume
+    const pIdx = cliArgs.indexOf('-p')
+    expect(cliArgs[pIdx + 1]).toBe('follow up')
+
+    const result = await promise
+    expect(result.response).toBe('follow up answer')
+    expect(result.threadId).toBe('sess_abc')
+  })
+
+  it('rejects when no response in JSON output', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
+
+    resolveCliExecution(child, {
+      stdout: JSON.stringify({ session_id: 's1' }),
+      code: 0,
+    })
+
+    await expect(promise).rejects.toThrow(
+      'No response found in Gemini JSON output',
+    )
+  })
+
+  it('rejects with parse error on invalid JSON', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
+
+    resolveCliExecution(child, { stdout: 'not json', code: 0 })
+
+    await expect(promise).rejects.toThrow('Failed to parse Gemini JSON output')
+  })
 
   it('wraps gemini quota errors specially', async () => {
     mockConfig.geminiMode = 'cli'
@@ -379,6 +489,21 @@ describe('Gemini CLI executor', () => {
     })
 
     await expect(promise).rejects.toThrow('Gemini quota exceeded')
+  })
+
+  it('handles spawn error events with friendly message', async () => {
+    mockConfig.geminiMode = 'cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
+
+    child.emit('error', new Error('not found'))
+
+    await expect(promise).rejects.toThrow(
+      'Failed to spawn gemini CLI. Is it installed and in PATH? Error: not found',
+    )
   })
 })
 
