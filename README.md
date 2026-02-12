@@ -354,6 +354,30 @@ claude mcp add consult-llm -e OPENAI_MODE=cli -- npx -y consult-llm-mcp
 > Set reasoning effort with `-e CODEX_REASONING_EFFORT=high`. Options:
 > `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (gpt-5.1-codex-max only).
 
+#### Multi-turn conversations
+
+CLI mode supports multi-turn conversations via the `thread_id` parameter. The
+first response includes a `[thread_id:xxx]` prefix. Pass that ID in follow-up
+requests to continue the conversation with full context from prior turns.
+
+This works with both Gemini CLI and Codex CLI. Gemini uses session IDs, Codex
+uses thread IDs, but both are passed through the same `thread_id` parameter.
+
+```
+⏺ consult-llm - consult_llm (MCP)(prompt: "What's your take on winter?",
+                                   model: "gpt-5.3-codex")
+  ⎿  [thread_id:thread_b1ff711...]
+
+     Winter is high-variance, not universally the worst. ...
+
+⏺ consult-llm - consult_llm (MCP)(prompt: "What about rain?",
+                                   model: "gpt-5.3-codex",
+                                   thread_id: "thread_b1ff711...")
+  ⎿  [thread_id:thread_b1ff711...]
+
+     Rain has high upside, high annoyance depending on context. ...
+```
+
 ### Web mode
 
 Copies the formatted prompt to clipboard instead of querying an LLM. Paste into
@@ -482,6 +506,11 @@ models complex questions.
   - When `true`, the formatted prompt (including system prompt and file
     contents) is copied to clipboard for manual pasting into browser-based LLM
     services
+
+- **thread_id** (optional): Resume a multi-turn conversation
+  - Works with Codex CLI (`gpt-*`) and Gemini CLI (`gemini-*`) in CLI mode
+  - The first response includes a `[thread_id:xxx]` prefix — pass that ID back
+    as `thread_id` in follow-up requests to maintain conversation context
 
 - **git_diff** (optional): Include git diff output as context
   - **files** (required): Specific files to include in diff
