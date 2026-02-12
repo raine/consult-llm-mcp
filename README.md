@@ -2,7 +2,7 @@
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.2, Gemini
 3.0 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
-to bring in the heavy artillery.
+to bring in the heavy artillery. Supports multi-turn conversations.
 
 ```
 > Still getting this error after your fix. Ask gemini
@@ -21,6 +21,9 @@ to bring in the heavy artillery.
 ⏺ The LLM identified the issue - iter_matches() API changed. Switching to
   iter_captures() approach now.
 ```
+
+[Features](#features) · [Quick start](#quick-start) ·
+[Configuration](#configuration) · [Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -620,8 +623,8 @@ need reliability or custom instructions.
 
 Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
 that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
-"ask codex". See [skills/consult/SKILL.md](skills/consult/SKILL.md) for the
-full content.
+"ask codex". See [skills/consult/SKILL.md](skills/consult/SKILL.md) for the full
+content.
 
 Save it as `~/.claude/skills/consult-llm/SKILL.md` and you can then use it by
 typing "ask gemini about X" or "ask codex about X" in Claude Code.
