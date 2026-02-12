@@ -34,6 +34,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 - [Gemini CLI mode](#gemini-cli): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
 - [Codex CLI mode](#codex-cli): Use the `codex` CLI for OpenAI models
+- [Multi-turn conversations](#multi-turn-conversations): Resume CLI sessions
+  across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
 - Simple: provides just one MCP tool to not clutter the context
