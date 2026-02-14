@@ -72,9 +72,9 @@ describe('ConsultLlmArgs', () => {
     expect(parsedTrue.web_mode).toBe(true)
   })
 
-  it('defaults task_mode to review', () => {
+  it('defaults task_mode to general', () => {
     const parsed = ConsultLlmArgs.parse({ prompt: 'hello' })
-    expect(parsed.task_mode).toBe('review')
+    expect(parsed.task_mode).toBe('general')
   })
 
   it('accepts valid task_mode values', () => {

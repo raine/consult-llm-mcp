@@ -27,9 +27,9 @@ export const ConsultLlmArgs = z.object({
       'LLM model to use. Prefer gpt-5.1-codex-max when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
     ),
   task_mode: TaskMode.optional()
-    .default('review')
+    .default('general')
     .describe(
-      'Controls the system prompt persona. "review" (default): critical code reviewer focused on bugs, security, and quality. "plan": constructive architect exploring trade-offs and alternatives. "create": generative writer producing docs, content, or designs. "general": neutral base prompt with no specialized instructions.',
+      'Controls the system prompt persona. Choose based on the task: "review": critical code reviewer for finding bugs, security issues, and quality problems. "plan": constructive architect for exploring trade-offs, comparing approaches, and designing solutions. "create": generative writer for producing documentation, content, or designs. "general" (default): neutral prompt that defers to your instructions in the prompt field.',
     ),
   web_mode: z
     .boolean()

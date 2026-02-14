@@ -521,13 +521,14 @@ models complex questions.
     `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
     `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
 
-- **task_mode** (optional): Controls the system prompt persona
-  - `review` (default): Critical code reviewer — bugs, security, performance,
+- **task_mode** (optional): Controls the system prompt persona. The calling LLM
+  should choose based on the task:
+  - `general` (default): Neutral base prompt that defers to the user prompt
+  - `review`: Critical code reviewer — bugs, security, performance,
     anti-patterns
   - `plan`: Constructive architect — trade-offs, alternatives, incremental
     strategies
   - `create`: Generative writer — docs, content, polished output
-  - `general`: Neutral base prompt with no specialized instructions
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`

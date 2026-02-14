@@ -61,7 +61,7 @@ IMPORTANT: Do not edit files yourself, only provide recommendations and code exa
 
 export function getSystemPrompt(
   isCliMode: boolean,
-  taskMode: TaskMode = 'review',
+  taskMode: TaskMode = 'general',
 ): string {
   const customPromptPath =
     config.systemPromptPath ??

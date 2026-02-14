@@ -117,7 +117,7 @@ describe('handleConsultLlm', () => {
       'gpt-5.1',
       undefined,
       undefined,
-      'review',
+      'general',
     )
     expect(result.content[0]?.text).toBe('ok')
   })
@@ -130,7 +130,7 @@ describe('handleConsultLlm', () => {
       'gpt-5.2',
       undefined,
       undefined,
-      'review',
+      'general',
     )
   })
 
