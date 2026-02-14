@@ -43,7 +43,7 @@ Focus on correctness and functionality. Ignore style, naming, and non-causal cod
 - Think about edge cases and failure modes
 - Suggest incremental implementation strategies
 
-Always include a final recommendation with clear rationale, not just a list of options.`,
+Be constructive and thorough. Present options clearly with pros and cons, and always conclude with a specific recommendation and rationale.`,
 
   create: `Your role is to:
 - Generate clear, well-structured content
