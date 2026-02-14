@@ -456,7 +456,9 @@ This creates a placeholder file with the default system prompt that you can edit
 to customize how the consultant LLM behaves. The custom prompt is read on every
 request, so changes take effect immediately without restarting the server.
 
-To revert to the default prompt, simply delete the `SYSTEM_PROMPT.md` file.
+When a custom prompt file exists, it acts as a full override — `task_mode`
+overlays are not applied on top. To revert to the default prompt with
+`task_mode` support, simply delete the `SYSTEM_PROMPT.md` file.
 
 #### Custom prompt path
 
@@ -518,6 +520,14 @@ models complex questions.
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
     `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
     `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+
+- **task_mode** (optional): Controls the system prompt persona
+  - `review` (default): Critical code reviewer — bugs, security, performance,
+    anti-patterns
+  - `plan`: Constructive architect — trade-offs, alternatives, incremental
+    strategies
+  - `create`: Generative writer — docs, content, polished output
+  - `general`: Neutral base prompt with no specialized instructions
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM
   - Default: `false`
