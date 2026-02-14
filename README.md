@@ -22,7 +22,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
   iter_captures() approach now.
 ```
 
-[Quick start](#quick-start) · [Configuration](#configuration) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Configuration](#configuration) ·
+[Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -368,23 +369,32 @@ This works with both Gemini CLI and Codex CLI. Gemini uses session IDs, Codex
 uses thread IDs, but both are passed through the same `thread_id` parameter.
 
 ```
-⏺ consult-llm - consult_llm (MCP)(prompt: "What's your take on winter?",
+> Ask codex what's the best caching strategy for our read-heavy API
+
+⏺ consult-llm - consult_llm (MCP)(prompt: "What's the best caching strategy for a read-heavy API?",
                                    model: "gpt-5.3-codex")
   ⎿  [thread_id:thread_b1ff711...]
 
-     Winter is high-variance, not universally the worst. ...
+     Redis with TTL-based invalidation. Set short TTLs for volatile data ...
 
-⏺ consult-llm - consult_llm (MCP)(prompt: "What about rain?",
+⏺ Codex recommends Redis with TTL-based invalidation — but our payment
+  endpoints need strong consistency. Let me push back on that.
+
+⏺ consult-llm - consult_llm (MCP)(prompt: "What if we need strong consistency guarantees?
+                                            Does that change your recommendation?",
                                    model: "gpt-5.3-codex",
                                    thread_id: "thread_b1ff711...")
   ⎿  [thread_id:thread_b1ff711...]
 
-     Rain has high upside, high annoyance depending on context. ...
+     Yes — with strong consistency, the TTL approach breaks down. Consider
+     write-through caching or cache invalidation on writes instead ...
+
+⏺ Good — Codex revised its recommendation based on the consistency
+  constraint. I'll use write-through caching for the payment endpoints.
 ```
 
-See [skills/debate/SKILL.md](skills/debate/SKILL.md) for a skill where the agent
-debates an opponent LLM through multiple turns, then synthesizes and implements
-the result.
+See the [debate skills](#debate-skills) for multi-LLM workflows that use
+`thread_id` to maintain context across debate rounds.
 
 ### Web mode
 
@@ -643,6 +653,34 @@ for the full content.
 
 Save it as `~/.claude/commands/consult.md` and you can then use it by typing
 `/consult ask gemini about X` or `/consult ask codex about X` in Claude Code.
+
+## Debate skills
+
+Two skills that orchestrate structured debates between LLMs to find the best
+implementation approach before writing code. Both use `thread_id` to maintain
+conversation context across rounds, so each LLM remembers the full debate
+history without resending everything.
+
+### debate
+
+**Claude moderates, two LLMs debate.** Gemini and Codex independently propose
+approaches, then critique each other's proposals. Claude synthesizes the best
+ideas and implements. See [skills/debate/SKILL.md](skills/debate/SKILL.md).
+
+```
+> /debate design the multi-tenant isolation strategy
+```
+
+### debate-vs
+
+**Claude participates as a debater** against one opponent LLM (Gemini or Codex)
+through multiple rounds. Claude forms its own position, then debates back and
+forth before synthesizing and implementing. See
+[skills/debate-vs/SKILL.md](skills/debate-vs/SKILL.md).
+
+```
+> /debate-vs --gemini design the multi-tenant isolation strategy
+```
 
 ## Development
 
