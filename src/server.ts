@@ -78,6 +78,7 @@ export async function handleConsultLlm(args: unknown) {
     web_mode,
     model: parsedModel,
     thread_id: threadId,
+    task_mode: taskMode,
   } = parseResult.data
 
   const providedModel =
@@ -128,7 +129,7 @@ export async function handleConsultLlm(args: unknown) {
   await logPrompt(model, prompt)
 
   if (web_mode) {
-    const systemPrompt = getSystemPrompt(isCliMode)
+    const systemPrompt = getSystemPrompt(isCliMode, taskMode)
     const fullPrompt = `# System Prompt
 
 ${systemPrompt}
@@ -156,7 +157,7 @@ ${prompt}`
     response,
     costInfo,
     threadId: returnedThreadId,
-  } = await queryLlm(prompt, model, filePaths, threadId)
+  } = await queryLlm(prompt, model, filePaths, threadId, taskMode)
   await logResponse(model, response, costInfo)
 
   const responseText = returnedThreadId

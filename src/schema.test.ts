@@ -71,4 +71,24 @@ describe('ConsultLlmArgs', () => {
     })
     expect(parsedTrue.web_mode).toBe(true)
   })
+
+  it('defaults task_mode to review', () => {
+    const parsed = ConsultLlmArgs.parse({ prompt: 'hello' })
+    expect(parsed.task_mode).toBe('review')
+  })
+
+  it('accepts valid task_mode values', () => {
+    for (const mode of ['review', 'plan', 'create', 'general']) {
+      const parsed = ConsultLlmArgs.parse({ prompt: 'test', task_mode: mode })
+      expect(parsed.task_mode).toBe(mode)
+    }
+  })
+
+  it('rejects invalid task_mode values', () => {
+    const result = ConsultLlmArgs.safeParse({
+      prompt: 'test',
+      task_mode: 'invalid',
+    })
+    expect(result.success).toBe(false)
+  })
 })

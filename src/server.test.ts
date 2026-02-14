@@ -117,6 +117,7 @@ describe('handleConsultLlm', () => {
       'gpt-5.1',
       undefined,
       undefined,
+      'review',
     )
     expect(result.content[0]?.text).toBe('ok')
   })
@@ -129,6 +130,7 @@ describe('handleConsultLlm', () => {
       'gpt-5.2',
       undefined,
       undefined,
+      'review',
     )
   })
 
@@ -241,6 +243,21 @@ describe('handleConsultLlm', () => {
         thread_id: 'sess_abc',
       }),
     ).rejects.toThrow('thread_id is only supported with CLI mode models')
+  })
+
+  it('passes task_mode to queryLlm', async () => {
+    await handleConsultLlm({ prompt: 'plan this', task_mode: 'plan' })
+    const callArgs = queryLlmMock.mock.calls[0] as unknown[]
+    expect(callArgs[4]).toBe('plan')
+  })
+
+  it('passes task_mode to getSystemPrompt in web mode', async () => {
+    await handleConsultLlm({
+      prompt: 'create content',
+      web_mode: true,
+      task_mode: 'create',
+    })
+    expect(getSystemPromptMock).toHaveBeenCalledWith(false, 'create')
   })
 
   it('propagates query errors', async () => {

@@ -6,6 +6,9 @@ import { SupportedChatModel, fallbackModel } from './config.js'
 export { ALL_MODELS, SupportedChatModel }
 export type { SupportedChatModel as SupportedChatModelType }
 
+export const TaskMode = z.enum(['review', 'plan', 'create', 'general'])
+export type TaskMode = z.infer<typeof TaskMode>
+
 export const ConsultLlmArgs = z.object({
   files: z
     .array(z.string())
@@ -22,6 +25,11 @@ export const ConsultLlmArgs = z.object({
     .default(fallbackModel)
     .describe(
       'LLM model to use. Prefer gpt-5.1-codex-max when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
+    ),
+  task_mode: TaskMode.optional()
+    .default('review')
+    .describe(
+      'Controls the system prompt persona. "review" (default): critical code reviewer focused on bugs, security, and quality. "plan": constructive architect exploring trade-offs and alternatives. "create": generative writer producing docs, content, or designs. "general": neutral base prompt with no specialized instructions.',
     ),
   web_mode: z
     .boolean()

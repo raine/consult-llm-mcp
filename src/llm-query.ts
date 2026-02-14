@@ -1,5 +1,5 @@
 import { getExecutorForModel } from './llm.js'
-import { type SupportedChatModel } from './schema.js'
+import { type SupportedChatModel, type TaskMode } from './schema.js'
 import { calculateCost } from './llm-cost.js'
 import { config } from './config.js'
 import { getSystemPrompt } from './system-prompt.js'
@@ -9,6 +9,7 @@ export async function queryLlm(
   model: SupportedChatModel,
   filePaths?: string[],
   threadId?: string,
+  taskMode?: TaskMode,
 ): Promise<{
   response: string
   costInfo: string
@@ -20,7 +21,7 @@ export async function queryLlm(
   const isCliMode =
     (model.startsWith('gemini-') && config.geminiMode === 'cli') ||
     (model.startsWith('gpt-') && config.openaiMode === 'cli')
-  const systemPrompt = getSystemPrompt(isCliMode)
+  const systemPrompt = getSystemPrompt(isCliMode, taskMode)
 
   const {
     response,
