@@ -78,7 +78,7 @@ describe('ConsultLlmArgs', () => {
   })
 
   it('accepts valid task_mode values', () => {
-    for (const mode of ['review', 'plan', 'create', 'general']) {
+    for (const mode of ['review', 'debug', 'plan', 'create', 'general']) {
       const parsed = ConsultLlmArgs.parse({ prompt: 'test', task_mode: mode })
       expect(parsed.task_mode).toBe(mode)
     }

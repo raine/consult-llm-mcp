@@ -526,8 +526,10 @@ models complex questions.
   - `general` (default): Neutral base prompt that defers to the user prompt
   - `review`: Critical code reviewer — bugs, security, performance,
     anti-patterns
-  - `plan`: Constructive architect — trade-offs, alternatives, incremental
-    strategies
+  - `debug`: Focused troubleshooter — root cause analysis, execution tracing,
+    ignores style issues
+  - `plan`: Constructive architect — trade-offs, alternatives, always includes a
+    final recommendation
   - `create`: Generative writer — docs, content, polished output
 
 - **web_mode** (optional): Copy prompt to clipboard instead of querying LLM

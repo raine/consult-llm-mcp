@@ -6,7 +6,7 @@ import { SupportedChatModel, fallbackModel } from './config.js'
 export { ALL_MODELS, SupportedChatModel }
 export type { SupportedChatModel as SupportedChatModelType }
 
-export const TaskMode = z.enum(['review', 'plan', 'create', 'general'])
+export const TaskMode = z.enum(['review', 'debug', 'plan', 'create', 'general'])
 export type TaskMode = z.infer<typeof TaskMode>
 
 export const ConsultLlmArgs = z.object({
@@ -29,7 +29,7 @@ export const ConsultLlmArgs = z.object({
   task_mode: TaskMode.optional()
     .default('general')
     .describe(
-      'Controls the system prompt persona. Choose based on the task: "review": critical code reviewer for finding bugs, security issues, and quality problems. "plan": constructive architect for exploring trade-offs, comparing approaches, and designing solutions. "create": generative writer for producing documentation, content, or designs. "general" (default): neutral prompt that defers to your instructions in the prompt field.',
+      'Controls the system prompt persona. Choose based on the task: "review": critical code reviewer for finding bugs, security issues, and quality problems. "debug": focused troubleshooter for root cause analysis from errors, logs, and stack traces — ignores style issues. "plan": constructive architect for exploring trade-offs, comparing approaches, and designing solutions. "create": generative writer for producing documentation, content, or designs. "general" (default): neutral prompt that defers to your instructions in the prompt field.',
     ),
   web_mode: z
     .boolean()
