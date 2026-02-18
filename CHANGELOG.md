@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.2.0 (2026-02-14)
+
+- Added `task_mode` parameter for adaptive system prompts with five modes:
+  `review`, `plan`, `create`, `debug`, and `general` (default)
+
 ## v2.1.0 (2026-02-12)
 
 - Added multi-turn conversation support for CLI modes via `thread_id` parameter
