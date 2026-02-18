@@ -1,9 +1,12 @@
 ---
-name: consult-llm
-description:
-  Use it when the user asks to "ask gemini", "ask codex", or "ask in browser"
-allowed-tools: Read, Glob, Grep, mcp__consult-llm__consult_llm
+name: consult
+description: Consult an external LLM with the user's query.
+allowed-tools: Glob, Grep, Read, mcp__consult-llm__consult_llm
 ---
+
+Consult an external LLM with the user's query.
+
+User query: $ARGUMENTS
 
 When consulting with external LLMs:
 
@@ -16,24 +19,24 @@ When consulting with external LLMs:
 **2. Determine Mode and Model**:
 
 - **Web mode**: Use if user says "ask in browser" or "consult in browser"
-- **Codex mode**: Use if user says "ask codex" → use model "gpt-5.1-codex-max"
-- **Gemini mode**: Default for "ask gemini" → use model "gemini-2.5-pro"
+- **Codex mode**: Use if user says "ask codex" → use model "gpt-5.3-codex"
+- **Gemini mode**: Default for "ask gemini" → use model "gemini-3-pro-preview"
 
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
 
-- **For API mode (Gemini)**:
-  - `model`: "gemini-2.5-pro"
-  - `prompt`: Clear, neutral question without suggesting solutions
+- **For API/CLI mode (Gemini)**:
+  - `model`: "gemini-3-pro-preview"
+  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
   - `files`: Array of relevant file paths
 
-- **For API mode (Codex)**:
-  - `model`: "gpt-5.1-codex-max"
-  - `prompt`: Clear, neutral question without suggesting solutions
+- **For API/CLI mode (Codex)**:
+  - `model`: "gpt-5.3-codex"
+  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
   - `files`: Array of relevant file paths
 
 - **For web mode**:
   - `web_mode`: true
-  - `prompt`: Clear, neutral question without suggesting solutions
+  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
   - `files`: Array of relevant file paths
   - (model parameter is ignored in web mode)
 
@@ -47,5 +50,9 @@ When consulting with external LLMs:
 **Critical Rules**:
 
 - ALWAYS gather file context before consulting
-- Ask neutral, open-ended questions to avoid bias
+- **Pass through the user's query faithfully** — do NOT add your own theories,
+  suspects, analysis, or suggested solutions to the prompt. The user's words are
+  the prompt. You may lightly rephrase for clarity or add brief factual context
+  (e.g. "we recently changed X to Y"), but never inject your own diagnostic
+  opinions or hypotheses.
 - Provide focused, relevant files (quality over quantity)
