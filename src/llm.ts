@@ -143,6 +143,9 @@ function createGeminiExecutor(): LlmExecutor {
                   threadId: parsed.sessionId,
                 })
               } catch {
+                logCliDebug('Failed to parse Gemini JSON output', {
+                  rawOutput: stdout,
+                })
                 reject(
                   new Error(
                     `Failed to parse Gemini JSON output: ${stdout.slice(0, 200)}`,
