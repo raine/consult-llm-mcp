@@ -32,9 +32,11 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
-- [Gemini CLI mode](#gemini-cli): Use the `gemini` CLI to take advantage of
+- [Gemini CLI backend](#gemini-cli): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
-- [Codex CLI mode](#codex-cli): Use the `codex` CLI for OpenAI models
+- [Codex CLI backend](#codex-cli): Use the `codex` CLI for OpenAI models
+- [Cursor CLI backend](#cursor-cli): Use the `cursor-agent` CLI to access
+  Claude, GPT, and Gemini models through a single tool
 - [Multi-turn conversations](#multi-turn-conversations): Resume CLI sessions
   across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
@@ -46,20 +48,23 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 1. **Add to Claude Code**:
 
    ```bash
-   claude mcp add consult-llm -e GEMINI_API_KEY=your_key -- npx -y consult-llm-mcp
+   claude mcp add consult-llm \
+     -e OPENAI_API_KEY=your_key \
+     -e GEMINI_API_KEY=your_key \
+     -- npx -y consult-llm-mcp
    ```
 
    For global availability across projects, add `--scope user`.
 
    <details>
-   <summary>Using multiple API keys or CLI mode</summary>
+   <summary>Using multiple API keys or CLI backends</summary>
 
    ```bash
    claude mcp add consult-llm \
      -e OPENAI_API_KEY=your_openai_key \
      -e GEMINI_API_KEY=your_gemini_key \
      -e DEEPSEEK_API_KEY=your_deepseek_key \
-     -e GEMINI_MODE=cli \
+     -e GEMINI_BACKEND=gemini-cli \
      -- npx -y consult-llm-mcp
    ```
 
@@ -302,24 +307,26 @@ confidence in the approach.
 
 </details>
 
-## Modes
+## Backends
 
-consult-llm-mcp supports three modes of operation:
+Each model is routed to a **backend** — either an API endpoint or a CLI tool.
 
-| Mode    | Description                   | When to use                                                      |
-| ------- | ----------------------------- | ---------------------------------------------------------------- |
-| **API** | Queries LLM APIs directly     | You have API keys and want the simplest setup                    |
-| **CLI** | Shells out to local CLI tools | Free quota (Gemini), existing subscriptions, or prefer CLI tools |
-| **Web** | Copies prompt to clipboard    | You prefer browser UIs or want to review prompts                 |
+| Backend        | Description                      | When to use                                                      |
+| -------------- | -------------------------------- | ---------------------------------------------------------------- |
+| **API**        | Queries LLM APIs directly        | You have API keys and want the simplest setup                    |
+| **Gemini CLI** | Shells out to `gemini` CLI       | Free quota (Gemini), existing subscriptions, or prefer CLI tools |
+| **Codex CLI**  | Shells out to `codex` CLI        | OpenAI models via Codex subscription                             |
+| **Cursor CLI** | Shells out to `cursor-agent` CLI | Access Claude, GPT, and Gemini through one tool                  |
+| **Web**        | Copies prompt to clipboard       | You prefer browser UIs or want to review prompts                 |
 
-### API mode (default)
+### API (default)
 
-The default mode. Requires API keys configured via environment variables. See
+The default backend. Requires API keys configured via environment variables. See
 [Configuration](#configuration) for details.
 
-### CLI mode
+### CLI backends
 
-Instead of making API calls, shell out to local CLI tools. The CLI agents can
+Instead of making API calls, shell out to local CLI tools. The CLI tools can
 explore the codebase themselves, so you don't need to pass all relevant files as
 context, but it helps.
 
@@ -336,7 +343,7 @@ Use Gemini's local CLI to take advantage of Google's
 **Setup:**
 
 ```bash
-claude mcp add consult-llm -e GEMINI_MODE=cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e GEMINI_BACKEND=gemini-cli -- npx -y consult-llm-mcp
 ```
 
 #### Codex CLI
@@ -351,7 +358,7 @@ Use OpenAI's Codex CLI for OpenAI models.
 **Setup:**
 
 ```bash
-claude mcp add consult-llm -e OPENAI_MODE=cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e OPENAI_BACKEND=codex-cli -- npx -y consult-llm-mcp
 ```
 
 <!-- prettier-ignore -->
@@ -359,14 +366,45 @@ claude mcp add consult-llm -e OPENAI_MODE=cli -- npx -y consult-llm-mcp
 > Set reasoning effort with `-e CODEX_REASONING_EFFORT=high`. Options:
 > `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (gpt-5.1-codex-max only).
 
+#### Cursor CLI
+
+Use Cursor's agent CLI to access Claude, GPT, and Gemini models through one
+tool. Also the only way to use Claude models (claude-sonnet-4-6,
+claude-opus-4-6) since they have no direct API in this server.
+
+**Requirements:**
+
+1. Install the [Cursor agent CLI](https://cursor.com/cli) (`cursor-agent` in
+   PATH)
+
+**Setup:**
+
+```bash
+# Route GPT models through Cursor CLI
+claude mcp add consult-llm -e OPENAI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
+
+# Route Gemini models through Cursor CLI
+claude mcp add consult-llm -e GEMINI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
+
+# Route everything through Cursor CLI
+claude mcp add consult-llm \
+  -e OPENAI_BACKEND=cursor-cli \
+  -e GEMINI_BACKEND=cursor-cli \
+  -- npx -y consult-llm-mcp
+```
+
+Claude models (e.g., `claude-sonnet-4-6`) are always routed to Cursor CLI — no
+config needed, just add them to `CONSULT_LLM_ALLOWED_MODELS`.
+
 #### Multi-turn conversations
 
-CLI mode supports multi-turn conversations via the `thread_id` parameter. The
+CLI backends support multi-turn conversations via the `thread_id` parameter. The
 first response includes a `[thread_id:xxx]` prefix. Pass that ID in follow-up
 requests to continue the conversation with full context from prior turns.
 
-This works with both Gemini CLI and Codex CLI. Gemini uses session IDs, Codex
-uses thread IDs, but both are passed through the same `thread_id` parameter.
+This works with all CLI backends (Gemini CLI, Codex CLI, Cursor CLI). Each uses
+its own session/thread mechanism, but all are passed through the same
+`thread_id` parameter.
 
 ```
 > Ask codex what's the best caching strategy for our read-heavy API
@@ -424,13 +462,12 @@ See the "Using web mode..." example above for a concrete transcript.
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
     `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
-- `GEMINI_MODE` - Choose between API or CLI mode for Gemini models (optional)
-  - Options: `api` (default), `cli`
-  - CLI mode uses the system-installed `gemini` CLI tool
-- `OPENAI_MODE` - Choose between API or CLI mode for OpenAI models (optional)
-  - Options: `api` (default), `cli`
-  - CLI mode uses the system-installed `codex` CLI tool
+    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`, `claude-sonnet-4-6`,
+    `claude-opus-4-6`
+- `GEMINI_BACKEND` - Backend for Gemini models (optional)
+  - Options: `api` (default), `gemini-cli`, `cursor-cli`
+- `OPENAI_BACKEND` - Backend for OpenAI models (optional)
+  - Options: `api` (default), `codex-cli`, `cursor-cli`
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
 - `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
@@ -519,7 +556,8 @@ models complex questions.
 - **model** (optional): LLM model to use
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
     `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`, `claude-sonnet-4-6`,
+    `claude-opus-4-6`
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
   should choose based on the task:
@@ -539,7 +577,7 @@ models complex questions.
     services
 
 - **thread_id** (optional): Resume a multi-turn conversation
-  - Works with Codex CLI (`gpt-*`) and Gemini CLI (`gemini-*`) in CLI mode
+  - Works with CLI backends (Codex CLI, Gemini CLI, Cursor CLI)
   - The first response includes a `[thread_id:xxx]` prefix — pass that ID back
     as `thread_id` in follow-up requests to maintain conversation context
 
@@ -563,6 +601,8 @@ models complex questions.
 - **gpt-5.1-codex**: OpenAI's Codex model optimized for coding
 - **gpt-5.1-codex-mini**: Lighter, faster version of gpt-5.1-codex
 - **gpt-5.1**: Broad world knowledge with strong general reasoning
+- **claude-sonnet-4-6**: Anthropic's Claude Sonnet 4.6 (via Cursor CLI)
+- **claude-opus-4-6**: Anthropic's Claude Opus 4.6 (via Cursor CLI)
 
 ## Logging
 
@@ -702,7 +742,7 @@ To work on the MCP server locally and use your development version:
 1. Clone the repository and install dependencies:
 
    ```bash
-   git clone https://github.com/yourusername/consult-llm-mcp.git
+   git clone https://github.com/raine/consult-llm-mcp.git
    cd consult-llm-mcp
    npm install
    ```
