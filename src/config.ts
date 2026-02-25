@@ -15,8 +15,10 @@ const enabledModels =
     : [...ALL_MODELS]
 
 if (enabledModels.length === 0) {
-  console.error('❌ Invalid environment variables:')
-  console.error('  CONSULT_LLM_ALLOWED_MODELS: No valid models enabled.')
+  const msg =
+    'Invalid environment variables:\n  CONSULT_LLM_ALLOWED_MODELS: No valid models enabled.'
+  logToFile(`FATAL ERROR:\n${msg}`)
+  console.error(`❌ ${msg}`)
   process.exit(1)
 }
 
@@ -88,10 +90,12 @@ const parsedConfig = Config.safeParse({
 })
 
 if (!parsedConfig.success) {
-  console.error('❌ Invalid environment variables:')
-  for (const issue of parsedConfig.error.issues) {
-    console.error(`  ${issue.path.join('.')}: ${issue.message}`)
-  }
+  const details = parsedConfig.error.issues
+    .map((issue) => `  ${issue.path.join('.')}: ${issue.message}`)
+    .join('\n')
+  const msg = `Invalid environment variables:\n${details}`
+  logToFile(`FATAL ERROR:\n${msg}`)
+  console.error(`❌ ${msg}`)
   process.exit(1)
 }
 
