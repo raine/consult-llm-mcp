@@ -48,7 +48,7 @@ export type Config = ParsedConfig & {
 }
 
 // Migrate legacy GEMINI_MODE / OPENAI_MODE env vars
-function migrateBackendEnv(
+export function migrateBackendEnv(
   newVar: string | undefined,
   oldVar: string | undefined,
   providerCliValue: string,
