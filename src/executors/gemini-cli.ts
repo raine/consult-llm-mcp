@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
 import { logCliDebug } from '../logger.js'
+import { runCli } from './cli-runner.js'
 import type { LlmExecutor } from './types.js'
 
 export function parseGeminiJson(output: string): {
@@ -45,96 +45,40 @@ export function createGeminiExecutor(): LlmExecutor {
       }
       args.push('-p', message)
 
-      return new Promise((resolve, reject) => {
+      const { stdout, stderr, code } = await runCli('gemini', args)
+
+      if (code === 0) {
         try {
-          logCliDebug('Spawning gemini CLI', {
-            model,
-            promptLength: message.length,
-            threadId,
-            args,
-          })
-
-          const child = spawn('gemini', args, {
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
-
-          let stdout = ''
-          let stderr = ''
-          const startTime = Date.now()
-
-          child.on('spawn', () =>
-            logCliDebug('gemini CLI process spawned successfully'),
-          )
-          child.stdout.on('data', (data: Buffer) => (stdout += data.toString()))
-          child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
-
-          child.on('close', (code) => {
-            const duration = Date.now() - startTime
-            logCliDebug('gemini CLI process closed', {
-              code,
-              duration: `${duration}ms`,
-              stdoutLength: stdout.length,
-              stderrLength: stderr.length,
-            })
-
-            if (code === 0) {
-              try {
-                const parsed = parseGeminiJson(stdout)
-                if (!parsed.response) {
-                  reject(new Error('No response found in Gemini JSON output'))
-                  return
-                }
-                resolve({
-                  response: parsed.response,
-                  usage: null,
-                  threadId: parsed.sessionId,
-                })
-              } catch {
-                logCliDebug('Failed to parse Gemini JSON output', {
-                  rawOutput: stdout,
-                })
-                reject(
-                  new Error(
-                    `Failed to parse Gemini JSON output: ${stdout.slice(0, 200)}`,
-                  ),
-                )
-              }
-            } else {
-              if (stderr.includes('RESOURCE_EXHAUSTED')) {
-                reject(
-                  new Error(
-                    `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
-                  ),
-                )
-              } else {
-                reject(
-                  new Error(
-                    `Gemini CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
-                  ),
-                )
-              }
-            }
-          })
-
-          child.on('error', (err) => {
-            logCliDebug('Failed to spawn gemini CLI', { error: err.message })
-            reject(
-              new Error(
-                `Failed to spawn gemini CLI. Is it installed and in PATH? Error: ${err.message}`,
-              ),
-            )
-          })
+          const parsed = parseGeminiJson(stdout)
+          if (!parsed.response) {
+            throw new Error('No response found in Gemini JSON output')
+          }
+          return {
+            response: parsed.response,
+            usage: null,
+            threadId: parsed.sessionId,
+          }
         } catch (err) {
-          reject(
-            new Error(
-              `Synchronous error while trying to spawn gemini: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            ),
+          if (err instanceof Error && err.message.includes('No response')) {
+            throw err
+          }
+          logCliDebug('Failed to parse Gemini JSON output', {
+            rawOutput: stdout,
+          })
+          throw new Error(
+            `Failed to parse Gemini JSON output: ${stdout.slice(0, 200)}`,
           )
         }
-      })
+      } else {
+        if (stderr.includes('RESOURCE_EXHAUSTED')) {
+          throw new Error(
+            `Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: ${stderr.trim()}`,
+          )
+        }
+        throw new Error(
+          `Gemini CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
+        )
+      }
     },
   }
 }

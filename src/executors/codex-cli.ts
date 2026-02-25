@@ -1,7 +1,6 @@
-import { spawn } from 'node:child_process'
 import { relative } from 'node:path'
 import { config } from '../config.js'
-import { logCliDebug } from '../logger.js'
+import { runCli } from './cli-runner.js'
 import type { LlmExecutor } from './types.js'
 
 export function parseCodexJsonl(output: string): {
@@ -80,79 +79,23 @@ export function createCodexExecutor(): LlmExecutor {
         args.push('-m', model, fullPrompt)
       }
 
-      return new Promise((resolve, reject) => {
-        try {
-          logCliDebug('Spawning codex CLI', {
-            model,
-            promptLength: fullPrompt.length,
-            threadId,
-            args,
-          })
+      const { stdout, stderr, code } = await runCli('codex', args)
 
-          const child = spawn('codex', args, {
-            shell: false,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          })
-
-          let stdout = ''
-          let stderr = ''
-          const startTime = Date.now()
-
-          child.on('spawn', () =>
-            logCliDebug('codex CLI process spawned successfully'),
-          )
-          child.stdout.on('data', (data: Buffer) => (stdout += data.toString()))
-          child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
-
-          child.on('close', (code) => {
-            const duration = Date.now() - startTime
-            logCliDebug('codex CLI process closed', {
-              code,
-              duration: `${duration}ms`,
-              stdoutLength: stdout.length,
-              stderrLength: stderr.length,
-            })
-
-            if (code === 0) {
-              const parsed = parseCodexJsonl(stdout)
-              if (!parsed.response) {
-                reject(
-                  new Error('No agent_message found in Codex JSONL output'),
-                )
-                return
-              }
-              resolve({
-                response: parsed.response,
-                usage: null,
-                threadId: parsed.threadId,
-              })
-            } else {
-              reject(
-                new Error(
-                  `Codex CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
-                ),
-              )
-            }
-          })
-
-          child.on('error', (err) => {
-            logCliDebug('Failed to spawn codex CLI', { error: err.message })
-            reject(
-              new Error(
-                `Failed to spawn codex CLI. Is it installed and in PATH? Error: ${err.message}`,
-              ),
-            )
-          })
-        } catch (err) {
-          reject(
-            new Error(
-              `Synchronous error while trying to spawn codex: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            ),
-          )
+      if (code === 0) {
+        const parsed = parseCodexJsonl(stdout)
+        if (!parsed.response) {
+          throw new Error('No agent_message found in Codex JSONL output')
         }
-      })
+        return {
+          response: parsed.response,
+          usage: null,
+          threadId: parsed.threadId,
+        }
+      } else {
+        throw new Error(
+          `Codex CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
+        )
+      }
     },
   }
 }
