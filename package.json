@@ -8,7 +8,7 @@
     "consult-llm-mcp": "./dist/main.js"
   },
   "scripts": {
-    "build": "./scripts/generate-version.sh && tsc",
+    "build": "./scripts/generate-version && tsc",
     "dev": "tsx src/main.ts",
     "start": "node dist/main.js",
     "test": "vitest",
