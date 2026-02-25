@@ -89,7 +89,7 @@ export function logConfiguration(config: Record<string, unknown>) {
 
 export function logCliDebug(message: string, data?: unknown) {
   const logMessage = data
-    ? `Gemini CLI: ${message}\n${JSON.stringify(data, null, 2)}`
-    : `Gemini CLI: ${message}`
+    ? `CLI: ${message}\n${JSON.stringify(data, null, 2)}`
+    : `CLI: ${message}`
   logToFile(logMessage)
 }
