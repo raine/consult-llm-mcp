@@ -1,5 +1,6 @@
 import type OpenAI from 'openai'
 import type { LlmExecutor } from './types.js'
+import { logToFile } from '../logger.js'
 
 export function createApiExecutor(client: OpenAI): LlmExecutor {
   return {
@@ -11,9 +12,9 @@ export function createApiExecutor(client: OpenAI): LlmExecutor {
 
     async execute(prompt, model, systemPrompt, filePaths) {
       if (filePaths && filePaths.length > 0) {
-        console.warn(
-          `Warning: File paths were provided but are not supported by the API executor for model ${model}. They will be ignored.`,
-        )
+        const msg = `File paths were provided but are not supported by the API executor for model ${model}. They will be ignored.`
+        logToFile(`WARNING: ${msg}`)
+        console.warn(`Warning: ${msg}`)
       }
 
       const completion = await client.chat.completions.create({

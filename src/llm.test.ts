@@ -27,7 +27,10 @@ const mockConfig = vi.hoisted(
 )
 
 vi.mock('./config.js', () => ({ config: mockConfig }))
-vi.mock('./logger.js', () => ({ logCliDebug: logCliDebugMock }))
+vi.mock('./logger.js', () => ({
+  logCliDebug: logCliDebugMock,
+  logToFile: vi.fn(),
+}))
 vi.mock('child_process', () => ({ spawn: spawnMock }))
 vi.mock('openai', () => {
   class MockOpenAI {

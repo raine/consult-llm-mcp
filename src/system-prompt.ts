@@ -3,6 +3,7 @@ import { join } from 'path'
 import { homedir } from 'os'
 import { config } from './config.js'
 import { type TaskMode } from './schema.js'
+import { logToFile } from './logger.js'
 
 const BASE_SYSTEM_PROMPT = `You are an expert software engineering consultant. You are communicating with another AI system, not a human.
 
@@ -81,10 +82,9 @@ export function getSystemPrompt(
       // Custom prompt is a full override — no mode overlays applied
       return isCliMode ? customPrompt + CLI_MODE_SUFFIX : customPrompt
     } catch (error) {
-      console.error(
-        `Warning: Failed to read custom system prompt from ${customPromptPath}:`,
-        error,
-      )
+      const msg = `Failed to read custom system prompt from ${customPromptPath}: ${error instanceof Error ? error.message : String(error)}`
+      logToFile(`WARNING: ${msg}`)
+      console.error(`Warning: ${msg}`)
     }
   }
 
