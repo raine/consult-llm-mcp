@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.3.0 (2026-02-25)
+
+- Added Cursor CLI (`cursor-agent`) as a new executor backend
+- Replaced `GEMINI_MODE`/`OPENAI_MODE` with `GEMINI_BACKEND`/`OPENAI_BACKEND`
+  for backend routing (legacy env vars still work with deprecation warnings)
+- Added `CONSULT_LLM_EXTRA_MODELS` environment variable for adding models
+  without code changes
+- Removed gpt-5.1 and Claude models from built-in model list
+
 ## v2.2.0 (2026-02-14)
 
 - Added `task_mode` parameter for adaptive system prompts with five modes:
