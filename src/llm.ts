@@ -89,8 +89,6 @@ const createExecutorProvider = () => {
       } else {
         executor = createApiExecutor(getGeminiApiClient())
       }
-    } else if (model.startsWith('claude-')) {
-      executor = createCursorExecutor()
     } else {
       throw new Error(`Unable to determine LLM provider for model: ${model}`)
     }

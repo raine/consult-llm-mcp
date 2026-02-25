@@ -549,19 +549,16 @@ describe('Cursor CLI executor', () => {
     JSON.stringify({ session_id: sessionId, result })
 
   it('spawns agent CLI and parses JSON output', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('claude-sonnet-4-6')
+    const executor = getExecutorForModel('gpt-5.2')
     expect(executor.capabilities.isCli).toBe(true)
     expect(executor.capabilities.supportsThreads).toBe(true)
     expect(executor.capabilities.supportsFileRefs).toBe(true)
 
-    const promise = executor.execute(
-      'user prompt',
-      'claude-sonnet-4-6',
-      'system',
-    )
+    const promise = executor.execute('user prompt', 'gpt-5.2', 'system')
 
     resolveCliExecution(child, {
       stdout: agentJsonOutput('sess_123', 'result'),
@@ -578,7 +575,7 @@ describe('Cursor CLI executor', () => {
     expect(cliArgs).toContain('--mode')
     expect(cliArgs).toContain('ask')
     expect(cliArgs).toContain('--model')
-    expect(cliArgs).toContain('claude-sonnet-4-6')
+    expect(cliArgs).toContain('gpt-5.2')
 
     const result = await promise
     expect(result.response).toBe('result')
@@ -587,13 +584,14 @@ describe('Cursor CLI executor', () => {
   })
 
   it('resumes a session with thread_id', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('claude-sonnet-4-6')
+    const executor = getExecutorForModel('gpt-5.2')
     const promise = executor.execute(
       'follow up',
-      'claude-sonnet-4-6',
+      'gpt-5.2',
       'system',
       undefined,
       'sess_abc',
@@ -661,11 +659,12 @@ describe('Cursor CLI executor', () => {
   })
 
   it('rejects when no result in JSON output', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('claude-sonnet-4-6')
-    const promise = executor.execute('user', 'claude-sonnet-4-6', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     resolveCliExecution(child, {
       stdout: JSON.stringify({ session_id: 's1' }),
@@ -678,11 +677,12 @@ describe('Cursor CLI executor', () => {
   })
 
   it('handles spawn error events with friendly message', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('claude-sonnet-4-6')
-    const promise = executor.execute('user', 'claude-sonnet-4-6', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     child.emit('error', new Error('not found'))
 
@@ -704,11 +704,6 @@ describe('executor selection', () => {
       'system',
     )
     expect(result.response).toBe('deepseek')
-  })
-
-  it('routes claude models to agent executor', () => {
-    const executor = getExecutorForModel('claude-sonnet-4-6')
-    expect(executor.capabilities.isCli).toBe(true)
   })
 
   it('throws on unknown models', () => {
