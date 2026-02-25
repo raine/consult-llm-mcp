@@ -30,10 +30,12 @@ import { homedir } from 'node:os'
 import { getExecutorForModel } from './llm.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+import { GIT_HASH } from './version.js'
+
 const packageJson = JSON.parse(
   readFileSync(join(__dirname, '../package.json'), 'utf-8'),
 ) as { version: string }
-const SERVER_VERSION = packageJson.version
+const SERVER_VERSION = `${packageJson.version}+${GIT_HASH}`
 
 const server = new Server(
   {

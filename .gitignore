@@ -2,4 +2,5 @@
 node_modules
 dist
 tsconfig.tsbuildinfo
+src/version.ts
 test
