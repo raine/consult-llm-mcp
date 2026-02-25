@@ -466,7 +466,8 @@ See the "Using web mode..." example above for a concrete transcript.
 - `CONSULT_LLM_EXTRA_MODELS` - Add models not in the built-in list (optional)
   - Comma-separated list, e.g., `grok-3,kimi-k2.5`
   - Merged with built-in models and included in the tool schema
-  - Useful for newly released models with a known provider prefix (`gpt-`, `gemini-`, `deepseek-`)
+  - Useful for newly released models with a known provider prefix (`gpt-`,
+    `gemini-`, `deepseek-`)
 - `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
   - Comma-separated list, e.g., `gpt-5.2,gemini-3-pro-preview`
   - When set, only these models appear in the tool schema
