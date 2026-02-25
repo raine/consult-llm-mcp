@@ -42,7 +42,7 @@ export const ConsultLlmArgs = z.object({
     .string()
     .optional()
     .describe(
-      'Thread/session ID for resuming a conversation. Works with Codex CLI (gpt-*) and Gemini CLI (gemini-*) in CLI mode. Returned in the response prefix as [thread_id:xxx].',
+      'Thread/session ID for resuming a conversation. Works with CLI backends (Codex, Gemini CLI, Agent CLI). Returned in the response prefix as [thread_id:xxx].',
     ),
   git_diff: z
     .object({
@@ -82,6 +82,6 @@ Be specific about what you want: code implementation, code review, bug analysis,
 
 IMPORTANT: Ask neutral, open-ended questions. Avoid suggesting specific solutions or alternatives in your prompt as this can bias the analysis. Instead of "Should I use X or Y approach?", ask "What's the best approach for this problem?" Let the consultant LLM provide unbiased recommendations.
 
-For multi-turn conversations with CLI models (Codex and Gemini), the response includes a [thread_id:xxx] prefix. Extract this ID and pass it as the thread_id parameter in follow-up requests to maintain conversation context.`,
+For multi-turn conversations with CLI backends (Codex, Gemini CLI, Agent CLI), the response includes a [thread_id:xxx] prefix. Extract this ID and pass it as the thread_id parameter in follow-up requests to maintain conversation context.`,
   inputSchema: consultLlmInputSchema,
 } as const

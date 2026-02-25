@@ -32,8 +32,8 @@ const Config = z.object({
   geminiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
   defaultModel: SupportedChatModel.optional(),
-  geminiMode: z.enum(['api', 'cli']).default('api'),
-  openaiMode: z.enum(['api', 'cli']).default('api'),
+  geminiBackend: z.enum(['api', 'gemini-cli', 'agent-cli']).default('api'),
+  openaiBackend: z.enum(['api', 'codex-cli', 'agent-cli']).default('api'),
   codexReasoningEffort: z
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional(),
@@ -51,8 +51,8 @@ const parsedConfig = Config.safeParse({
   geminiApiKey: process.env.GEMINI_API_KEY,
   deepseekApiKey: process.env.DEEPSEEK_API_KEY,
   defaultModel: process.env.CONSULT_LLM_DEFAULT_MODEL,
-  geminiMode: process.env.GEMINI_MODE,
-  openaiMode: process.env.OPENAI_MODE,
+  geminiBackend: process.env.GEMINI_BACKEND,
+  openaiBackend: process.env.OPENAI_BACKEND,
   codexReasoningEffort: process.env.CODEX_REASONING_EFFORT,
   systemPromptPath: process.env.CONSULT_LLM_SYSTEM_PROMPT_PATH,
 })

@@ -9,4 +9,7 @@ export const ALL_MODELS = [
   'gpt-5.1-codex',
   'gpt-5.1-codex-mini',
   'gpt-5.1',
+  'claude-sonnet-4-6',
+  'claude-opus-4-6',
+  'claude-haiku-4-5',
 ] as const

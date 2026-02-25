@@ -27,6 +27,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { homedir } from 'os'
+import { getExecutorForModel } from './llm.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageJson = JSON.parse(
@@ -51,16 +52,6 @@ server.setRequestHandler(ListToolsRequestSchema, () => {
     tools: [toolSchema],
   }
 })
-
-export function isCliExecution(model: SupportedChatModel): boolean {
-  if (model.startsWith('gemini-') && config.geminiMode === 'cli') {
-    return true
-  }
-  if (model.startsWith('gpt-') && config.openaiMode === 'cli') {
-    return true
-  }
-  return false
-}
 
 export async function handleConsultLlm(args: unknown) {
   const parseResult = ConsultLlmArgs.safeParse(args)
@@ -95,18 +86,18 @@ export async function handleConsultLlm(args: unknown) {
 
   logToolCall('consult_llm', args)
 
-  const isCliMode = isCliExecution(model)
+  const executor = getExecutorForModel(model)
 
-  if (threadId && !isCliMode) {
+  if (threadId && !executor.capabilities.supportsThreads) {
     throw new Error(
-      'thread_id is only supported with CLI mode models (Codex or Gemini CLI)',
+      `thread_id is not supported by the configured backend for model: ${model}`,
     )
   }
 
   let prompt: string
   let filePaths: string[] | undefined
 
-  if (web_mode || !isCliMode) {
+  if (web_mode || !executor.capabilities.supportsFileRefs) {
     const contextFiles = files ? processFiles(files) : []
 
     const gitDiffOutput = git_diff
@@ -129,7 +120,7 @@ export async function handleConsultLlm(args: unknown) {
   await logPrompt(model, prompt)
 
   if (web_mode) {
-    const systemPrompt = getSystemPrompt(isCliMode, taskMode)
+    const systemPrompt = getSystemPrompt(executor.capabilities.isCli, taskMode)
     const fullPrompt = `# System Prompt
 
 ${systemPrompt}
@@ -157,7 +148,7 @@ ${prompt}`
     response,
     costInfo,
     threadId: returnedThreadId,
-  } = await queryLlm(prompt, model, filePaths, threadId, taskMode)
+  } = await queryLlm(prompt, model, executor, filePaths, threadId, taskMode)
   await logResponse(model, response, costInfo)
 
   const responseText = returnedThreadId

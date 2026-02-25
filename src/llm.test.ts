@@ -2,7 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { EventEmitter } from 'events'
 import type { Config } from './config.js'
 import type { SupportedChatModel } from './schema.js'
-import { getExecutorForModel, parseCodexJsonl, parseGeminiJson } from './llm.js'
+import {
+  getExecutorForModel,
+  parseCodexJsonl,
+  parseGeminiJson,
+  parseAgentJson,
+} from './llm.js'
 
 const createCompletionMock = vi.hoisted(() => vi.fn())
 const spawnMock = vi.hoisted(() => vi.fn())
@@ -14,8 +19,8 @@ const mockConfig = vi.hoisted(
       openaiApiKey: 'openai',
       geminiApiKey: 'gemini',
       deepseekApiKey: 'deepseek',
-      openaiMode: 'api',
-      geminiMode: 'api',
+      openaiBackend: 'api',
+      geminiBackend: 'api',
       defaultModel: undefined,
       codexReasoningEffort: undefined,
     }) as Config,
@@ -76,8 +81,8 @@ beforeEach(() => {
     openaiApiKey: 'openai',
     geminiApiKey: 'gemini',
     deepseekApiKey: 'deepseek',
-    openaiMode: 'api',
-    geminiMode: 'api',
+    openaiBackend: 'api',
+    geminiBackend: 'api',
     defaultModel: undefined,
   })
 })
@@ -96,6 +101,10 @@ describe('API executor', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     const executor = getExecutorForModel('gpt-5.1')
+    expect(executor.capabilities.isCli).toBe(false)
+    expect(executor.capabilities.supportsThreads).toBe(false)
+    expect(executor.capabilities.supportsFileRefs).toBe(false)
+
     const result = await executor.execute(
       'user prompt',
       'gpt-5.1',
@@ -206,11 +215,14 @@ describe('Codex CLI executor', () => {
   }
 
   it('spawns codex CLI with --json and parses JSONL output', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
     const executor = getExecutorForModel('gpt-5.1')
+    expect(executor.capabilities.isCli).toBe(true)
+    expect(executor.capabilities.supportsThreads).toBe(true)
+
     const promise = executor.execute('user', 'gpt-5.1', 'system', [
       '/absolute/path/to/file.ts',
     ])
@@ -241,7 +253,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('resumes a session with thread_id', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -277,7 +289,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('rejects when no agent_message in JSONL output', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -295,7 +307,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('rejects with codex errors on non-zero exit', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -310,7 +322,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('includes reasoning effort config when set', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     mockConfig.codexReasoningEffort = 'xhigh'
     const child = createChildProcess()
     setupSpawn(child)
@@ -333,7 +345,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('handles spawn error events with friendly message', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -348,7 +360,7 @@ describe('Codex CLI executor', () => {
   })
 
   it('handles synchronous spawn failures', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockConfig.openaiBackend = 'codex-cli'
     spawnMock.mockImplementation(() => {
       throw new Error('sync failure')
     })
@@ -385,11 +397,13 @@ describe('Gemini CLI executor', () => {
   }
 
   it('spawns gemini CLI with -o json and parses JSON output', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
     const executor = getExecutorForModel('gemini-2.5-pro')
+    expect(executor.capabilities.isCli).toBe(true)
+
     const promise = executor.execute('user prompt', 'gemini-2.5-pro', 'system')
 
     resolveCliExecution(child, {
@@ -413,7 +427,7 @@ describe('Gemini CLI executor', () => {
   })
 
   it('resumes a session with thread_id', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -445,7 +459,7 @@ describe('Gemini CLI executor', () => {
   })
 
   it('rejects when no response in JSON output', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -463,7 +477,7 @@ describe('Gemini CLI executor', () => {
   })
 
   it('rejects with parse error on invalid JSON', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -476,7 +490,7 @@ describe('Gemini CLI executor', () => {
   })
 
   it('wraps gemini quota errors specially', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -492,7 +506,7 @@ describe('Gemini CLI executor', () => {
   })
 
   it('handles spawn error events with friendly message', async () => {
-    mockConfig.geminiMode = 'cli'
+    mockConfig.geminiBackend = 'gemini-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -503,6 +517,177 @@ describe('Gemini CLI executor', () => {
 
     await expect(promise).rejects.toThrow(
       'Failed to spawn gemini CLI. Is it installed and in PATH? Error: not found',
+    )
+  })
+})
+
+describe('parseAgentJson', () => {
+  it('extracts session_id and result', () => {
+    const output = JSON.stringify({
+      session_id: 'sess_abc',
+      result: 'hello world',
+    })
+    const result = parseAgentJson(output)
+    expect(result.sessionId).toBe('sess_abc')
+    expect(result.response).toBe('hello world')
+  })
+
+  it('returns empty response when result is missing', () => {
+    const output = JSON.stringify({ session_id: 's1' })
+    const result = parseAgentJson(output)
+    expect(result.sessionId).toBe('s1')
+    expect(result.response).toBe('')
+  })
+})
+
+describe('Agent CLI executor', () => {
+  const setupSpawn = (child: FakeChildProcess) => {
+    spawnMock.mockReturnValue(child)
+  }
+
+  const agentJsonOutput = (sessionId: string, result: string) =>
+    JSON.stringify({ session_id: sessionId, result })
+
+  it('spawns agent CLI and parses JSON output', async () => {
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('claude-sonnet-4-6')
+    expect(executor.capabilities.isCli).toBe(true)
+    expect(executor.capabilities.supportsThreads).toBe(true)
+    expect(executor.capabilities.supportsFileRefs).toBe(true)
+
+    const promise = executor.execute(
+      'user prompt',
+      'claude-sonnet-4-6',
+      'system',
+    )
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_123', 'result'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    expect(args?.[0]).toBe('agent')
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs).toContain('--print')
+    expect(cliArgs).toContain('--trust')
+    expect(cliArgs).toContain('--output-format')
+    expect(cliArgs).toContain('json')
+    expect(cliArgs).toContain('--mode')
+    expect(cliArgs).toContain('ask')
+    expect(cliArgs).toContain('--model')
+    expect(cliArgs).toContain('claude-sonnet-4-6')
+
+    const result = await promise
+    expect(result.response).toBe('result')
+    expect(result.usage).toBeNull()
+    expect(result.threadId).toBe('sess_123')
+  })
+
+  it('resumes a session with thread_id', async () => {
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('claude-sonnet-4-6')
+    const promise = executor.execute(
+      'follow up',
+      'claude-sonnet-4-6',
+      'system',
+      undefined,
+      'sess_abc',
+    )
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_abc', 'follow up answer'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    const cliArgs = args?.[1] as string[]
+    expect(cliArgs).toContain('--resume')
+    expect(cliArgs).toContain('sess_abc')
+    // Prompt should NOT contain system prompt on resume
+    const promptArg = cliArgs[cliArgs.length - 1]
+    expect(promptArg).toBe('follow up')
+    expect(promptArg).not.toContain('system')
+
+    const result = await promise
+    expect(result.response).toBe('follow up answer')
+    expect(result.threadId).toBe('sess_abc')
+  })
+
+  it('routes GPT models to agent when openaiBackend is agent-cli', async () => {
+    mockConfig.openaiBackend = 'agent-cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.1')
+    expect(executor.capabilities.isCli).toBe(true)
+
+    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_1', 'result'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    expect(args?.[0]).toBe('agent')
+
+    const result = await promise
+    expect(result.response).toBe('result')
+  })
+
+  it('routes Gemini models to agent when geminiBackend is agent-cli', async () => {
+    mockConfig.geminiBackend = 'agent-cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-2.5-pro')
+    expect(executor.capabilities.isCli).toBe(true)
+
+    const promise = executor.execute('user', 'gemini-2.5-pro', 'system')
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_1', 'result'),
+      code: 0,
+    })
+
+    const args = spawnMock.mock.calls[0]
+    expect(args?.[0]).toBe('agent')
+
+    const result = await promise
+    expect(result.response).toBe('result')
+  })
+
+  it('rejects when no result in JSON output', async () => {
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('claude-sonnet-4-6')
+    const promise = executor.execute('user', 'claude-sonnet-4-6', 'system')
+
+    resolveCliExecution(child, {
+      stdout: JSON.stringify({ session_id: 's1' }),
+      code: 0,
+    })
+
+    await expect(promise).rejects.toThrow(
+      'No result found in Agent CLI JSON output',
+    )
+  })
+
+  it('handles spawn error events with friendly message', async () => {
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('claude-sonnet-4-6')
+    const promise = executor.execute('user', 'claude-sonnet-4-6', 'system')
+
+    child.emit('error', new Error('not found'))
+
+    await expect(promise).rejects.toThrow(
+      'Failed to spawn agent CLI. Is it installed and in PATH? Error: not found',
     )
   })
 })
@@ -519,6 +704,11 @@ describe('executor selection', () => {
       'system',
     )
     expect(result.response).toBe('deepseek')
+  })
+
+  it('routes claude models to agent executor', () => {
+    const executor = getExecutorForModel('claude-sonnet-4-6')
+    expect(executor.capabilities.isCli).toBe(true)
   })
 
   it('throws on unknown models', () => {

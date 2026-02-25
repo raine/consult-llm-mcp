@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import type { Config } from './config.js'
 import type { SupportedChatModel } from './schema.js'
-import { handleConsultLlm, isCliExecution, initSystemPrompt } from './server.js'
+import { handleConsultLlm, initSystemPrompt } from './server.js'
 
 const processFilesMock = vi.hoisted(() => vi.fn())
 const generateGitDiffMock = vi.hoisted(() => vi.fn())
@@ -18,11 +18,24 @@ const logResponseMock = vi.hoisted(() => vi.fn())
 const logServerStartMock = vi.hoisted(() => vi.fn())
 const logConfigurationMock = vi.hoisted(() => vi.fn())
 
+const apiCapabilities = {
+  isCli: false,
+  supportsThreads: false,
+  supportsFileRefs: false,
+}
+const cliCapabilities = {
+  isCli: true,
+  supportsThreads: true,
+  supportsFileRefs: true,
+}
+
+const mockGetExecutorForModel = vi.hoisted(() => vi.fn())
+
 const mockConfig = vi.hoisted(
   () =>
     ({
-      openaiMode: 'api',
-      geminiMode: 'api',
+      openaiBackend: 'api',
+      geminiBackend: 'api',
       defaultModel: undefined,
     }) as Config,
 )
@@ -50,6 +63,9 @@ vi.mock('./logger.js', () => ({
   logServerStart: logServerStartMock,
   logConfiguration: logConfigurationMock,
 }))
+vi.mock('./llm.js', () => ({
+  getExecutorForModel: mockGetExecutorForModel,
+}))
 
 beforeEach(() => {
   processFilesMock.mockReset().mockReturnValue([{ path: 'a.ts', content: '' }])
@@ -64,25 +80,17 @@ beforeEach(() => {
   logToolCallMock.mockReset()
   logPromptMock.mockReset()
   logResponseMock.mockReset()
+  mockGetExecutorForModel.mockReset()
   Object.assign(mockConfig, {
-    openaiMode: 'api',
-    geminiMode: 'api',
+    openaiBackend: 'api',
+    geminiBackend: 'api',
     defaultModel: undefined,
   })
-})
 
-describe('isCliExecution', () => {
-  it('detects CLI mode for Gemini and OpenAI models', () => {
-    mockConfig.geminiMode = 'cli'
-    expect(isCliExecution('gemini-2.5-pro')).toBe(true)
-    mockConfig.geminiMode = 'api'
-    expect(isCliExecution('gemini-2.5-pro')).toBe(false)
-
-    mockConfig.openaiMode = 'cli'
-    expect(isCliExecution('gpt-5.1')).toBe(true)
-    expect(isCliExecution('gpt-5.2')).toBe(true)
-    mockConfig.openaiMode = 'api'
-    expect(isCliExecution('gpt-5.1')).toBe(false)
+  // Default: return API executor
+  mockGetExecutorForModel.mockReturnValue({
+    capabilities: apiCapabilities,
+    execute: vi.fn(),
   })
 })
 
@@ -115,6 +123,7 @@ describe('handleConsultLlm', () => {
     expect(queryLlmMock).toHaveBeenCalledWith(
       'BUILT PROMPT',
       'gpt-5.1',
+      expect.objectContaining({ capabilities: apiCapabilities }),
       undefined,
       undefined,
       'general',
@@ -128,6 +137,7 @@ describe('handleConsultLlm', () => {
     expect(queryLlmMock).toHaveBeenCalledWith(
       'BUILT PROMPT',
       'gpt-5.2',
+      expect.objectContaining({ capabilities: apiCapabilities }),
       undefined,
       undefined,
       'general',
@@ -135,7 +145,11 @@ describe('handleConsultLlm', () => {
   })
 
   it('builds CLI prompts without file contents', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: cliCapabilities,
+      execute: vi.fn(),
+    })
+
     await handleConsultLlm({
       prompt: 'cli prompt',
       files: ['./foo.ts'],
@@ -144,9 +158,10 @@ describe('handleConsultLlm', () => {
 
     expect(processFilesMock).not.toHaveBeenCalled()
     expect(buildPromptMock).not.toHaveBeenCalled()
-    const [prompt, model, filePaths] = queryLlmMock.mock.calls[0] as [
+    const [prompt, model, , filePaths] = queryLlmMock.mock.calls[0] as [
       string,
       SupportedChatModel,
+      unknown,
       string[] | undefined,
     ]
     expect(prompt).toMatchInlineSnapshot(`
@@ -183,8 +198,12 @@ describe('handleConsultLlm', () => {
     expect(result.content[0]?.text).toContain('Prompt copied to clipboard')
   })
 
-  it('passes thread_id to queryLlm for Codex CLI models', async () => {
-    mockConfig.openaiMode = 'cli'
+  it('passes thread_id to queryLlm for CLI backend models', async () => {
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: cliCapabilities,
+      execute: vi.fn(),
+    })
+
     await handleConsultLlm({
       prompt: 'follow up',
       model: 'gpt-5.2',
@@ -192,11 +211,14 @@ describe('handleConsultLlm', () => {
     })
 
     const callArgs = queryLlmMock.mock.calls[0] as unknown[]
-    expect(callArgs[3]).toBe('thread_abc')
+    expect(callArgs[4]).toBe('thread_abc')
   })
 
   it('prefixes response with thread_id when returned', async () => {
-    mockConfig.openaiMode = 'cli'
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: cliCapabilities,
+      execute: vi.fn(),
+    })
     queryLlmMock.mockResolvedValueOnce({
       response: 'answer',
       costInfo: null,
@@ -211,8 +233,12 @@ describe('handleConsultLlm', () => {
     expect(result.content[0]?.text).toBe('[thread_id:thread_xyz]\n\nanswer')
   })
 
-  it('passes thread_id to queryLlm for Gemini CLI models', async () => {
-    mockConfig.geminiMode = 'cli'
+  it('passes thread_id to queryLlm for Gemini CLI backend', async () => {
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: cliCapabilities,
+      execute: vi.fn(),
+    })
+
     await handleConsultLlm({
       prompt: 'follow up',
       model: 'gemini-2.5-pro',
@@ -220,35 +246,43 @@ describe('handleConsultLlm', () => {
     })
 
     const callArgs = queryLlmMock.mock.calls[0] as unknown[]
-    expect(callArgs[3]).toBe('sess_abc')
+    expect(callArgs[4]).toBe('sess_abc')
   })
 
-  it('rejects thread_id with non-CLI model', async () => {
-    mockConfig.openaiMode = 'api'
+  it('rejects thread_id with non-CLI backend model', async () => {
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: apiCapabilities,
+      execute: vi.fn(),
+    })
+
     await expect(
       handleConsultLlm({
         prompt: 'hello',
         model: 'gpt-5.2',
         thread_id: 'thread_abc',
       }),
-    ).rejects.toThrow('thread_id is only supported with CLI mode models')
+    ).rejects.toThrow('thread_id is not supported by the configured backend')
   })
 
-  it('rejects thread_id with Gemini API model', async () => {
-    mockConfig.geminiMode = 'api'
+  it('rejects thread_id with Gemini API backend', async () => {
+    mockGetExecutorForModel.mockReturnValue({
+      capabilities: apiCapabilities,
+      execute: vi.fn(),
+    })
+
     await expect(
       handleConsultLlm({
         prompt: 'hello',
         model: 'gemini-2.5-pro',
         thread_id: 'sess_abc',
       }),
-    ).rejects.toThrow('thread_id is only supported with CLI mode models')
+    ).rejects.toThrow('thread_id is not supported by the configured backend')
   })
 
   it('passes task_mode to queryLlm', async () => {
     await handleConsultLlm({ prompt: 'plan this', task_mode: 'plan' })
     const callArgs = queryLlmMock.mock.calls[0] as unknown[]
-    expect(callArgs[4]).toBe('plan')
+    expect(callArgs[5]).toBe('plan')
   })
 
   it('passes task_mode to getSystemPrompt in web mode', async () => {
