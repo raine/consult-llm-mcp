@@ -3,3 +3,6 @@ panes:
     focus: true
   - split: horizontal
     command: npm install
+files:
+  symlink:
+    - history
