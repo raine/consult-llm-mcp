@@ -1,5 +1,6 @@
 import { spawn } from 'child_process'
 import { relative } from 'path'
+import { config } from '../config.js'
 import { logCliDebug } from '../logger.js'
 import type { LlmExecutor } from './types.js'
 
@@ -39,6 +40,15 @@ export function createCursorExecutor(): LlmExecutor {
         ? messageWithFiles
         : `${systemPrompt}\n\n${messageWithFiles}`
 
+      // Map model IDs to cursor-agent model names
+      let cursorModel = model.replace('-preview', '')
+
+      // cursor-agent encodes reasoning effort in the model name
+      // e.g. gpt-5.3-codex + high → gpt-5.3-codex-high
+      if (config.codexReasoningEffort && cursorModel.includes('-codex')) {
+        cursorModel = `${cursorModel}-${config.codexReasoningEffort}`
+      }
+
       const args: string[] = [
         '--print',
         '--trust',
@@ -47,7 +57,7 @@ export function createCursorExecutor(): LlmExecutor {
         '--mode',
         'ask',
         '--model',
-        model,
+        cursorModel,
       ]
       if (threadId) {
         args.push('--resume', threadId)
