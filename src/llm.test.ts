@@ -6,7 +6,7 @@ import {
   getExecutorForModel,
   parseCodexJsonl,
   parseGeminiJson,
-  parseAgentJson,
+  parseCursorJson,
 } from './llm.js'
 
 const createCompletionMock = vi.hoisted(() => vi.fn())
@@ -521,26 +521,26 @@ describe('Gemini CLI executor', () => {
   })
 })
 
-describe('parseAgentJson', () => {
+describe('parseCursorJson', () => {
   it('extracts session_id and result', () => {
     const output = JSON.stringify({
       session_id: 'sess_abc',
       result: 'hello world',
     })
-    const result = parseAgentJson(output)
+    const result = parseCursorJson(output)
     expect(result.sessionId).toBe('sess_abc')
     expect(result.response).toBe('hello world')
   })
 
   it('returns empty response when result is missing', () => {
     const output = JSON.stringify({ session_id: 's1' })
-    const result = parseAgentJson(output)
+    const result = parseCursorJson(output)
     expect(result.sessionId).toBe('s1')
     expect(result.response).toBe('')
   })
 })
 
-describe('Agent CLI executor', () => {
+describe('Cursor CLI executor', () => {
   const setupSpawn = (child: FakeChildProcess) => {
     spawnMock.mockReturnValue(child)
   }
@@ -569,7 +569,7 @@ describe('Agent CLI executor', () => {
     })
 
     const args = spawnMock.mock.calls[0]
-    expect(args?.[0]).toBe('agent')
+    expect(args?.[0]).toBe('cursor-agent')
     const cliArgs = args?.[1] as string[]
     expect(cliArgs).toContain('--print')
     expect(cliArgs).toContain('--trust')
@@ -618,8 +618,8 @@ describe('Agent CLI executor', () => {
     expect(result.threadId).toBe('sess_abc')
   })
 
-  it('routes GPT models to agent when openaiBackend is agent-cli', async () => {
-    mockConfig.openaiBackend = 'agent-cli'
+  it('routes GPT models to agent when openaiBackend is cursor-cli', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -633,14 +633,14 @@ describe('Agent CLI executor', () => {
     })
 
     const args = spawnMock.mock.calls[0]
-    expect(args?.[0]).toBe('agent')
+    expect(args?.[0]).toBe('cursor-agent')
 
     const result = await promise
     expect(result.response).toBe('result')
   })
 
-  it('routes Gemini models to agent when geminiBackend is agent-cli', async () => {
-    mockConfig.geminiBackend = 'agent-cli'
+  it('routes Gemini models to agent when geminiBackend is cursor-cli', async () => {
+    mockConfig.geminiBackend = 'cursor-cli'
     const child = createChildProcess()
     setupSpawn(child)
 
@@ -654,7 +654,7 @@ describe('Agent CLI executor', () => {
     })
 
     const args = spawnMock.mock.calls[0]
-    expect(args?.[0]).toBe('agent')
+    expect(args?.[0]).toBe('cursor-agent')
 
     const result = await promise
     expect(result.response).toBe('result')
@@ -673,7 +673,7 @@ describe('Agent CLI executor', () => {
     })
 
     await expect(promise).rejects.toThrow(
-      'No result found in Agent CLI JSON output',
+      'No result found in Cursor CLI JSON output',
     )
   })
 
@@ -687,7 +687,7 @@ describe('Agent CLI executor', () => {
     child.emit('error', new Error('not found'))
 
     await expect(promise).rejects.toThrow(
-      'Failed to spawn agent CLI. Is it installed and in PATH? Error: not found',
+      'Failed to spawn cursor-agent CLI. Is it installed and in PATH? Error: not found',
     )
   })
 })

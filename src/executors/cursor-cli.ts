@@ -3,7 +3,7 @@ import { relative } from 'path'
 import { logCliDebug } from '../logger.js'
 import type { LlmExecutor } from './types.js'
 
-export function parseAgentJson(output: string): {
+export function parseCursorJson(output: string): {
   sessionId: string | undefined
   response: string
 } {
@@ -17,7 +17,7 @@ export function parseAgentJson(output: string): {
   }
 }
 
-export function createAgentExecutor(): LlmExecutor {
+export function createCursorExecutor(): LlmExecutor {
   const appendFiles = (text: string, filePaths?: string[]): string => {
     if (!filePaths || filePaths.length === 0) return text
     const fileList = filePaths
@@ -56,14 +56,14 @@ export function createAgentExecutor(): LlmExecutor {
 
       return new Promise((resolve, reject) => {
         try {
-          logCliDebug('Spawning agent CLI', {
+          logCliDebug('Spawning cursor-agent CLI', {
             model,
             promptLength: message.length,
             threadId,
             args,
           })
 
-          const child = spawn('agent', args, {
+          const child = spawn('cursor-agent', args, {
             shell: false,
             stdio: ['ignore', 'pipe', 'pipe'],
           })
@@ -73,14 +73,14 @@ export function createAgentExecutor(): LlmExecutor {
           const startTime = Date.now()
 
           child.on('spawn', () =>
-            logCliDebug('agent CLI process spawned successfully'),
+            logCliDebug('cursor-agent CLI process spawned successfully'),
           )
           child.stdout.on('data', (data: Buffer) => (stdout += data.toString()))
           child.stderr.on('data', (data: Buffer) => (stderr += data.toString()))
 
           child.on('close', (code) => {
             const duration = Date.now() - startTime
-            logCliDebug('agent CLI process closed', {
+            logCliDebug('cursor-agent CLI process closed', {
               code,
               duration: `${duration}ms`,
               stdoutLength: stdout.length,
@@ -89,9 +89,9 @@ export function createAgentExecutor(): LlmExecutor {
 
             if (code === 0) {
               try {
-                const parsed = parseAgentJson(stdout)
+                const parsed = parseCursorJson(stdout)
                 if (!parsed.response) {
-                  reject(new Error('No result found in Agent CLI JSON output'))
+                  reject(new Error('No result found in Cursor CLI JSON output'))
                   return
                 }
                 resolve({
@@ -100,36 +100,38 @@ export function createAgentExecutor(): LlmExecutor {
                   threadId: parsed.sessionId ?? threadId,
                 })
               } catch {
-                logCliDebug('Failed to parse Agent CLI JSON output', {
+                logCliDebug('Failed to parse Cursor CLI JSON output', {
                   rawOutput: stdout,
                 })
                 reject(
                   new Error(
-                    `Failed to parse Agent CLI JSON output: ${stdout.slice(0, 200)}`,
+                    `Failed to parse Cursor CLI JSON output: ${stdout.slice(0, 200)}`,
                   ),
                 )
               }
             } else {
               reject(
                 new Error(
-                  `Agent CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
+                  `Cursor CLI exited with code ${code ?? -1}. Error: ${stderr.trim()}`,
                 ),
               )
             }
           })
 
           child.on('error', (err) => {
-            logCliDebug('Failed to spawn agent CLI', { error: err.message })
+            logCliDebug('Failed to spawn cursor-agent CLI', {
+              error: err.message,
+            })
             reject(
               new Error(
-                `Failed to spawn agent CLI. Is it installed and in PATH? Error: ${err.message}`,
+                `Failed to spawn cursor-agent CLI. Is it installed and in PATH? Error: ${err.message}`,
               ),
             )
           })
         } catch (err) {
           reject(
             new Error(
-              `Synchronous error while trying to spawn agent: ${
+              `Synchronous error while trying to spawn cursor-agent: ${
                 err instanceof Error ? err.message : String(err)
               }`,
             ),

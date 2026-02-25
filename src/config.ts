@@ -33,8 +33,8 @@ const Config = z.object({
   geminiApiKey: z.string().optional(),
   deepseekApiKey: z.string().optional(),
   defaultModel: SupportedChatModel.optional(),
-  geminiBackend: z.enum(['api', 'gemini-cli', 'agent-cli']).default('api'),
-  openaiBackend: z.enum(['api', 'codex-cli', 'agent-cli']).default('api'),
+  geminiBackend: z.enum(['api', 'gemini-cli', 'cursor-cli']).default('api'),
+  openaiBackend: z.enum(['api', 'codex-cli', 'cursor-cli']).default('api'),
   codexReasoningEffort: z
     .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh'])
     .optional(),

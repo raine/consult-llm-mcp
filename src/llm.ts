@@ -5,13 +5,13 @@ import type { LlmExecutor } from './executors/types.js'
 import { createApiExecutor } from './executors/api.js'
 import { createGeminiExecutor } from './executors/gemini-cli.js'
 import { createCodexExecutor } from './executors/codex-cli.js'
-import { createAgentExecutor } from './executors/agent-cli.js'
+import { createCursorExecutor } from './executors/cursor-cli.js'
 
 // Re-export for consumers
 export type { LlmExecutor, LlmExecutorCapabilities } from './executors/types.js'
 export { parseGeminiJson } from './executors/gemini-cli.js'
 export { parseCodexJsonl } from './executors/codex-cli.js'
-export { parseAgentJson } from './executors/agent-cli.js'
+export { parseCursorJson } from './executors/cursor-cli.js'
 
 const createExecutorProvider = () => {
   const executorCache = new Map<string, LlmExecutor>()
@@ -74,8 +74,8 @@ const createExecutorProvider = () => {
     if (model.startsWith('gpt-')) {
       if (config.openaiBackend === 'codex-cli') {
         executor = createCodexExecutor()
-      } else if (config.openaiBackend === 'agent-cli') {
-        executor = createAgentExecutor()
+      } else if (config.openaiBackend === 'cursor-cli') {
+        executor = createCursorExecutor()
       } else {
         executor = createApiExecutor(getOpenAIClient())
       }
@@ -84,13 +84,13 @@ const createExecutorProvider = () => {
     } else if (model.startsWith('gemini-')) {
       if (config.geminiBackend === 'gemini-cli') {
         executor = createGeminiExecutor()
-      } else if (config.geminiBackend === 'agent-cli') {
-        executor = createAgentExecutor()
+      } else if (config.geminiBackend === 'cursor-cli') {
+        executor = createCursorExecutor()
       } else {
         executor = createApiExecutor(getGeminiApiClient())
       }
     } else if (model.startsWith('claude-')) {
-      executor = createAgentExecutor()
+      executor = createCursorExecutor()
     } else {
       throw new Error(`Unable to determine LLM provider for model: ${model}`)
     }
