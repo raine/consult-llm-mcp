@@ -1,5 +1,5 @@
-import { spawn } from 'child_process'
-import { relative } from 'path'
+import { spawn } from 'node:child_process'
+import { relative } from 'node:path'
 import { config } from '../config.js'
 import { logCliDebug } from '../logger.js'
 import type { LlmExecutor } from './types.js'

@@ -1,8 +1,8 @@
-import { readFileSync, existsSync } from 'fs'
-import { join } from 'path'
-import { homedir } from 'os'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { config } from './config.js'
-import { type TaskMode } from './schema.js'
+import type { TaskMode } from './schema.js'
 import { logToFile } from './logger.js'
 
 const BASE_SYSTEM_PROMPT = `You are an expert software engineering consultant. You are communicating with another AI system, not a human.

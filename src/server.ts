@@ -23,10 +23,10 @@ import {
 } from './logger.js'
 import { DEFAULT_SYSTEM_PROMPT, getSystemPrompt } from './system-prompt.js'
 import { copyToClipboard } from './clipboard.js'
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
-import { dirname, join, resolve } from 'path'
-import { fileURLToPath } from 'url'
-import { homedir } from 'os'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { homedir } from 'node:os'
 import { getExecutorForModel } from './llm.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

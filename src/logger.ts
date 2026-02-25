@@ -1,6 +1,6 @@
-import { appendFileSync, mkdirSync } from 'fs'
-import { join } from 'path'
-import { homedir } from 'os'
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { format } from 'prettier'
 
 const xdgStateHome =

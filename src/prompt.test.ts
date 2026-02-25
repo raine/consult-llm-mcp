@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { writeFileSync, mkdirSync, rmSync, readFileSync, chmodSync } from 'fs'
-import { join, relative } from 'path'
-import { tmpdir } from 'os'
+import {
+  writeFileSync,
+  mkdirSync,
+  rmSync,
+  readFileSync,
+  chmodSync,
+} from 'node:fs'
+import { join, relative } from 'node:path'
+import { tmpdir } from 'node:os'
 import { processFiles } from './file.js'
 import { buildPrompt } from './prompt-builder.js'
 

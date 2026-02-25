@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { EventEmitter } from 'events'
+import { EventEmitter } from 'node:events'
 import type { Config } from './config.js'
 import type { SupportedChatModel } from './schema.js'
 import {
