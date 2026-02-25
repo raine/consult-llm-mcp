@@ -31,7 +31,7 @@ vi.mock('./logger.js', () => ({
   logCliDebug: logCliDebugMock,
   logToFile: vi.fn(),
 }))
-vi.mock('child_process', () => ({ spawn: spawnMock }))
+vi.mock('node:child_process', () => ({ spawn: spawnMock }))
 vi.mock('openai', () => {
   class MockOpenAI {
     chat = {
@@ -57,7 +57,11 @@ type FakeChildProcess = EventEmitter & {
 
 const createChildProcess = (): FakeChildProcess => {
   const child = new EventEmitter() as FakeChildProcess
-  child.stdout = new EventEmitter()
+  const stdout = new EventEmitter() as EventEmitter & {
+    setEncoding: ReturnType<typeof vi.fn>
+  }
+  stdout.setEncoding = vi.fn()
+  child.stdout = stdout
   child.stderr = new EventEmitter()
   child.kill = vi.fn()
   return child
