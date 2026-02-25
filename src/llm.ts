@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { config } from './config.js'
-import { type SupportedChatModel as SupportedChatModelType } from './schema.js'
+import type { SupportedChatModel as SupportedChatModelType } from './schema.js'
 import type { LlmExecutor } from './executors/types.js'
 import { createApiExecutor } from './executors/api.js'
 import { createGeminiExecutor } from './executors/gemini-cli.js'

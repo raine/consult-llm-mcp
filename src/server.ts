@@ -75,10 +75,7 @@ export async function handleConsultLlm(args: unknown) {
   const providedModel =
     typeof args === 'object' &&
     args !== null &&
-    Object.prototype.hasOwnProperty.call(
-      args as Record<string, unknown>,
-      'model',
-    )
+    Object.hasOwn(args as Record<string, unknown>, 'model')
 
   const model: SupportedChatModel = providedModel
     ? parsedModel

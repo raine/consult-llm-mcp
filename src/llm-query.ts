@@ -1,5 +1,5 @@
 import type { LlmExecutor } from './executors/types.js'
-import { type SupportedChatModel, type TaskMode } from './schema.js'
+import type { SupportedChatModel, TaskMode } from './schema.js'
 import { calculateCost } from './llm-cost.js'
 import { getSystemPrompt } from './system-prompt.js'
 
