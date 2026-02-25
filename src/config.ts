@@ -2,17 +2,41 @@ import { z } from 'zod/v4'
 import { ALL_MODELS } from './models.js'
 import { logToFile } from './logger.js'
 
-// Parse allowed models from environment
-const rawAllowedModels = process.env.CONSULT_LLM_ALLOWED_MODELS
-  ? process.env.CONSULT_LLM_ALLOWED_MODELS.split(',')
-      .map((m) => m.trim())
-      .filter((m) => m.length > 0)
-  : []
+/** Build the final model catalog from built-in + extra + allowlist filtering. */
+export function buildModelCatalog(
+  builtinModels: readonly string[],
+  extraModelsRaw?: string,
+  allowedModelsRaw?: string,
+): string[] {
+  const extraModels = extraModelsRaw
+    ? extraModelsRaw
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => m.length > 0)
+    : []
 
-const enabledModels =
-  rawAllowedModels.length > 0
-    ? ALL_MODELS.filter((m) => rawAllowedModels.includes(m))
-    : [...ALL_MODELS]
+  const allAvailable: string[] = [
+    ...builtinModels,
+    ...extraModels.filter((m) => !builtinModels.includes(m)),
+  ]
+
+  const allowedModels = allowedModelsRaw
+    ? allowedModelsRaw
+        .split(',')
+        .map((m) => m.trim())
+        .filter((m) => m.length > 0)
+    : []
+
+  return allowedModels.length > 0
+    ? allAvailable.filter((m) => allowedModels.includes(m))
+    : allAvailable
+}
+
+const enabledModels = buildModelCatalog(
+  ALL_MODELS,
+  process.env.CONSULT_LLM_EXTRA_MODELS,
+  process.env.CONSULT_LLM_ALLOWED_MODELS,
+)
 
 if (enabledModels.length === 0) {
   const msg =
