@@ -51,20 +51,20 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.0",
-    "clipboardy": "^5.0.0",
-    "openai": "^6.9.1",
-    "prettier": "^3.6.2",
-    "zod": "^4.1.12"
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "clipboardy": "^5.3.1",
+    "openai": "^6.25.0",
+    "prettier": "^3.8.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.38.0",
-    "@types/node": "^24.0.3",
+    "@types/node": "^25.3.0",
     "concurrently": "^9.2.1",
     "eslint": "^9.38.0",
-    "tsx": "^4.20.3",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.46.2",
-    "vitest": "^3.0.0"
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.1",
+    "vitest": "^4.0.18"
   }
 }
