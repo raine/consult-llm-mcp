@@ -333,7 +333,8 @@ context, but it helps.
 #### Gemini CLI
 
 Use Gemini's local CLI to take advantage of Google's
-[free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli).
+[free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
+or use your Google AI Pro subscription.
 
 **Requirements:**
 
