@@ -4,3 +4,4 @@ dist
 tsconfig.tsbuildinfo
 src/version.ts
 test
+history
