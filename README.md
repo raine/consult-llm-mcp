@@ -463,9 +463,14 @@ See the "Using web mode..." example above for a concrete transcript.
   - Options: `api` (default), `codex-cli`, `cursor-cli`
 - `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
+- `CONSULT_LLM_EXTRA_MODELS` - Add models not in the built-in list (optional)
+  - Comma-separated list, e.g., `grok-3,kimi-k2.5`
+  - Merged with built-in models and included in the tool schema
+  - Useful for newly released models with a known provider prefix (`gpt-`, `gemini-`, `deepseek-`)
 - `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
   - Comma-separated list, e.g., `gpt-5.2,gemini-3-pro-preview`
   - When set, only these models appear in the tool schema
+  - Filters the combined catalog (built-in + extra models)
   - If `CONSULT_LLM_DEFAULT_MODEL` is set, it must be in this list
   - See [Tips](#controlling-which-models-claude-uses) for usage examples
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
