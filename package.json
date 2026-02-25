@@ -13,11 +13,11 @@
     "start": "node dist/main.js",
     "test": "vitest",
     "test:run": "vitest run",
-    "format": "prettier --write .",
+    "format": "oxfmt --write .",
     "check": "concurrently \"pnpm:check:*\"",
     "check:types": "tsc --noEmit",
-    "check:format": "prettier --write .",
-    "check:lint": "eslint .",
+    "check:format": "oxfmt --check .",
+    "check:lint": "biome lint .",
     "check:test": "vitest run",
     "install-global": "npm run build && npm install -g .",
     "prepublishOnly": "pnpm run check && npm run build",
@@ -58,13 +58,12 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@eslint/js": "^9.38.0",
+    "@biomejs/biome": "2.4.4",
     "@types/node": "^25.3.0",
     "concurrently": "^9.2.1",
-    "eslint": "^9.38.0",
+    "oxfmt": "^0.35.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.56.1",
     "vitest": "^4.0.18"
   }
 }
