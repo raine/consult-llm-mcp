@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.1 (2026-02-25)
+
+- Updated tool description to tell callers not to inline file contents in the
+  prompt field, since the server reads files automatically via the `files`
+  parameter
+
 ## v2.3.0 (2026-02-25)
 
 - Added Cursor CLI (`cursor-agent`) as a new executor backend
