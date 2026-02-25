@@ -101,20 +101,20 @@ describe('API executor', () => {
     })
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
-    const executor = getExecutorForModel('gpt-5.1')
+    const executor = getExecutorForModel('gpt-5.2')
     expect(executor.capabilities.isCli).toBe(false)
     expect(executor.capabilities.supportsThreads).toBe(false)
     expect(executor.capabilities.supportsFileRefs).toBe(false)
 
     const result = await executor.execute(
       'user prompt',
-      'gpt-5.1',
+      'gpt-5.2',
       'system prompt',
       ['/tmp/file.ts'],
     )
 
     expect(createCompletionMock).toHaveBeenCalledWith({
-      model: 'gpt-5.1',
+      model: 'gpt-5.2',
       messages: [
         { role: 'system', content: 'system prompt' },
         { role: 'user', content: 'user prompt' },
@@ -131,9 +131,9 @@ describe('API executor', () => {
       choices: [{ message: {} }],
     })
 
-    const executor = getExecutorForModel('gpt-5.1')
+    const executor = getExecutorForModel('gpt-5.2')
     await expect(
-      executor.execute('prompt', 'gpt-5.1', 'system'),
+      executor.execute('prompt', 'gpt-5.2', 'system'),
     ).rejects.toThrow('No response from the model via API')
   })
 })
@@ -220,11 +220,11 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
+    const executor = getExecutorForModel('gpt-5.2')
     expect(executor.capabilities.isCli).toBe(true)
     expect(executor.capabilities.supportsThreads).toBe(true)
 
-    const promise = executor.execute('user', 'gpt-5.1', 'system', [
+    const promise = executor.execute('user', 'gpt-5.2', 'system', [
       '/absolute/path/to/file.ts',
     ])
 
@@ -240,7 +240,7 @@ describe('Codex CLI executor', () => {
     expect(cliArgs[1]).toBe('--json')
     expect(cliArgs[2]).toBe('--skip-git-repo-check')
     expect(cliArgs).toContain('-m')
-    expect(cliArgs).toContain('gpt-5.1')
+    expect(cliArgs).toContain('gpt-5.2')
     // Last arg is the prompt with system + user + files
     const promptArg = cliArgs[cliArgs.length - 1]
     expect(promptArg).toContain('system')
@@ -258,10 +258,10 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
+    const executor = getExecutorForModel('gpt-5.2')
     const promise = executor.execute(
       'follow up question',
-      'gpt-5.1',
+      'gpt-5.2',
       'system',
       undefined,
       'thread_abc',
@@ -294,8 +294,8 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     resolveCliExecution(child, {
       stdout: JSON.stringify({ type: 'thread.started', thread_id: 't1' }),
@@ -312,8 +312,8 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     resolveCliExecution(child, { stderr: 'boom', code: 2 })
 
@@ -328,8 +328,8 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     resolveCliExecution(child, {
       stdout: codexJsonlOutput('t1', 'result'),
@@ -349,8 +349,8 @@ describe('Codex CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
 
     child.emit('error', new Error('not found'))
 
@@ -365,8 +365,8 @@ describe('Codex CLI executor', () => {
       throw new Error('sync failure')
     })
 
-    const executor = getExecutorForModel('gpt-5.1')
-    await expect(executor.execute('user', 'gpt-5.1', 'system')).rejects.toThrow(
+    const executor = getExecutorForModel('gpt-5.2')
+    await expect(executor.execute('user', 'gpt-5.2', 'system')).rejects.toThrow(
       'Synchronous error while trying to spawn codex: sync failure',
     )
   })
@@ -710,10 +710,10 @@ describe('Cursor CLI executor', () => {
     const child = createChildProcess()
     setupSpawn(child)
 
-    const executor = getExecutorForModel('gpt-5.1')
+    const executor = getExecutorForModel('gpt-5.2')
     expect(executor.capabilities.isCli).toBe(true)
 
-    const promise = executor.execute('user', 'gpt-5.1', 'system')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
     resolveCliExecution(child, {
       stdout: agentJsonOutput('sess_1', 'result'),
       code: 0,
@@ -803,9 +803,9 @@ describe('executor selection', () => {
 
   it('creates distinct executors for different backends', () => {
     mockConfig.openaiBackend = 'api'
-    const execApi = getExecutorForModel('gpt-5.1')
+    const execApi = getExecutorForModel('gpt-5.2')
     mockConfig.openaiBackend = 'cursor-cli'
-    const execCli = getExecutorForModel('gpt-5.1')
+    const execCli = getExecutorForModel('gpt-5.2')
     expect(execApi).not.toBe(execCli)
   })
 

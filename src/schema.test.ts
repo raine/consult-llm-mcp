@@ -4,7 +4,7 @@ import { ConsultLlmArgs, SupportedChatModel, ALL_MODELS } from './schema.js'
 describe('SupportedChatModel', () => {
   it('accepts known models and rejects unsupported ones', () => {
     expect(SupportedChatModel.safeParse('gpt-5.2').success).toBe(true)
-    expect(SupportedChatModel.safeParse('gpt-5.1-codex-max').success).toBe(true)
+    expect(SupportedChatModel.safeParse('gpt-5.2-codex').success).toBe(true)
     expect(SupportedChatModel.safeParse('gpt-3.5').success).toBe(false)
   })
 

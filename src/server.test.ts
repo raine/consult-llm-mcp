@@ -102,7 +102,7 @@ describe('handleConsultLlm', () => {
   })
 
   it('inlines files and git diff for API mode', async () => {
-    mockConfig.defaultModel = 'gpt-5.1' as SupportedChatModel
+    mockConfig.defaultModel = 'gpt-5.2' as SupportedChatModel
     const result = await handleConsultLlm({
       prompt: 'help me',
       files: ['file1.ts'],
@@ -122,7 +122,7 @@ describe('handleConsultLlm', () => {
     )
     expect(queryLlmMock).toHaveBeenCalledWith(
       'BUILT PROMPT',
-      'gpt-5.1',
+      'gpt-5.2',
       expect.objectContaining({ capabilities: apiCapabilities }),
       undefined,
       undefined,
@@ -132,7 +132,7 @@ describe('handleConsultLlm', () => {
   })
 
   it('uses explicit model even when config default exists', async () => {
-    mockConfig.defaultModel = 'gpt-5.1' as SupportedChatModel
+    mockConfig.defaultModel = 'gpt-5.2' as SupportedChatModel
     await handleConsultLlm({ prompt: 'hello', model: 'gpt-5.2' })
     expect(queryLlmMock).toHaveBeenCalledWith(
       'BUILT PROMPT',

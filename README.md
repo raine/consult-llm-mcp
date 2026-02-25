@@ -364,7 +364,7 @@ claude mcp add consult-llm -e OPENAI_BACKEND=codex-cli -- npx -y consult-llm-mcp
 <!-- prettier-ignore -->
 > [!TIP]
 > Set reasoning effort with `-e CODEX_REASONING_EFFORT=high`. Options:
-> `none`, `minimal`, `low`, `medium`, `high`, `xhigh` (gpt-5.1-codex-max only).
+> `none`, `minimal`, `low`, `medium`, `high`, `xhigh`.
 
 #### Cursor CLI
 
@@ -456,8 +456,7 @@ See the "Using web mode..." example above for a concrete transcript.
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`
 - `GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
 - `OPENAI_BACKEND` - Backend for OpenAI models (optional)
@@ -549,8 +548,7 @@ models complex questions.
 
 - **model** (optional): LLM model to use
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`, `gpt-5.1-codex-max`,
-    `gpt-5.1-codex`, `gpt-5.1-codex-mini`, `gpt-5.1`
+    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
   should choose based on the task:
@@ -590,10 +588,6 @@ models complex questions.
 - **gpt-5.2**: OpenAI's latest GPT model
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3
 - **gpt-5.2-codex**: OpenAI's Codex model based on GPT-5.2
-- **gpt-5.1-codex-max**: Strongest OpenAI Codex model
-- **gpt-5.1-codex**: OpenAI's Codex model optimized for coding
-- **gpt-5.1-codex-mini**: Lighter, faster version of gpt-5.1-codex
-- **gpt-5.1**: Broad world knowledge with strong general reasoning
 
 ## Logging
 

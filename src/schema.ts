@@ -24,7 +24,7 @@ export const ConsultLlmArgs = z.object({
   model: SupportedChatModel.optional()
     .default(fallbackModel)
     .describe(
-      'LLM model to use. Prefer gpt-5.1-codex-max when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
+      'LLM model to use. Prefer gpt-5.3-codex when user mentions Codex. This parameter is ignored when `web_mode` is `true`.',
     ),
   task_mode: TaskMode.optional()
     .default('general')
