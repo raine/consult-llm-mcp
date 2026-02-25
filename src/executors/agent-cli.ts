@@ -18,19 +18,12 @@ export function parseAgentJson(output: string): {
 }
 
 export function createAgentExecutor(): LlmExecutor {
-  const buildFullPrompt = (
-    prompt: string,
-    systemPrompt: string,
-    filePaths?: string[],
-  ): string => {
-    let fullPrompt = `${systemPrompt}\n\n${prompt}`
-    if (filePaths && filePaths.length > 0) {
-      const fileList = filePaths
-        .map((path) => `- ${relative(process.cwd(), path)}`)
-        .join('\n')
-      fullPrompt = `${fullPrompt}\n\nPlease read the following files for context:\n${fileList}`
-    }
-    return fullPrompt
+  const appendFiles = (text: string, filePaths?: string[]): string => {
+    if (!filePaths || filePaths.length === 0) return text
+    const fileList = filePaths
+      .map((path) => `- ${relative(process.cwd(), path)}`)
+      .join('\n')
+    return `${text}\n\nPlease read the following files for context:\n${fileList}`
   }
 
   return {
@@ -41,9 +34,10 @@ export function createAgentExecutor(): LlmExecutor {
     },
 
     async execute(prompt, model, systemPrompt, filePaths, threadId) {
+      const messageWithFiles = appendFiles(prompt, filePaths)
       const message = threadId
-        ? prompt
-        : buildFullPrompt(prompt, systemPrompt, filePaths)
+        ? messageWithFiles
+        : `${systemPrompt}\n\n${messageWithFiles}`
 
       const args: string[] = [
         '--print',
@@ -103,7 +97,7 @@ export function createAgentExecutor(): LlmExecutor {
                 resolve({
                   response: parsed.response,
                   usage: null,
-                  threadId: parsed.sessionId,
+                  threadId: parsed.sessionId ?? threadId,
                 })
               } catch {
                 logCliDebug('Failed to parse Agent CLI JSON output', {

@@ -18,19 +18,12 @@ export function parseGeminiJson(output: string): {
 }
 
 export function createGeminiExecutor(): LlmExecutor {
-  const buildFullPrompt = (
-    prompt: string,
-    systemPrompt: string,
-    filePaths?: string[],
-  ): string => {
-    let fullPrompt = `${systemPrompt}\n\n${prompt}`
-    if (filePaths && filePaths.length > 0) {
-      const fileReferences = filePaths
-        .map((path) => `@${relative(process.cwd(), path)}`)
-        .join(' ')
-      fullPrompt = `${fullPrompt}\n\nFiles: ${fileReferences}`
-    }
-    return fullPrompt
+  const appendFiles = (text: string, filePaths?: string[]): string => {
+    if (!filePaths || filePaths.length === 0) return text
+    const fileReferences = filePaths
+      .map((path) => `@${relative(process.cwd(), path)}`)
+      .join(' ')
+    return `${text}\n\nFiles: ${fileReferences}`
   }
 
   return {
@@ -41,9 +34,10 @@ export function createGeminiExecutor(): LlmExecutor {
     },
 
     async execute(prompt, model, systemPrompt, filePaths, threadId) {
+      const messageWithFiles = appendFiles(prompt, filePaths)
       const message = threadId
-        ? prompt
-        : buildFullPrompt(prompt, systemPrompt, filePaths)
+        ? messageWithFiles
+        : `${systemPrompt}\n\n${messageWithFiles}`
 
       const args: string[] = ['-m', model, '-o', 'json']
       if (threadId) {
