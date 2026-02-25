@@ -84,6 +84,7 @@ beforeEach(() => {
     openaiBackend: 'api',
     geminiBackend: 'api',
     defaultModel: undefined,
+    codexReasoningEffort: undefined,
   })
 })
 
@@ -341,7 +342,6 @@ describe('Codex CLI executor', () => {
     expect(cliArgs).toContain('model_reasoning_effort="xhigh"')
 
     await promise
-    mockConfig.codexReasoningEffort = undefined
   })
 
   it('handles spawn error events with friendly message', async () => {
@@ -616,6 +616,95 @@ describe('Cursor CLI executor', () => {
     expect(result.threadId).toBe('sess_abc')
   })
 
+  it('strips -preview from model names', async () => {
+    mockConfig.geminiBackend = 'cursor-cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gemini-3-pro-preview')
+    const promise = executor.execute('user', 'gemini-3-pro-preview', 'system')
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_1', 'result'),
+      code: 0,
+    })
+
+    const cliArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    expect(cliArgs).toContain('gemini-3-pro')
+    expect(cliArgs).not.toContain('gemini-3-pro-preview')
+
+    await promise
+  })
+
+  it('appends reasoning effort to codex model names', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
+    mockConfig.codexReasoningEffort = 'high'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.3-codex')
+    const promise = executor.execute('user', 'gpt-5.3-codex', 'system')
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_1', 'result'),
+      code: 0,
+    })
+
+    const cliArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    expect(cliArgs).toContain('gpt-5.3-codex-high')
+
+    await promise
+  })
+
+  it('does not append reasoning effort to non-codex models', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
+    mockConfig.codexReasoningEffort = 'high'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute('user', 'gpt-5.2', 'system')
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_1', 'result'),
+      code: 0,
+    })
+
+    const cliArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    expect(cliArgs).toContain('gpt-5.2')
+    expect(cliArgs).not.toContain('gpt-5.2-high')
+
+    await promise
+  })
+
+  it('includes file refs when resuming a session', async () => {
+    mockConfig.openaiBackend = 'cursor-cli'
+    const child = createChildProcess()
+    setupSpawn(child)
+
+    const executor = getExecutorForModel('gpt-5.2')
+    const promise = executor.execute(
+      'follow up',
+      'gpt-5.2',
+      'system',
+      ['src/file.ts'],
+      'sess_abc',
+    )
+
+    resolveCliExecution(child, {
+      stdout: agentJsonOutput('sess_abc', 'answer'),
+      code: 0,
+    })
+
+    const cliArgs = spawnMock.mock.calls[0]?.[1] as string[]
+    const promptArg = cliArgs[cliArgs.length - 1]
+    expect(promptArg).toContain('follow up')
+    expect(promptArg).toContain('src/file.ts')
+    expect(promptArg).not.toContain('system')
+
+    await promise
+  })
+
   it('routes GPT models to agent when openaiBackend is cursor-cli', async () => {
     mockConfig.openaiBackend = 'cursor-cli'
     const child = createChildProcess()
@@ -704,6 +793,20 @@ describe('executor selection', () => {
       'system',
     )
     expect(result.response).toBe('deepseek')
+  })
+
+  it('caches and reuses executor instances', () => {
+    const exec1 = getExecutorForModel('gpt-5.2')
+    const exec2 = getExecutorForModel('gpt-5.2')
+    expect(exec1).toBe(exec2)
+  })
+
+  it('creates distinct executors for different backends', () => {
+    mockConfig.openaiBackend = 'api'
+    const execApi = getExecutorForModel('gpt-5.1')
+    mockConfig.openaiBackend = 'cursor-cli'
+    const execCli = getExecutorForModel('gpt-5.1')
+    expect(execApi).not.toBe(execCli)
   })
 
   it('throws on unknown models', () => {
