@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { migrateBackendEnv, buildModelCatalog } from './config.js'
+import {
+  migrateBackendEnv,
+  buildModelCatalog,
+  filterByAvailability,
+} from './config.js'
 import { ALL_MODELS } from './models.js'
 
 vi.mock('./logger.js', () => ({ logToFile: vi.fn() }))
@@ -63,6 +67,111 @@ describe('migrateBackendEnv', () => {
         'OPENAI_BACKEND',
       ),
     ).toBe('codex-cli')
+  })
+})
+
+describe('filterByAvailability', () => {
+  const allModels = ['gemini-2.5-pro', 'gpt-5.2', 'deepseek-reasoner']
+
+  it('includes gemini models when using gemini-cli backend', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'gemini-cli',
+      openaiBackend: 'api',
+    })
+    expect(result).toContain('gemini-2.5-pro')
+    expect(result).not.toContain('gpt-5.2')
+  })
+
+  it('includes gemini models when using cursor-cli backend', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'cursor-cli',
+      openaiBackend: 'api',
+    })
+    expect(result).toContain('gemini-2.5-pro')
+  })
+
+  it('includes gemini models when API key is set', () => {
+    const result = filterByAvailability(allModels, {
+      geminiApiKey: 'key',
+      geminiBackend: 'api',
+      openaiBackend: 'api',
+    })
+    expect(result).toContain('gemini-2.5-pro')
+  })
+
+  it('excludes gemini models when backend is api and no key', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiBackend: 'api',
+    })
+    expect(result).not.toContain('gemini-2.5-pro')
+  })
+
+  it('includes gpt models when using codex-cli backend', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiBackend: 'codex-cli',
+    })
+    expect(result).toContain('gpt-5.2')
+    expect(result).not.toContain('gemini-2.5-pro')
+  })
+
+  it('includes gpt models when using cursor-cli backend', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiBackend: 'cursor-cli',
+    })
+    expect(result).toContain('gpt-5.2')
+  })
+
+  it('includes gpt models when API key is set', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiApiKey: 'key',
+      openaiBackend: 'api',
+    })
+    expect(result).toContain('gpt-5.2')
+  })
+
+  it('excludes gpt models when backend is api and no key', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiBackend: 'api',
+    })
+    expect(result).not.toContain('gpt-5.2')
+  })
+
+  it('includes deepseek models only when API key is set', () => {
+    expect(
+      filterByAvailability(allModels, {
+        geminiBackend: 'api',
+        openaiBackend: 'api',
+        deepseekApiKey: 'key',
+      }),
+    ).toContain('deepseek-reasoner')
+
+    expect(
+      filterByAvailability(allModels, {
+        geminiBackend: 'api',
+        openaiBackend: 'api',
+      }),
+    ).not.toContain('deepseek-reasoner')
+  })
+
+  it('includes unknown-prefix models (user extras)', () => {
+    const result = filterByAvailability([...allModels, 'grok-3'], {
+      geminiBackend: 'api',
+      openaiBackend: 'api',
+    })
+    expect(result).toContain('grok-3')
+  })
+
+  it('returns empty array when no providers are available', () => {
+    const result = filterByAvailability(allModels, {
+      geminiBackend: 'api',
+      openaiBackend: 'api',
+    })
+    expect(result).toEqual([])
   })
 })
 

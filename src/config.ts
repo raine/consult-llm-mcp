@@ -2,6 +2,33 @@ import { z } from 'zod/v4'
 import { ALL_MODELS } from './models.js'
 import { logToFile } from './logger.js'
 
+export interface ProviderAvailability {
+  geminiApiKey?: string
+  geminiBackend: string
+  openaiApiKey?: string
+  openaiBackend: string
+  deepseekApiKey?: string
+}
+
+export function filterByAvailability(
+  models: string[],
+  providers: ProviderAvailability,
+): string[] {
+  return models.filter((model) => {
+    if (model.startsWith('gemini-')) {
+      return providers.geminiBackend !== 'api' || !!providers.geminiApiKey
+    }
+    if (model.startsWith('gpt-')) {
+      return providers.openaiBackend !== 'api' || !!providers.openaiApiKey
+    }
+    if (model.startsWith('deepseek-')) {
+      return !!providers.deepseekApiKey
+    }
+    // Unknown prefix (user-added extra models) — always include
+    return true
+  })
+}
+
 /** Build the final model catalog from built-in + extra + allowlist filtering. */
 export function buildModelCatalog(
   builtinModels: readonly string[],
@@ -32,15 +59,41 @@ export function buildModelCatalog(
     : allAvailable
 }
 
-const enabledModels = buildModelCatalog(
+// Resolve backends early (needed for availability filtering)
+const resolvedGeminiBackend = migrateBackendEnv(
+  process.env.GEMINI_BACKEND,
+  process.env.GEMINI_MODE,
+  'gemini-cli',
+  'GEMINI_MODE',
+  'GEMINI_BACKEND',
+)
+
+const resolvedOpenaiBackend = migrateBackendEnv(
+  process.env.OPENAI_BACKEND,
+  process.env.OPENAI_MODE,
+  'codex-cli',
+  'OPENAI_MODE',
+  'OPENAI_BACKEND',
+)
+
+// Build catalog, then filter to only available providers
+const catalogModels = buildModelCatalog(
   ALL_MODELS,
   process.env.CONSULT_LLM_EXTRA_MODELS,
   process.env.CONSULT_LLM_ALLOWED_MODELS,
 )
 
+const enabledModels = filterByAvailability(catalogModels, {
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  geminiBackend: resolvedGeminiBackend ?? 'api',
+  openaiApiKey: process.env.OPENAI_API_KEY,
+  openaiBackend: resolvedOpenaiBackend ?? 'api',
+  deepseekApiKey: process.env.DEEPSEEK_API_KEY,
+})
+
 if (enabledModels.length === 0) {
   const msg =
-    'Invalid environment variables:\n  CONSULT_LLM_ALLOWED_MODELS: No valid models enabled.'
+    'Invalid environment variables:\n  No models available. Set API keys or configure CLI backends.'
   logToFile(`FATAL ERROR:\n${msg}`)
   console.error(`❌ ${msg}`)
   process.exit(1)
@@ -95,20 +148,8 @@ const parsedConfig = Config.safeParse({
   geminiApiKey: process.env.GEMINI_API_KEY,
   deepseekApiKey: process.env.DEEPSEEK_API_KEY,
   defaultModel: process.env.CONSULT_LLM_DEFAULT_MODEL,
-  geminiBackend: migrateBackendEnv(
-    process.env.GEMINI_BACKEND,
-    process.env.GEMINI_MODE,
-    'gemini-cli',
-    'GEMINI_MODE',
-    'GEMINI_BACKEND',
-  ),
-  openaiBackend: migrateBackendEnv(
-    process.env.OPENAI_BACKEND,
-    process.env.OPENAI_MODE,
-    'codex-cli',
-    'OPENAI_MODE',
-    'OPENAI_BACKEND',
-  ),
+  geminiBackend: resolvedGeminiBackend,
+  openaiBackend: resolvedOpenaiBackend,
   codexReasoningEffort: process.env.CODEX_REASONING_EFFORT,
   systemPromptPath: process.env.CONSULT_LLM_SYSTEM_PROMPT_PATH,
 })
