@@ -2,7 +2,7 @@ panes:
   - command: <agent>
     focus: true
   - split: horizontal
-    command: npm install
+    command: npm install && ./scripts/generate-version
 files:
   symlink:
     - history
