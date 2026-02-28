@@ -1,7 +1,7 @@
 # Consult LLM MCP
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.2, Gemini
-3.0 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
+3.1 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
 to bring in the heavy artillery. Supports multi-turn conversations.
 
 ```
@@ -27,7 +27,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
 ## Features
 
-- Query powerful AI models (GPT-5.2, Gemini 3.0 Pro, DeepSeek Reasoner) with
+- Query powerful AI models (GPT-5.2, Gemini 3.1 Pro, DeepSeek Reasoner) with
   relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
@@ -457,7 +457,8 @@ See the "Using web mode..." example above for a concrete transcript.
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`
+    `gemini-3.1-pro-preview`, `deepseek-reasoner`, `gpt-5.3-codex`,
+    `gpt-5.2-codex`
 - `GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
 - `OPENAI_BACKEND` - Backend for OpenAI models (optional)
@@ -555,7 +556,8 @@ models complex questions.
 
 - **model** (optional): LLM model to use
   - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `deepseek-reasoner`, `gpt-5.3-codex`, `gpt-5.2-codex`
+    `gemini-3.1-pro-preview`, `deepseek-reasoner`, `gpt-5.3-codex`,
+    `gpt-5.2-codex`
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
   should choose based on the task:
@@ -590,6 +592,8 @@ models complex questions.
 - **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
 - **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview ($2/$12 per million
   tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
+- **gemini-3.1-pro-preview**: Google's Gemini 3.1 Pro Preview ($2/$12 per
+  million tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
 - **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
   tokens)
 - **gpt-5.2**: OpenAI's latest GPT model

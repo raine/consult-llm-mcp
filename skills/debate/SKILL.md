@@ -61,7 +61,7 @@ Be specific and opinionated. Defend your choices.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3-pro-preview"
+- `model`: "gemini-3.1-pro-preview"
 - `prompt`: Opening prompt above
 - `files`: Array of relevant source files discovered in Phase 1
 
@@ -93,7 +93,7 @@ Be constructive but thorough in your critique.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3-pro-preview"
+- `model`: "gemini-3.1-pro-preview"
 - `prompt`: Rebuttal prompt with Codex's opening argument as the opponent
 - `thread_id`: `gemini_thread_id` from Phase 2
 
@@ -206,7 +206,7 @@ Be concise. Only flag issues worth fixing.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3-pro-preview"
+- `model`: "gemini-3.1-pro-preview"
 - `prompt`: Final review prompt
 - `thread_id`: `gemini_thread_id` from Phase 2
 - `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`

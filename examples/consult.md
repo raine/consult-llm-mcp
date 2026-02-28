@@ -14,12 +14,12 @@ When consulting with external LLMs:
 
 - **Web mode**: Use if user says "ask in browser" or "consult in browser"
 - **Codex mode**: Use if user says "ask codex" → use model "gpt-5.1-codex-max"
-- **Gemini mode**: Default for "ask gemini" → use model "gemini-3-pro-preview"
+- **Gemini mode**: Default for "ask gemini" → use model "gemini-3.1-pro-preview"
 
 **3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
 
 - **For API/CLI mode (Gemini)**:
-  - `model`: "gemini-3-pro-preview"
+  - `model`: "gemini-3.1-pro-preview"
   - `prompt`: Clear, neutral question without suggesting solutions
   - `files`: Array of relevant file paths
 

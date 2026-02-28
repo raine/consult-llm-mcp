@@ -20,6 +20,10 @@ const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
     inputCostPerMillion: 2.0,
     outputCostPerMillion: 12.0,
   },
+  'gemini-3.1-pro-preview': {
+    inputCostPerMillion: 2.0,
+    outputCostPerMillion: 12.0,
+  },
   'deepseek-reasoner': {
     inputCostPerMillion: 0.55,
     outputCostPerMillion: 2.19,
