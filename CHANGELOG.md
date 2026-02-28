@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.4.2 (2026-02-28)
+
+- Added gemini-3.1-pro-preview model support
+- Filter unavailable models from the tool schema based on configured API keys
+  and CLI backends, preventing errors when selecting unconfigured models
+
 ## v2.4.1 (2026-02-25)
 
 - Updated tool description to tell callers not to inline file contents in the
