@@ -703,12 +703,34 @@ for the full content.
 Save it as `~/.claude/commands/consult.md` and you can then use it by typing
 `/consult ask gemini about X` or `/consult ask codex about X` in Claude Code.
 
-## Debate skills
+## Multi-LLM skills
 
-Two skills that orchestrate structured debates between LLMs to find the best
-implementation approach before writing code. Both use `thread_id` to maintain
-conversation context across rounds, so each LLM remembers the full debate
-history without resending everything.
+Skills that orchestrate multi-turn conversations between LLMs. All use
+`thread_id` to maintain conversation context across rounds, so each LLM
+remembers the full history without resending everything.
+
+### collab
+
+**Collaborative ideation.** Gemini and Codex independently brainstorm ideas,
+then build on each other's suggestions across multiple rounds. Unlike debate,
+the tone is cooperative — refining and combining rather than critiquing. Claude
+synthesizes the strongest ideas into a plan and implements. See
+[skills/collab/SKILL.md](skills/collab/SKILL.md).
+
+```
+> /collab how should we handle offline sync for the mobile app
+```
+
+### collab-vs
+
+**Claude brainstorms with one LLM.** Claude and an opponent (Gemini or Codex)
+take turns building on each other's ideas. Like collab, but Claude participates
+directly instead of moderating. See
+[skills/collab-vs/SKILL.md](skills/collab-vs/SKILL.md).
+
+```
+> /collab-vs --gemini how should we handle offline sync for the mobile app
+```
 
 ### debate
 
