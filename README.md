@@ -456,9 +456,9 @@ See the "Using web mode..." example above for a concrete transcript.
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `gemini-3.1-pro-preview`, `deepseek-reasoner`, `gpt-5.3-codex`,
-    `gpt-5.2-codex`
+  - Options: `gpt-5.2` (default), `gpt-5.4`, `gemini-2.5-pro`,
+    `gemini-3-pro-preview`, `gemini-3.1-pro-preview`, `deepseek-reasoner`,
+    `gpt-5.3-codex`, `gpt-5.2-codex`
 - `GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
 - `OPENAI_BACKEND` - Backend for OpenAI models (optional)
@@ -555,9 +555,9 @@ models complex questions.
   - All files are added as context with file paths and code blocks
 
 - **model** (optional): LLM model to use
-  - Options: `gpt-5.2` (default), `gemini-2.5-pro`, `gemini-3-pro-preview`,
-    `gemini-3.1-pro-preview`, `deepseek-reasoner`, `gpt-5.3-codex`,
-    `gpt-5.2-codex`
+  - Options: `gpt-5.2` (default), `gpt-5.4`, `gemini-2.5-pro`,
+    `gemini-3-pro-preview`, `gemini-3.1-pro-preview`, `deepseek-reasoner`,
+    `gpt-5.3-codex`, `gpt-5.2-codex`
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
   should choose based on the task:
@@ -596,7 +596,8 @@ models complex questions.
   million tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
 - **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
   tokens)
-- **gpt-5.2**: OpenAI's latest GPT model
+- **gpt-5.4**: OpenAI's GPT-5.4 model ($2.50/$15 per million tokens)
+- **gpt-5.2**: OpenAI's GPT-5.2 model ($1.75/$14 per million tokens)
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3
 - **gpt-5.2-codex**: OpenAI's Codex model based on GPT-5.2
 

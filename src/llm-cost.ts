@@ -8,6 +8,10 @@ type ModelPricing = {
 }
 
 const MODEL_PRICING: Partial<Record<SupportedChatModel, ModelPricing>> = {
+  'gpt-5.4': {
+    inputCostPerMillion: 2.5,
+    outputCostPerMillion: 15.0,
+  },
   'gpt-5.2': {
     inputCostPerMillion: 1.75,
     outputCostPerMillion: 14.0,

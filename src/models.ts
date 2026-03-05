@@ -4,6 +4,7 @@ export const ALL_MODELS = [
   'gemini-3.1-pro-preview',
   'deepseek-reasoner',
   'gpt-5.2',
+  'gpt-5.4',
   'gpt-5.3-codex',
   'gpt-5.2-codex',
 ] as const
