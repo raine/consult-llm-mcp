@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.5.0 (2026-03-05)
+
+- Added gpt-5.4 model support ($2.50/$15 per million tokens)
+
 ## v2.4.2 (2026-02-28)
 
 - Added gemini-3.1-pro-preview model support
