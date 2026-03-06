@@ -1,6 +1,6 @@
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
 use rmcp::{ServerHandler, tool, tool_handler, tool_router};
 use serde_json::Value;
 use std::path::PathBuf;
@@ -53,7 +53,12 @@ impl ConsultServer {
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for ConsultServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        let mut info = ServerInfo::new(ServerCapabilities::builder().enable_tools().build());
+        let mut impl_info = Implementation::default();
+        impl_info.name = "consult_llm".to_string();
+        impl_info.version = format!("{}+{}", env!("CARGO_PKG_VERSION"), env!("GIT_HASH"));
+        info.server_info = impl_info;
+        info
     }
 }
 
