@@ -14,6 +14,7 @@ Check the arguments for flags:
 **Mode flags:**
 - `--dry-run` → debate and plan only, skip implementation
 - `--skip-final` → skip the final review phase
+- `--rounds N` → number of debate rounds (default: 2, max: 3)
 
 Strip all flags from arguments to get the task description.
 
@@ -72,11 +73,13 @@ Call BOTH simultaneously:
 
 **Extract thread IDs:** Each response will include a `[thread_id:xxx]` prefix. Save both thread IDs (`gemini_thread_id`, `codex_thread_id`) for use in subsequent phases.
 
-## Phase 3: Rebuttals
+## Phase 3: Debate Rounds
 
-Have each LLM critique the other's approach (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and their own opening argument, so you only need to send the opponent's argument.
+For each round (default 2, configurable with `--rounds N`, max 3):
 
-**Rebuttal prompt (same for both, just swap the opponent's argument):**
+Have each LLM critique the other's latest argument (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponent's latest response.
+
+**Round 1 rebuttal prompt (same for both, swap the opponent's argument):**
 ```
 Your opponent proposed this alternative approach:
 [Opponent's opening argument]
@@ -85,22 +88,38 @@ Provide a rebuttal:
 1. **Critique**: What are the weaknesses in your opponent's approach?
 2. **Defense**: Address any weaknesses in your own approach
 3. **Concessions**: Are there any good ideas from your opponent worth adopting?
-4. **Final position**: State your refined recommendation
+4. **Updated position**: State your refined recommendation
 
 Be constructive but thorough in your critique.
 ```
 
-Call BOTH simultaneously:
+**Subsequent round prompt (same for both, swap the opponent's latest rebuttal):**
+```
+Your opponent has responded to your critique:
+[Opponent's latest rebuttal]
+
+Continue the debate:
+1. **Critique**: What weaknesses remain in your opponent's updated position?
+2. **Defense**: Address any new points raised against your approach
+3. **Concessions**: Any new ideas worth adopting?
+4. **Updated position**: State your refined recommendation
+
+Focus on unresolved disagreements. Don't repeat settled points.
+```
+
+Call BOTH simultaneously each round:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
 - `model`: "gemini-3.1-pro-preview"
-- `prompt`: Rebuttal prompt with Codex's opening argument as the opponent
-- `thread_id`: `gemini_thread_id` from Phase 2
+- `prompt`: Rebuttal prompt with Codex's latest response as the opponent
+- `thread_id`: `gemini_thread_id`
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
 - `model`: "gpt-5.3-codex"
-- `prompt`: Rebuttal prompt with Gemini's opening argument as the opponent
-- `thread_id`: `codex_thread_id` from Phase 2
+- `prompt`: Rebuttal prompt with Gemini's latest response as the opponent
+- `thread_id`: `codex_thread_id`
+
+Present both responses to the user after each round.
 
 ## Phase 4: Moderator's Verdict
 
