@@ -71,12 +71,15 @@ export function createCodexExecutor(): LlmExecutor {
           `model_reasoning_effort="${config.codexReasoningEffort}"`,
         )
       }
-      const extraDirs = [
-        getMainWorktreePath(),
-        ...getExternalDirectories(filePaths),
-      ].filter((d): d is string => d !== null)
-      for (const dir of extraDirs) {
-        args.push('--add-dir', dir)
+      // --add-dir is not supported by `codex exec resume`
+      if (!threadId) {
+        const extraDirs = [
+          getMainWorktreePath(),
+          ...getExternalDirectories(filePaths),
+        ].filter((d): d is string => d !== null)
+        for (const dir of extraDirs) {
+          args.push('--add-dir', dir)
+        }
       }
       args.push('-m', model)
       if (threadId) {
