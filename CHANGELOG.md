@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.5.2 (2026-03-06)
+
+- Fixed Codex CLI thread resumption failing due to unsupported `--add-dir` flag
+  in `codex exec resume`
+
 ## v2.5.1 (2026-03-06)
 
 - Consult skill now queries both Gemini and Codex in parallel by default, with
