@@ -1,4 +1,5 @@
 import { relative } from 'node:path'
+import { getExternalDirectories } from '../external-dirs.js'
 import { getMainWorktreePath } from '../git-worktree.js'
 import { logCliDebug } from '../logger.js'
 import { runCli } from './cli-runner.js'
@@ -41,9 +42,12 @@ export function createGeminiExecutor(): LlmExecutor {
         : `${systemPrompt}\n\n${messageWithFiles}`
 
       const args: string[] = ['-m', model, '-o', 'json']
-      const mainWorktree = getMainWorktreePath()
-      if (mainWorktree) {
-        args.push('--include-directories', mainWorktree)
+      const extraDirs = [
+        getMainWorktreePath(),
+        ...getExternalDirectories(filePaths),
+      ].filter((d): d is string => d !== null)
+      for (const dir of extraDirs) {
+        args.push('--include-directories', dir)
       }
       if (threadId) {
         args.push('-r', threadId)

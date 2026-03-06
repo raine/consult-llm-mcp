@@ -1,5 +1,6 @@
 import { relative } from 'node:path'
 import { config } from '../config.js'
+import { getExternalDirectories } from '../external-dirs.js'
 import { getMainWorktreePath } from '../git-worktree.js'
 import { runCli } from './cli-runner.js'
 import type { LlmExecutor } from './types.js'
@@ -70,9 +71,12 @@ export function createCodexExecutor(): LlmExecutor {
           `model_reasoning_effort="${config.codexReasoningEffort}"`,
         )
       }
-      const mainWorktree = getMainWorktreePath()
-      if (mainWorktree) {
-        args.push('--add-dir', mainWorktree)
+      const extraDirs = [
+        getMainWorktreePath(),
+        ...getExternalDirectories(filePaths),
+      ].filter((d): d is string => d !== null)
+      for (const dir of extraDirs) {
+        args.push('--add-dir', dir)
       }
       args.push('-m', model)
       if (threadId) {
