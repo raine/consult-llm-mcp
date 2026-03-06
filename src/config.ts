@@ -60,20 +60,33 @@ export function buildModelCatalog(
 }
 
 // Resolve backends early (needed for availability filtering)
-const resolvedGeminiBackend = migrateBackendEnv(
+// Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
+const geminiBackendRaw = migratePrefixedEnv(
+  process.env.CONSULT_LLM_GEMINI_BACKEND,
   process.env.GEMINI_BACKEND,
+  'GEMINI_BACKEND',
+  'CONSULT_LLM_GEMINI_BACKEND',
+)
+const resolvedGeminiBackend = migrateBackendEnv(
+  geminiBackendRaw,
   process.env.GEMINI_MODE,
   'gemini-cli',
   'GEMINI_MODE',
-  'GEMINI_BACKEND',
+  'CONSULT_LLM_GEMINI_BACKEND',
 )
 
-const resolvedOpenaiBackend = migrateBackendEnv(
+const openaiBackendRaw = migratePrefixedEnv(
+  process.env.CONSULT_LLM_OPENAI_BACKEND,
   process.env.OPENAI_BACKEND,
+  'OPENAI_BACKEND',
+  'CONSULT_LLM_OPENAI_BACKEND',
+)
+const resolvedOpenaiBackend = migrateBackendEnv(
+  openaiBackendRaw,
   process.env.OPENAI_MODE,
   'codex-cli',
   'OPENAI_MODE',
-  'OPENAI_BACKEND',
+  'CONSULT_LLM_OPENAI_BACKEND',
 )
 
 // Build catalog, then filter to only available providers
@@ -126,6 +139,21 @@ export type Config = ParsedConfig & {
   allowedModels: string[]
 }
 
+/** Prefer CONSULT_LLM_-prefixed env var, fall back to unprefixed with deprecation warning. */
+export function migratePrefixedEnv(
+  prefixed: string | undefined,
+  unprefixed: string | undefined,
+  unprefixedName: string,
+  prefixedName: string,
+): string | undefined {
+  if (prefixed) return prefixed
+  if (!unprefixed) return undefined
+  logToFile(
+    `DEPRECATED: ${unprefixedName}=${unprefixed} → use ${prefixedName}=${unprefixed} instead`,
+  )
+  return unprefixed
+}
+
 // Migrate legacy GEMINI_MODE / OPENAI_MODE env vars
 export function migrateBackendEnv(
   newVar: string | undefined,
@@ -150,7 +178,12 @@ const parsedConfig = Config.safeParse({
   defaultModel: process.env.CONSULT_LLM_DEFAULT_MODEL,
   geminiBackend: resolvedGeminiBackend,
   openaiBackend: resolvedOpenaiBackend,
-  codexReasoningEffort: process.env.CODEX_REASONING_EFFORT,
+  codexReasoningEffort: migratePrefixedEnv(
+    process.env.CONSULT_LLM_CODEX_REASONING_EFFORT,
+    process.env.CODEX_REASONING_EFFORT,
+    'CODEX_REASONING_EFFORT',
+    'CONSULT_LLM_CODEX_REASONING_EFFORT',
+  ),
   systemPromptPath: process.env.CONSULT_LLM_SYSTEM_PROMPT_PATH,
 })
 

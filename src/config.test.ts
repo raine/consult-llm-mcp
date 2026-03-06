@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   migrateBackendEnv,
+  migratePrefixedEnv,
   buildModelCatalog,
   filterByAvailability,
 } from './config.js'
@@ -67,6 +68,41 @@ describe('migrateBackendEnv', () => {
         'OPENAI_BACKEND',
       ),
     ).toBe('codex-cli')
+  })
+})
+
+describe('migratePrefixedEnv', () => {
+  it('returns prefixed value when set', () => {
+    expect(
+      migratePrefixedEnv(
+        'codex-cli',
+        'api',
+        'OPENAI_BACKEND',
+        'CONSULT_LLM_OPENAI_BACKEND',
+      ),
+    ).toBe('codex-cli')
+  })
+
+  it('falls back to unprefixed value with deprecation', () => {
+    expect(
+      migratePrefixedEnv(
+        undefined,
+        'gemini-cli',
+        'GEMINI_BACKEND',
+        'CONSULT_LLM_GEMINI_BACKEND',
+      ),
+    ).toBe('gemini-cli')
+  })
+
+  it('returns undefined when both are missing', () => {
+    expect(
+      migratePrefixedEnv(
+        undefined,
+        undefined,
+        'OPENAI_BACKEND',
+        'CONSULT_LLM_OPENAI_BACKEND',
+      ),
+    ).toBeUndefined()
   })
 })
 
