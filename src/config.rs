@@ -228,30 +228,32 @@ pub fn init_config() {
         std::process::exit(1);
     }
 
-    // Validate backend strings
-    if let Some(ref raw) = resolved_gemini_backend
-        && Backend::from_str(raw).is_none()
-    {
-        let msg = format!(
-            "Invalid environment variables:\n  geminiBackend: Invalid enum value. Expected 'api' | 'gemini-cli' | 'cursor-cli', received '{raw}'"
-        );
-        log_to_file(&format!("FATAL ERROR:\n{msg}"));
-        eprintln!("❌ {msg}");
-        std::process::exit(1);
+    // Validate backend strings against per-provider allowed values
+    if let Some(ref raw) = resolved_gemini_backend {
+        let valid = matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli");
+        if !valid {
+            let msg = format!(
+                "Invalid environment variables:\n  geminiBackend: Invalid enum value. Expected 'api' | 'gemini-cli' | 'cursor-cli', received '{raw}'"
+            );
+            log_to_file(&format!("FATAL ERROR:\n{msg}"));
+            eprintln!("❌ {msg}");
+            std::process::exit(1);
+        }
     }
-    if let Some(ref raw) = resolved_openai_backend
-        && Backend::from_str(raw).is_none()
-    {
-        let msg = format!(
-            "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
-        );
-        log_to_file(&format!("FATAL ERROR:\n{msg}"));
-        eprintln!("❌ {msg}");
-        std::process::exit(1);
+    if let Some(ref raw) = resolved_openai_backend {
+        let valid = matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli");
+        if !valid {
+            let msg = format!(
+                "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
+            );
+            log_to_file(&format!("FATAL ERROR:\n{msg}"));
+            eprintln!("❌ {msg}");
+            std::process::exit(1);
+        }
     }
 
     // Validate default model if provided
-    let default_model = env::var("CONSULT_LLM_DEFAULT_MODEL").ok();
+    let default_model = env_non_empty("CONSULT_LLM_DEFAULT_MODEL");
     if let Some(ref dm) = default_model
         && !enabled_models.contains(dm)
     {
