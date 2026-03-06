@@ -1,5 +1,6 @@
 import { relative } from 'node:path'
 import { config } from '../config.js'
+import { getMainWorktreePath } from '../git-worktree.js'
 import { runCli } from './cli-runner.js'
 import type { LlmExecutor } from './types.js'
 
@@ -58,26 +59,26 @@ export function createCodexExecutor(): LlmExecutor {
         ? message // On resume, include files but skip system prompt
         : `${systemPrompt}\n\n${message}`
 
-      const args: string[] = []
+      const args: string[] = ['exec']
       if (threadId) {
-        args.push('exec', 'resume', '--json', '--skip-git-repo-check')
-        if (config.codexReasoningEffort) {
-          args.push(
-            '-c',
-            `model_reasoning_effort="${config.codexReasoningEffort}"`,
-          )
-        }
-        args.push('-m', model, threadId, fullPrompt)
-      } else {
-        args.push('exec', '--json', '--skip-git-repo-check')
-        if (config.codexReasoningEffort) {
-          args.push(
-            '-c',
-            `model_reasoning_effort="${config.codexReasoningEffort}"`,
-          )
-        }
-        args.push('-m', model, fullPrompt)
+        args.push('resume')
       }
+      args.push('--json', '--skip-git-repo-check')
+      if (config.codexReasoningEffort) {
+        args.push(
+          '-c',
+          `model_reasoning_effort="${config.codexReasoningEffort}"`,
+        )
+      }
+      const mainWorktree = getMainWorktreePath()
+      if (mainWorktree) {
+        args.push('--add-dir', mainWorktree)
+      }
+      args.push('-m', model)
+      if (threadId) {
+        args.push(threadId)
+      }
+      args.push(fullPrompt)
 
       const { stdout, stderr, code } = await runCli('codex', args)
 

@@ -1,4 +1,5 @@
 import { relative } from 'node:path'
+import { getMainWorktreePath } from '../git-worktree.js'
 import { logCliDebug } from '../logger.js'
 import { runCli } from './cli-runner.js'
 import type { LlmExecutor } from './types.js'
@@ -40,6 +41,10 @@ export function createGeminiExecutor(): LlmExecutor {
         : `${systemPrompt}\n\n${messageWithFiles}`
 
       const args: string[] = ['-m', model, '-o', 'json']
+      const mainWorktree = getMainWorktreePath()
+      if (mainWorktree) {
+        args.push('--include-directories', mainWorktree)
+      }
       if (threadId) {
         args.push('-r', threadId)
       }
