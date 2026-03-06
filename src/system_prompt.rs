@@ -1,6 +1,8 @@
 use std::fs;
+use std::path::Path;
 
 use crate::config::config;
+use crate::logger::log_to_file;
 use crate::schema::TaskMode;
 
 const BASE_SYSTEM_PROMPT: &str = "You are an expert software engineering consultant. You are communicating with another AI system, not a human.\n\nCommunication style:\n- Skip pleasantries and praise\n- Be direct and specific\n- Respond in Markdown";
@@ -39,13 +41,23 @@ pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
             .to_string()
     });
 
-    if let Ok(custom) = fs::read_to_string(&custom_path) {
-        let trimmed = custom.trim().to_string();
-        return if is_cli {
-            format!("{trimmed}{CLI_MODE_SUFFIX}")
-        } else {
-            trimmed
-        };
+    let path = Path::new(&custom_path);
+    if path.exists() {
+        match fs::read_to_string(path) {
+            Ok(custom) => {
+                let trimmed = custom.trim().to_string();
+                return if is_cli {
+                    format!("{trimmed}{CLI_MODE_SUFFIX}")
+                } else {
+                    trimmed
+                };
+            }
+            Err(e) => {
+                let msg = format!("Failed to read custom system prompt from {custom_path}: {e}");
+                log_to_file(&format!("WARNING: {msg}"));
+                eprintln!("Warning: {msg}");
+            }
+        }
     }
 
     let overlay = mode_overlay(task_mode);
