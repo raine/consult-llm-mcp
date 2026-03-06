@@ -389,6 +389,8 @@ claude mcp add consult-llm -e GEMINI_BACKEND=cursor-cli -- npx -y consult-llm-mc
 claude mcp add consult-llm \
   -e OPENAI_BACKEND=cursor-cli \
   -e GEMINI_BACKEND=cursor-cli \
+  -e CODEX_REASONING_EFFORT=high \
+  -e CONSULT_LLM_ALLOWED_MODELS="gemini-3-pro-preview,gpt-5.3-codex" \
   -- npx -y consult-llm-mcp
 ```
 
