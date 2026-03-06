@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.5.1 (2026-03-06)
+
+- Consult skill now queries both Gemini and Codex in parallel by default, with
+  `--gemini` and `--codex` flags for single-model consultation
+- CLI backends now receive main worktree path as additional context when running
+  inside a git worktree
+- CLI backends now detect external file directories (outside workspace) and pass
+  them to Gemini/Codex so referenced files are accessible
+- Debate skill now supports multi-round debates via `--rounds` flag (default 2,
+  max 3)
+- Reduced anchoring bias in debate/debate-vs final review phase
+- Added `install-skills` script for easy skill installation
+
 ## v2.5.0 (2026-03-05)
 
 - Added gpt-5.4 model support ($2.50/$15 per million tokens)
