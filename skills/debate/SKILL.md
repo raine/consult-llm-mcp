@@ -194,7 +194,7 @@ After implementation, have both LLMs review the result (in parallel). Use `threa
 
 **Final review prompt:**
 ```
-The implementation is complete. Review the changes for bugs, issues, or improvements:
+Forget which side you argued during the debate. Review the implementation purely on its merits:
 - Any obvious bugs or edge cases missed?
 - Code quality issues (error handling, naming, structure)?
 - Deviations from best practices?
@@ -207,12 +207,14 @@ Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
 - `model`: "gemini-3.1-pro-preview"
+- `task_mode`: "review"
 - `prompt`: Final review prompt
 - `thread_id`: `gemini_thread_id` from Phase 2
 - `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
 - `model`: "gpt-5.3-codex"
+- `task_mode`: "review"
 - `prompt`: Final review prompt
 - `thread_id`: `codex_thread_id` from Phase 2
 - `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`

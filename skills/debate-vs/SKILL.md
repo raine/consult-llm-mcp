@@ -260,6 +260,7 @@ debate context):
 Call `mcp__consult-llm__consult_llm` with:
 
 - `model`: MODEL
+- `task_mode`: "review"
 - `thread_id`: The thread_id from the debate
 - `prompt`: Final review prompt below
 - `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
@@ -267,9 +268,8 @@ Call `mcp__consult-llm__consult_llm` with:
 **Final review prompt:**
 
 ```
-The implementation is complete. Review the changes:
+Forget which side you argued during the debate. Review the implementation purely on its merits:
 - Any bugs or edge cases missed?
-- Does the implementation match what we agreed on during the debate?
 - Code quality issues?
 - Security concerns?
 
