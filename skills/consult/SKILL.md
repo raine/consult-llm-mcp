@@ -6,7 +6,19 @@ allowed-tools: Glob, Grep, Read, mcp__consult-llm__consult_llm
 
 Consult an external LLM with the user's query.
 
-User query: $ARGUMENTS
+**Arguments:** `$ARGUMENTS`
+
+Check the arguments for flags:
+
+**Reviewer flags** (mutually exclusive):
+- `--gemini` → consult only Gemini
+- `--codex` → consult only Codex
+- No flag → consult both Gemini and Codex in parallel (default)
+
+**Mode flags:**
+- `--browser` → use web mode (copy prompt to clipboard)
+
+Strip all flags from arguments to get the user query.
 
 When consulting with external LLMs:
 
@@ -16,34 +28,51 @@ When consulting with external LLMs:
 - Read key files to understand their relevance
 - Select files directly related to the question
 
-**2. Determine Mode and Model**:
+**2. Call the MCP Tool**:
 
-- **Web mode**: Use if user says "ask in browser" or "consult in browser"
-- **Codex mode**: Use if user says "ask codex" → use model "gpt-5.3-codex"
-- **Gemini mode**: Default for "ask gemini" → use model "gemini-3.1-pro-preview"
+Based on the reviewer flag:
 
-**3. Call the MCP Tool**: Use `mcp__consult-llm__consult_llm` with:
+### If `--gemini`: Gemini only
 
-- **For API/CLI mode (Gemini)**:
-  - `model`: "gemini-3.1-pro-preview"
-  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
-  - `files`: Array of relevant file paths
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: "gemini-3.1-pro-preview"
+- `prompt`: The user's query, passed through faithfully (see Critical Rules)
+- `files`: Array of relevant file paths
 
-- **For API/CLI mode (Codex)**:
-  - `model`: "gpt-5.3-codex"
-  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
-  - `files`: Array of relevant file paths
+### If `--codex`: Codex only
 
-- **For web mode**:
-  - `web_mode`: true
-  - `prompt`: The user's query, passed through faithfully (see Critical Rules)
-  - `files`: Array of relevant file paths
-  - (model parameter is ignored in web mode)
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: "gpt-5.3-codex"
+- `prompt`: The user's query, passed through faithfully (see Critical Rules)
+- `files`: Array of relevant file paths
 
-**4. Present Results**:
+### If no flag (default): Both Gemini and Codex in parallel
+
+Call BOTH simultaneously (single response, multiple tool calls):
+
+**Gemini** - `mcp__consult-llm__consult_llm` with:
+- `model`: "gemini-3.1-pro-preview"
+- `prompt`: The user's query, passed through faithfully (see Critical Rules)
+- `files`: Array of relevant file paths
+
+**Codex** - `mcp__consult-llm__consult_llm` with:
+- `model`: "gpt-5.3-codex"
+- `prompt`: The user's query, passed through faithfully (see Critical Rules)
+- `files`: Array of relevant file paths
+
+### If `--browser`: Web mode
+
+Call `mcp__consult-llm__consult_llm` with:
+- `web_mode`: true
+- `prompt`: The user's query, passed through faithfully (see Critical Rules)
+- `files`: Array of relevant file paths
+- (model parameter is ignored in web mode)
+
+**3. Present Results**:
 
 - **API mode**: Summarize key insights, recommendations, and considerations from
-  the response
+  the response. When both LLMs were consulted, synthesize their responses —
+  highlight agreements, note disagreements, and present a unified summary.
 - **Web mode**: Inform user the prompt was copied to clipboard and ask them to
   paste it into their browser-based LLM and share the response back
 
