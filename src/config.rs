@@ -4,6 +4,11 @@ use std::sync::OnceLock;
 use crate::logger::log_to_file;
 use crate::models::ALL_MODELS;
 
+/// Read env var, treating empty strings as unset.
+fn env_non_empty(key: &str) -> Option<String> {
+    env::var(key).ok().filter(|v| !v.is_empty())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Backend {
     Api,
@@ -170,16 +175,16 @@ pub fn registry() -> &'static ModelRegistry {
 /// Exits process on fatal configuration errors.
 pub fn init_config() {
     let resolved_gemini_backend = migrate_backend_env(
-        env::var("GEMINI_BACKEND").ok().as_deref(),
-        env::var("GEMINI_MODE").ok().as_deref(),
+        env_non_empty("GEMINI_BACKEND").as_deref(),
+        env_non_empty("GEMINI_MODE").as_deref(),
         "gemini-cli",
         "GEMINI_MODE",
         "GEMINI_BACKEND",
     );
 
     let resolved_openai_backend = migrate_backend_env(
-        env::var("OPENAI_BACKEND").ok().as_deref(),
-        env::var("OPENAI_MODE").ok().as_deref(),
+        env_non_empty("OPENAI_BACKEND").as_deref(),
+        env_non_empty("OPENAI_MODE").as_deref(),
         "codex-cli",
         "OPENAI_MODE",
         "OPENAI_BACKEND",
@@ -187,8 +192,8 @@ pub fn init_config() {
 
     let catalog_models = build_model_catalog(
         ALL_MODELS,
-        env::var("CONSULT_LLM_EXTRA_MODELS").ok().as_deref(),
-        env::var("CONSULT_LLM_ALLOWED_MODELS").ok().as_deref(),
+        env_non_empty("CONSULT_LLM_EXTRA_MODELS").as_deref(),
+        env_non_empty("CONSULT_LLM_ALLOWED_MODELS").as_deref(),
     );
 
     let gemini_backend = resolved_gemini_backend
@@ -201,9 +206,9 @@ pub fn init_config() {
         .and_then(Backend::from_str)
         .unwrap_or(Backend::Api);
 
-    let openai_api_key = env::var("OPENAI_API_KEY").ok();
-    let gemini_api_key = env::var("GEMINI_API_KEY").ok();
-    let deepseek_api_key = env::var("DEEPSEEK_API_KEY").ok();
+    let openai_api_key = env_non_empty("OPENAI_API_KEY");
+    let gemini_api_key = env_non_empty("GEMINI_API_KEY");
+    let deepseek_api_key = env_non_empty("DEEPSEEK_API_KEY");
 
     let enabled_models = filter_by_availability(
         &catalog_models,
@@ -264,7 +269,7 @@ pub fn init_config() {
     }
 
     // Validate codex reasoning effort
-    let codex_reasoning_effort = env::var("CODEX_REASONING_EFFORT").ok();
+    let codex_reasoning_effort = env_non_empty("CODEX_REASONING_EFFORT");
     if let Some(ref effort) = codex_reasoning_effort {
         let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
         if !valid.contains(&effort.as_str()) {
@@ -291,7 +296,7 @@ pub fn init_config() {
         gemini_backend,
         openai_backend,
         codex_reasoning_effort,
-        system_prompt_path: env::var("CONSULT_LLM_SYSTEM_PROMPT_PATH").ok(),
+        system_prompt_path: env_non_empty("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
         allowed_models: enabled_models.clone(),
     });
 
