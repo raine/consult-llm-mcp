@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+bump="${1:-}"
+
+if [[ -z "$bump" ]]; then
+	echo "usage: scripts/publish <patch|minor|major>" >&2
+	exit 1
+fi
+
+if [[ "$bump" != "patch" && "$bump" != "minor" && "$bump" != "major" ]]; then
+	echo "error: bump must be patch, minor, or major (got: $bump)" >&2
+	exit 1
+fi
+
+# Pre-flight checks
+echo "Checking npm auth..."
+npm whoami
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	echo "error: working tree has uncommitted changes" >&2
+	exit 1
+fi
+
+# Non-mutating checks
+echo "Running checks..."
+cargo clippy --workspace --all-targets -- -D clippy::all
+cargo test --workspace
+
+# Bump version without creating a commit or tag
+npm version "$bump" --no-git-tag-version
+VERSION=$(node -p "require('./package.json').version")
+
+# Sync version to Cargo.toml
+sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+cargo check --quiet 2>/dev/null # update Cargo.lock
+
+# Cross-compile binaries
+echo "Building aarch64-apple-darwin..."
+cargo build --release --target aarch64-apple-darwin
+
+echo "Building x86_64-apple-darwin..."
+cargo build --release --target x86_64-apple-darwin
+
+echo "Building x86_64-unknown-linux-gnu..."
+cargo zigbuild --release --target x86_64-unknown-linux-gnu
+
+# Stage for publishing
+echo "Staging release..."
+STAGE_DIR="target/npm-package"
+rm -rf "$STAGE_DIR"
+mkdir -p "$STAGE_DIR"
+
+cp package.json README.md CHANGELOG.md LICENSE run.sh "$STAGE_DIR/"
+chmod +x "$STAGE_DIR/run.sh"
+
+cp target/aarch64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-arm64"
+cp target/x86_64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-x64"
+cp target/x86_64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-x64"
+chmod +x "$STAGE_DIR"/consult-llm-mcp-*
+
+# Publish from staging directory
+echo "Publishing v${VERSION} to npm..."
+(cd "$STAGE_DIR" && npm publish)
+
+# Commit and tag only after successful publish
+git add package.json Cargo.toml Cargo.lock
+git commit -m "$(cat <<EOF
+$VERSION
+EOF
+)"
+git tag "v$VERSION"
+git push
+git push --tags
+
+echo "Published v${VERSION}"

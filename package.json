@@ -1,0 +1,28 @@
+{
+  "name": "consult-llm-mcp",
+  "version": "2.5.0",
+  "description": "MCP server for consulting powerful AI models",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/raine/consult-llm-mcp.git"
+  },
+  "homepage": "https://github.com/raine/consult-llm-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/raine/consult-llm-mcp/issues"
+  },
+  "license": "MIT",
+  "bin": {
+    "consult-llm-mcp": "./run.sh"
+  },
+  "files": [
+    "run.sh",
+    "consult-llm-mcp-darwin-arm64",
+    "consult-llm-mcp-darwin-x64",
+    "consult-llm-mcp-linux-x64",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "publish:dry": "npm publish --dry-run"
+  }
+}

@@ -2,3 +2,5 @@
 .workmux
 target/
 history
+consult-llm-mcp-darwin-*
+consult-llm-mcp-linux-*
