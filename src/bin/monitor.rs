@@ -439,7 +439,7 @@ fn main() -> io::Result<()> {
 
     let poll_interval = Duration::from_millis(500);
     let mut last_poll = std::time::Instant::now();
-    let render_interval = Duration::from_millis(200);
+    let render_interval = Duration::from_millis(100);
 
     loop {
         guard.terminal.draw(|frame| render(frame, &state))?;
