@@ -52,3 +52,7 @@ install:
 # Run the application
 run *ARGS:
     cargo run -- "$@"
+
+# Run the TUI monitor
+monitor:
+    cargo run --bin consult-llm-monitor
