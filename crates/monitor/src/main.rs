@@ -603,7 +603,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                         ),
                         Line::styled(status.to_string(), Style::default().fg(status_color)),
                         consult_cell,
-                        Line::styled(elapsed_str, Style::default().fg(YELLOW)),
+                        Line::styled(elapsed_str, Style::default().fg(DIM_WHITE)),
                     ])
                     .style(bg),
                 );
