@@ -125,6 +125,7 @@ impl LlmExecutor for ApiExecutor {
             .choices
             .first()
             .and_then(|c| c.message.content.clone())
+            .filter(|s| !s.is_empty())
             .ok_or_else(|| anyhow::anyhow!("No response from the model via API"))?;
 
         let usage = chat_resp.usage.map(|u| Usage {
