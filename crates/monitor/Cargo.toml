@@ -12,4 +12,5 @@ consult-llm-core = { path = "../core" }
 ratatui = "0.30"
 crossterm = "0.29"
 chrono = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }

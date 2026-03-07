@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, Seek, SeekFrom, Stdout};
 use std::path::Path;
@@ -14,7 +14,9 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table};
 
-use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent, is_pid_alive, sessions_dir};
+use consult_llm_core::monitoring::{
+    EventEnvelope, HISTORY_FILE, HistoryRecord, MonitorEvent, is_pid_alive, sessions_dir,
+};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 // ── Colors (matching claude-history aesthetic) ──────────────────────────
@@ -54,6 +56,8 @@ struct AppState {
     row_count: usize,
     tick: usize,
     mode: AppMode,
+    history: VecDeque<HistoryRecord>,
+    history_offset: u64,
 }
 
 struct ServerState {
@@ -130,6 +134,8 @@ impl AppState {
             row_count: 0,
             tick: 0,
             mode: AppMode::Table,
+            history: VecDeque::new(),
+            history_offset: 0,
         }
     }
 
@@ -234,8 +240,8 @@ impl AppState {
             let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            // Skip sidecar event files
-            if stem.ends_with(".events") {
+            // Skip sidecar event files and history file
+            if stem.ends_with(".events") || stem == "history" {
                 continue;
             }
             let server_id = stem.to_string();
@@ -279,6 +285,36 @@ impl AppState {
 
             if let Some(server) = self.servers.get_mut(&server_id) {
                 server.file_offset = new_offset;
+            }
+        }
+    }
+
+    fn poll_history(&mut self, dir: &Path) {
+        let path = dir.join(HISTORY_FILE);
+        let Ok(file) = File::open(&path) else {
+            return;
+        };
+        let mut reader = BufReader::new(file);
+        let _ = reader.seek(SeekFrom::Start(self.history_offset));
+
+        let mut buf = String::new();
+        loop {
+            buf.clear();
+            match reader.read_line(&mut buf) {
+                Ok(0) => break,
+                Ok(bytes_read) => {
+                    if !buf.ends_with('\n') {
+                        break;
+                    }
+                    self.history_offset += bytes_read as u64;
+                    if let Ok(record) = serde_json::from_str::<HistoryRecord>(buf.trim()) {
+                        self.history.push_front(record);
+                        if self.history.len() > 100 {
+                            self.history.pop_back();
+                        }
+                    }
+                }
+                Err(_) => break,
             }
         }
     }
@@ -455,14 +491,16 @@ fn render(frame: &mut ratatui::Frame, state: &AppState) {
 fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
-        Constraint::Min(3),
+        Constraint::Min(5),
+        Constraint::Min(8),
         Constraint::Length(1),
     ])
     .split(area);
 
     render_header(frame, chunks[0], state);
     render_table(frame, chunks[1], state);
-    render_status_bar(frame, chunks[2]);
+    render_history_table(frame, chunks[2], state);
+    render_status_bar(frame, chunks[3]);
 }
 
 fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
@@ -672,7 +710,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let table = Table::new(
         rows,
         [
-            Constraint::Length(10),
+            Constraint::Min(14),
             Constraint::Length(7),
             Constraint::Length(8),
             Constraint::Min(20),
@@ -810,6 +848,112 @@ fn render_detail_view(
     );
 }
 
+fn format_relative_time(ts: &str, now: DateTime<Utc>) -> String {
+    let Ok(parsed) = DateTime::parse_from_rfc3339(ts) else {
+        return "—".to_string();
+    };
+    let secs = now
+        .signed_duration_since(parsed.with_timezone(&Utc))
+        .num_seconds()
+        .max(0);
+
+    if secs < 10 {
+        "just now".to_string()
+    } else if secs < 60 {
+        format!("{}s ago", secs)
+    } else if secs < 3600 {
+        format!("{}m ago", secs / 60)
+    } else if secs < 86400 {
+        format!("{}h ago", secs / 3600)
+    } else {
+        format!("{}d ago", secs / 86400)
+    }
+}
+
+fn format_tokens(tokens_in: Option<u64>, tokens_out: Option<u64>) -> String {
+    match (tokens_in, tokens_out) {
+        (Some(i), Some(o)) => {
+            format!("{}/{}", format_token_count(i), format_token_count(o))
+        }
+        _ => "\u{2014}".to_string(),
+    }
+}
+
+fn format_token_count(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k", n as f64 / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
+    let header = Row::new(vec![
+        "Time", "Project", "Model", "Backend", "Duration", "Tokens", "✓",
+    ])
+    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
+    .bottom_margin(1);
+
+    let now = Utc::now();
+    let rows: Vec<Row> = state
+        .history
+        .iter()
+        .map(|record| {
+            let status_icon = if record.success {
+                "\u{2713}"
+            } else {
+                "\u{2717}"
+            };
+            let status_color = if record.success { GREEN } else { RED };
+            let duration_str = format!("{:.1}s", record.duration_ms as f64 / 1000.0);
+
+            Row::new(vec![
+                Span::styled(
+                    format_relative_time(&record.ts, now),
+                    Style::default().fg(DIM),
+                ),
+                Span::styled(record.project.clone(), Style::default().fg(DIM_WHITE)),
+                Span::styled(record.model.clone(), Style::default().fg(DIM_WHITE)),
+                Span::styled(record.backend.clone(), Style::default().fg(DIM)),
+                Span::styled(duration_str, Style::default().fg(DIM_WHITE)),
+                Span::styled(
+                    format_tokens(record.tokens_in, record.tokens_out),
+                    Style::default().fg(DIM),
+                ),
+                Span::styled(status_icon.to_string(), Style::default().fg(status_color)),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [
+            Constraint::Length(10),
+            Constraint::Min(14),
+            Constraint::Length(14),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(10),
+            Constraint::Length(3),
+        ],
+    )
+    .header(header)
+    .block(
+        Block::default()
+            .title(Line::from(vec![Span::styled(
+                " History ",
+                Style::default().fg(DIM_WHITE),
+            )]))
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(SEPARATOR)),
+    );
+
+    frame.render_widget(table, area);
+}
+
 fn render_status_bar(frame: &mut ratatui::Frame, area: Rect) {
     let bar = Line::from(vec![
         Span::styled(" j/k", Style::default().fg(TEAL)),
@@ -838,6 +982,7 @@ fn main() -> io::Result<()> {
     let _ = fs::create_dir_all(&dir);
 
     state.poll_files(&dir);
+    state.poll_history(&dir);
     state.check_liveness();
     state.prune_finished(&dir);
 
@@ -928,6 +1073,7 @@ fn main() -> io::Result<()> {
 
         if last_poll.elapsed() >= poll_interval {
             state.poll_files(&dir);
+            state.poll_history(&dir);
             state.check_liveness();
             state.prune_finished(&dir);
             state.poll_detail_events(&dir);

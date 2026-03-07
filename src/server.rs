@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::clipboard::copy_to_clipboard;
 use crate::config::registry;
+use crate::executors::types::Usage;
 use crate::file::process_files;
 use crate::git::generate_git_diff;
 use crate::llm::ExecutorProvider;
@@ -89,23 +90,43 @@ impl ConsultServer {
             consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
                 id: consultation_id.clone(),
                 model: model.clone(),
-                backend: backend_name,
+                backend: backend_name.clone(),
             },
         );
+
+        let project = std::env::current_dir()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+            .unwrap_or_default();
 
         let start_time = std::time::Instant::now();
         let result = self
             .run_consult(args, &model, executor, &consultation_id)
             .await;
 
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
         match &result {
-            Ok(_) => {
+            Ok((_, usage)) => {
                 consult_llm_core::monitoring::emit(
                     consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
-                        duration_ms: start_time.elapsed().as_millis() as u64,
+                        duration_ms,
                         success: true,
                         error: None,
+                    },
+                );
+                consult_llm_core::monitoring::append_history(
+                    &consult_llm_core::monitoring::HistoryRecord {
+                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        project: project.clone(),
+                        model: model.clone(),
+                        backend: backend_name.clone(),
+                        duration_ms,
+                        success: true,
+                        error: None,
+                        tokens_in: usage.as_ref().map(|u| u.prompt_tokens),
+                        tokens_out: usage.as_ref().map(|u| u.completion_tokens),
                     },
                 );
             }
@@ -113,15 +134,28 @@ impl ConsultServer {
                 consult_llm_core::monitoring::emit(
                     consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
-                        duration_ms: start_time.elapsed().as_millis() as u64,
+                        duration_ms,
                         success: false,
                         error: Some(e.to_string()),
+                    },
+                );
+                consult_llm_core::monitoring::append_history(
+                    &consult_llm_core::monitoring::HistoryRecord {
+                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        project: project.clone(),
+                        model: model.clone(),
+                        backend: backend_name.clone(),
+                        duration_ms,
+                        success: false,
+                        error: Some(e.to_string()),
+                        tokens_in: None,
+                        tokens_out: None,
                     },
                 );
             }
         }
 
-        result
+        result.map(|(response, _)| response)
     }
 
     async fn run_consult(
@@ -130,7 +164,7 @@ impl ConsultServer {
         model: &str,
         executor: Arc<dyn crate::executors::types::LlmExecutor>,
         consultation_id: &str,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<(String, Option<Usage>)> {
         let (prompt, file_paths) = if args.web_mode || !executor.capabilities().supports_file_refs {
             // API mode or web mode: inline file contents
             let context_files = args
@@ -194,7 +228,7 @@ impl ConsultServer {
                     msg.push_str(&format!("  - {}\n", fp.display()));
                 }
             }
-            return Ok(msg);
+            return Ok((msg, None));
         }
 
         let result = query_llm(
@@ -210,10 +244,11 @@ impl ConsultServer {
 
         log_response(model, &result.response, &result.cost_info);
 
-        Ok(match result.thread_id {
+        let response = match result.thread_id {
             Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),
             None => result.response,
-        })
+        };
+        Ok((response, result.usage))
     }
 }
 

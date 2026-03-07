@@ -70,6 +70,36 @@ pub struct EventEnvelope {
     pub event: MonitorEvent,
 }
 
+pub const HISTORY_FILE: &str = "history.jsonl";
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct HistoryRecord {
+    pub ts: String,
+    pub project: String,
+    pub model: String,
+    pub backend: String,
+    pub duration_ms: u64,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_in: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tokens_out: Option<u64>,
+}
+
+pub fn append_history(record: &HistoryRecord) {
+    let dir = sessions_dir();
+    let _ = create_dir_all(&dir);
+    let path = dir.join(HISTORY_FILE);
+    if let Ok(file) = OpenOptions::new().create(true).append(true).open(path)
+        && let Ok(line) = serde_json::to_string(record)
+    {
+        let mut writer = BufWriter::new(file);
+        let _ = writeln!(writer, "{line}");
+    }
+}
+
 pub fn sessions_dir() -> PathBuf {
     let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = dirs::home_dir().unwrap_or_default();
@@ -143,7 +173,9 @@ fn cleanup_orphans(dir: &Path) {
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             continue;
         };
-        if stem.ends_with(".events") {
+        if stem == "history" {
+            continue; // Skip persistent history file
+        } else if stem.ends_with(".events") {
             sidecar_files.push(path);
         } else {
             server_files.push(path);

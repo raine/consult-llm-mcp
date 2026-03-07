@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::executors::types::LlmExecutor;
+use crate::executors::types::{LlmExecutor, Usage};
 use crate::llm_cost::calculate_cost;
 use crate::schema::TaskMode;
 use crate::system_prompt::get_system_prompt;
@@ -10,6 +10,7 @@ pub struct QueryResult {
     pub response: String,
     pub cost_info: String,
     pub thread_id: Option<String>,
+    pub usage: Option<Usage>,
 }
 
 pub async fn query_llm(
@@ -37,7 +38,7 @@ pub async fn query_llm(
         anyhow::bail!("No response from the model");
     }
 
-    let cost_info = match result.usage {
+    let cost_info = match &result.usage {
         Some(usage) => {
             let cost = calculate_cost(usage.prompt_tokens, usage.completion_tokens, model);
             format!(
@@ -56,5 +57,6 @@ pub async fn query_llm(
         response: result.response,
         cost_info,
         thread_id: result.thread_id,
+        usage: result.usage,
     })
 }

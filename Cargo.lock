@@ -314,6 +314,7 @@ dependencies = [
  "consult-llm-core",
  "crossterm",
  "ratatui",
+ "serde",
  "serde_json",
 ]
 
