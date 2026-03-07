@@ -82,6 +82,52 @@ impl ConsultServer {
             );
         }
 
+        let consultation_id = uuid::Uuid::new_v4().simple().to_string();
+        let backend_name = executor.backend_name().to_string();
+
+        consult_llm_mcp::monitoring::emit(
+            consult_llm_mcp::monitoring::MonitorEvent::ConsultStarted {
+                id: consultation_id.clone(),
+                model: model.clone(),
+                backend: backend_name,
+            },
+        );
+
+        let start_time = std::time::Instant::now();
+        let result = self.run_consult(args, &model, executor).await;
+
+        match &result {
+            Ok(_) => {
+                consult_llm_mcp::monitoring::emit(
+                    consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
+                        id: consultation_id,
+                        duration_ms: start_time.elapsed().as_millis(),
+                        success: true,
+                        error: None,
+                    },
+                );
+            }
+            Err(e) => {
+                consult_llm_mcp::monitoring::emit(
+                    consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
+                        id: consultation_id,
+                        duration_ms: start_time.elapsed().as_millis(),
+                        success: false,
+                        error: Some(e.to_string()),
+                    },
+                );
+            }
+        }
+
+        result
+    }
+
+    async fn run_consult(
+        &self,
+        args: ConsultLlmArgs,
+        model: &str,
+        executor: Arc<dyn crate::executors::types::LlmExecutor>,
+    ) -> anyhow::Result<String> {
         let (prompt, file_paths) = if args.web_mode || !executor.capabilities().supports_file_refs {
             // API mode or web mode: inline file contents
             let context_files = args
@@ -128,7 +174,7 @@ impl ConsultServer {
             (prompt, resolved)
         };
 
-        log_prompt(&model, &prompt);
+        log_prompt(model, &prompt);
 
         if args.web_mode {
             let system_prompt = get_system_prompt(executor.capabilities().is_cli, args.task_mode);
@@ -150,15 +196,15 @@ impl ConsultServer {
 
         let result = query_llm(
             &prompt,
-            &model,
-            &self.executor_provider.get_executor(&model)?,
+            model,
+            &executor,
             file_paths.as_deref(),
             args.thread_id.as_deref(),
             args.task_mode,
         )
         .await?;
 
-        log_response(&model, &result.response, &result.cost_info);
+        log_response(model, &result.response, &result.cost_info);
 
         Ok(match result.thread_id {
             Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),

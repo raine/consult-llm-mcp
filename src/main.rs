@@ -21,6 +21,8 @@ mod schema;
 mod server;
 mod system_prompt;
 
+use consult_llm_mcp::monitoring;
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GIT_HASH: &str = env!("GIT_HASH");
 
@@ -46,6 +48,12 @@ async fn main() {
     }
 
     config::init_config();
+
+    monitoring::init();
+    monitoring::emit(monitoring::MonitorEvent::ServerStarted {
+        version: format!("{VERSION}+{GIT_HASH}"),
+        pid: std::process::id(),
+    });
 
     let server_version = format!("{VERSION}+{GIT_HASH}");
     logger::log_server_start(&server_version);
@@ -100,5 +108,18 @@ async fn main() {
             .await
             .expect("Failed to start MCP server")
     };
-    service.waiting().await.expect("MCP server error");
+
+    tokio::select! {
+        res = service.waiting() => {
+            if let Err(e) = res {
+                logger::log_to_file(&format!("MCP server error: {e}"));
+            }
+        }
+        _ = tokio::signal::ctrl_c() => {
+            logger::log_to_file("Received SIGINT, shutting down");
+        }
+    }
+
+    monitoring::emit(monitoring::MonitorEvent::ServerStopped);
+    monitoring::cleanup();
 }
