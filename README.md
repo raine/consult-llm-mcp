@@ -480,6 +480,11 @@ See the "Using web mode..." example above for a concrete transcript.
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
   - Useful for project-specific prompts
+- `MCP_DEBUG_STDIN` - Log raw JSON-RPC messages received on stdin (optional)
+  - Set to `1` to enable
+  - Logs every message as `RAW RECV` entries and poll timing gaps as
+    `STDIN POLL` entries in `mcp.log`
+  - Useful for debugging transport-level issues
 
 ### Custom system prompt
 

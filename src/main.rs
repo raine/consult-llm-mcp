@@ -85,11 +85,20 @@ async fn main() {
     let executor_provider = Arc::new(llm::ExecutorProvider::new());
     let server = server::ConsultServer::new(executor_provider);
 
-    let stdin = logging_reader::LoggingReader::new(tokio::io::stdin());
-    let stdout = tokio::io::stdout();
-    let service = server
-        .serve((stdin, stdout))
-        .await
-        .expect("Failed to start MCP server");
+    let service = if std::env::var("MCP_DEBUG_STDIN").is_ok() {
+        logger::log_to_file("MCP_DEBUG_STDIN enabled");
+        let stdin = logging_reader::LoggingReader::new(tokio::io::stdin());
+        let stdout = tokio::io::stdout();
+        server
+            .serve((stdin, stdout))
+            .await
+            .expect("Failed to start MCP server")
+    } else {
+        let transport = rmcp::transport::io::stdio();
+        server
+            .serve(transport)
+            .await
+            .expect("Failed to start MCP server")
+    };
     service.waiting().await.expect("MCP server error");
 }
