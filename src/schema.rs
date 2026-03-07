@@ -99,11 +99,11 @@ pub fn consult_llm_schema() -> Map<String, Value> {
                         "description": "Git reference to compare against (e.g., \"HEAD\", \"main\", commit hash)"
                     }
                 },
-                "required": ["files"],
+                "required": ["files", "base_ref"],
                 "description": "Generate git diff output to include as context. Shows uncommitted changes by default."
             }
         },
-        "required": ["prompt"]
+        "required": ["prompt", "model", "task_mode", "web_mode"]
     }))
     .expect("valid schema JSON")
 }
