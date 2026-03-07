@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Test harness for consult-llm-monitor TUI
+# Simulates multiple MCP server instances writing NDJSON event files
+# Run this in one terminal, then launch `cargo run --bin consult-llm-monitor` in another
+
+state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
+sessions_dir="$state_home/consult-llm-mcp/sessions"
+mkdir -p "$sessions_dir"
+
+harness_pid=$$
+manifest=$(mktemp)
+
+cleanup() {
+	# Only the parent process should clean up
+	[[ -f "$manifest" ]] || return
+	echo ""
+	echo "cleaning up session files..."
+	jobs -p 2>/dev/null | xargs kill 2>/dev/null || true
+	wait 2>/dev/null || true
+	while IFS= read -r f; do
+		rm -f "$f"
+	done <"$manifest"
+	rm -f "$manifest"
+}
+trap cleanup EXIT INT TERM
+
+ts() {
+	python3 -c 'from datetime import datetime,timezone;print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]+"Z")'
+}
+
+new_uuid() {
+	uuidgen | tr '[:upper:]' '[:lower:]'
+}
+
+new_server() {
+	local id file
+	id=$(new_uuid)
+	file="${sessions_dir}/${id}.jsonl"
+	echo "$file" >>"$manifest"
+	echo "$file"
+}
+
+emit() {
+	local file="$1"
+	shift
+	echo "$@" >>"$file"
+}
+
+emit_server_started() {
+	local file="$1"
+	emit "$file" "{\"ts\":\"$(ts)\",\"type\":\"server_started\",\"version\":\"2.5.5\",\"pid\":$harness_pid}"
+}
+
+emit_consult_started() {
+	local file="$1" id="$2" model="$3" backend="$4"
+	emit "$file" "{\"ts\":\"$(ts)\",\"type\":\"consult_started\",\"id\":\"$id\",\"model\":\"$model\",\"backend\":\"$backend\"}"
+}
+
+emit_consult_finished_ok() {
+	local file="$1" id="$2" duration_ms="$3"
+	emit "$file" "{\"ts\":\"$(ts)\",\"type\":\"consult_finished\",\"id\":\"$id\",\"duration_ms\":$duration_ms,\"success\":true}"
+}
+
+emit_consult_finished_err() {
+	local file="$1" id="$2" duration_ms="$3" error="$4"
+	emit "$file" "{\"ts\":\"$(ts)\",\"type\":\"consult_finished\",\"id\":\"$id\",\"duration_ms\":$duration_ms,\"success\":false,\"error\":\"$error\"}"
+}
+
+emit_server_stopped() {
+	local file="$1"
+	emit "$file" "{\"ts\":\"$(ts)\",\"type\":\"server_stopped\"}"
+}
+
+# ── Scenario A: Gemini consultations, all succeed ────────────────────────
+
+scenario_a() {
+	local file
+	file=$(new_server)
+	echo "[A] gemini server started"
+	emit_server_started "$file"
+	sleep 1
+
+	local c1 c2 c3
+	c1=$(new_uuid)
+	emit_consult_started "$file" "$c1" "gemini-3.1-pro-preview" "gemini_cli"
+	echo "[A] consulting gemini-3.1-pro-preview..."
+	sleep 3
+	emit_consult_finished_ok "$file" "$c1" 3200
+	echo "[A] gemini consult 1 done"
+	sleep 1
+
+	c2=$(new_uuid)
+	emit_consult_started "$file" "$c2" "gemini-2.5-flash" "gemini_cli"
+	echo "[A] consulting gemini-2.5-flash..."
+	sleep 2
+	emit_consult_finished_ok "$file" "$c2" 1800
+	echo "[A] gemini consult 2 done"
+	sleep 1
+
+	c3=$(new_uuid)
+	emit_consult_started "$file" "$c3" "gemini-3.1-pro-preview" "gemini_cli"
+	echo "[A] consulting gemini-3.1-pro-preview..."
+	sleep 4
+	emit_consult_finished_ok "$file" "$c3" 4100
+	echo "[A] gemini consult 3 done"
+
+	sleep 1
+	emit_server_stopped "$file"
+	echo "[A] server stopped"
+}
+
+# ── Scenario B: Codex consultations, first one fails ─────────────────────
+
+scenario_b() {
+	local file
+	file=$(new_server)
+	sleep 2 # stagger start
+	echo "[B] codex server started"
+	emit_server_started "$file"
+	sleep 1
+
+	local c1 c2
+	c1=$(new_uuid)
+	emit_consult_started "$file" "$c1" "gpt-5.4" "codex_cli"
+	echo "[B] consulting gpt-5.4 (will fail)..."
+	sleep 5
+	emit_consult_finished_err "$file" "$c1" 5000 "timeout waiting for codex cli"
+	echo "[B] codex consult 1 failed"
+	sleep 1
+
+	c2=$(new_uuid)
+	emit_consult_started "$file" "$c2" "gpt-5.4" "codex_cli"
+	echo "[B] consulting gpt-5.4 (retry)..."
+	sleep 3
+	emit_consult_finished_ok "$file" "$c2" 2900
+	echo "[B] codex consult 2 done"
+
+	sleep 1
+	emit_server_stopped "$file"
+	echo "[B] server stopped"
+}
+
+# ── Scenario C: Mixed API consultations, overlapping, one rate limited ───
+
+scenario_c() {
+	local file
+	file=$(new_server)
+	sleep 4 # stagger start
+	echo "[C] api server started"
+	emit_server_started "$file"
+	sleep 1
+
+	local c1 c2 c3
+	c1=$(new_uuid)
+	c2=$(new_uuid)
+
+	# Two overlapping consults
+	emit_consult_started "$file" "$c1" "gpt-5.4" "openai_api"
+	echo "[C] consulting gpt-5.4..."
+	sleep 1
+	emit_consult_started "$file" "$c2" "deepseek-reasoner" "openai_api"
+	echo "[C] consulting deepseek-reasoner (concurrent)..."
+
+	sleep 3
+	emit_consult_finished_ok "$file" "$c1" 4100
+	echo "[C] gpt-5.4 done"
+	sleep 2
+	emit_consult_finished_err "$file" "$c2" 6200 "http 429 rate limit exceeded"
+	echo "[C] deepseek-reasoner rate limited"
+	sleep 1
+
+	c3=$(new_uuid)
+	emit_consult_started "$file" "$c3" "gpt-5.4" "openai_api"
+	echo "[C] consulting gpt-5.4..."
+	sleep 2
+	emit_consult_finished_ok "$file" "$c3" 2300
+	echo "[C] gpt-5.4 done"
+
+	sleep 1
+	emit_server_stopped "$file"
+	echo "[C] server stopped"
+}
+
+# ── Scenario D: Cursor CLI, short burst then idle ────────────────────────
+
+scenario_d() {
+	local file
+	file=$(new_server)
+	sleep 6 # stagger start
+	echo "[D] cursor server started"
+	emit_server_started "$file"
+	sleep 1
+
+	local c1 c2
+	c1=$(new_uuid)
+	emit_consult_started "$file" "$c1" "claude-sonnet-4-6" "cursor_cli"
+	echo "[D] consulting claude-sonnet-4-6..."
+	sleep 2
+	emit_consult_finished_ok "$file" "$c1" 1900
+	echo "[D] cursor consult 1 done"
+	sleep 1
+
+	c2=$(new_uuid)
+	emit_consult_started "$file" "$c2" "claude-sonnet-4-6" "cursor_cli"
+	echo "[D] consulting claude-sonnet-4-6..."
+	sleep 1
+	emit_consult_finished_ok "$file" "$c2" 1200
+	echo "[D] cursor consult 2 done"
+
+	# Idle period before stopping
+	echo "[D] idle..."
+	sleep 5
+
+	emit_server_stopped "$file"
+	echo "[D] server stopped"
+}
+
+# ── Run all scenarios concurrently ───────────────────────────────────────
+
+echo "consult-llm-monitor test harness"
+echo "sessions dir: $sessions_dir"
+echo "harness pid:  $harness_pid"
+echo ""
+echo "launch the TUI in another terminal:"
+echo "  cargo run --bin consult-llm-monitor"
+echo ""
+echo "press ctrl-c to stop early"
+echo ""
+
+scenario_a &
+scenario_b &
+scenario_c &
+scenario_d &
+
+wait
+echo ""
+echo "all scenarios completed"
