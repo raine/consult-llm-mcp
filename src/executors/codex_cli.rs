@@ -75,6 +75,10 @@ impl LlmExecutor for CodexCliExecutor {
         &self.capabilities
     }
 
+    fn backend_name(&self) -> &'static str {
+        "codex_cli"
+    }
+
     async fn execute(
         &self,
         prompt: &str,

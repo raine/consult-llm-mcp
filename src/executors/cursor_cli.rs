@@ -78,6 +78,10 @@ impl LlmExecutor for CursorCliExecutor {
         &self.capabilities
     }
 
+    fn backend_name(&self) -> &'static str {
+        "cursor_cli"
+    }
+
     async fn execute(
         &self,
         prompt: &str,

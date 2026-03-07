@@ -67,6 +67,10 @@ impl LlmExecutor for ApiExecutor {
         &self.capabilities
     }
 
+    fn backend_name(&self) -> &'static str {
+        "api"
+    }
+
     async fn execute(
         &self,
         prompt: &str,

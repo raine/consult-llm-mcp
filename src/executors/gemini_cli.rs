@@ -60,6 +60,10 @@ impl LlmExecutor for GeminiCliExecutor {
         &self.capabilities
     }
 
+    fn backend_name(&self) -> &'static str {
+        "gemini_cli"
+    }
+
     async fn execute(
         &self,
         prompt: &str,
