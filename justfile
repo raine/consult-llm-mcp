@@ -41,6 +41,14 @@ build:
 test:
     cargo test --workspace
 
+# Install debug binary globally via symlink
+dev-install:
+    cargo build && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp
+
+# Install release binary globally
+install:
+    cargo install --path .
+
 # Run the application
 run *ARGS:
     cargo run -- "$@"
