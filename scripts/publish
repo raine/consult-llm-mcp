@@ -148,11 +148,10 @@ fs.writeFileSync(process.env.ROOT_DIR + "/package.json", JSON.stringify(pkg, nul
 echo "Validating root package..."
 (cd "$root_dir" && npm pack --dry-run)
 
-# Prompt for OTP once (use automation token to skip this)
-OTP_FLAG=""
-read -rp "npm OTP (leave empty if using automation token): " OTP
-if [ -n "$OTP" ]; then
-	OTP_FLAG="--otp=$OTP"
+# Use automation token if available (no 2FA needed)
+if [ -n "${CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN:-}" ]; then
+	export NPM_CONFIG_TOKEN="$CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN"
+	echo "Using CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN for auth"
 fi
 
 NPM_TAG_FLAG=""
@@ -170,7 +169,7 @@ for plat in "${platforms[@]}"; do
 		echo "$pkg_name@$VERSION already published, skipping..."
 	else
 		echo "Publishing $pkg_name@$VERSION..."
-		(cd "$pkg_dir" && npm publish $OTP_FLAG $NPM_TAG_FLAG)
+		(cd "$pkg_dir" && npm publish $NPM_TAG_FLAG)
 	fi
 done
 
@@ -179,7 +178,7 @@ if npm view "consult-llm-mcp@$VERSION" version >/dev/null 2>&1; then
 	echo "consult-llm-mcp@$VERSION already published, skipping..."
 else
 	echo "Publishing consult-llm-mcp@$VERSION..."
-	(cd "$root_dir" && npm publish $OTP_FLAG $NPM_TAG_FLAG)
+	(cd "$root_dir" && npm publish $NPM_TAG_FLAG)
 fi
 
 if [[ "$BETA" == true ]]; then
