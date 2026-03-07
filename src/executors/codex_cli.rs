@@ -113,31 +113,17 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
     }
 }
 
-/// Extract meaningful command from Codex's `/bin/zsh -lc "actual command"` wrapper
+/// Extract the inner command from Codex's `/bin/zsh -lc "actual command"` wrapper.
 fn extract_shell_command(cmd: &str) -> String {
-    // Try to extract the inner command from /bin/zsh -lc "..."
     if let Some(start) = cmd.find("-lc") {
         let rest = &cmd[start + 3..].trim_start();
-        // Strip surrounding quotes
-        let inner = rest
-            .trim_start_matches('"')
+        rest.trim_start_matches('"')
             .trim_start_matches('\'')
             .trim_end_matches('"')
-            .trim_end_matches('\'');
-        // Take first word or truncate long commands
-        let short = inner.split_whitespace().next().unwrap_or(inner);
-        if short.len() > 30 {
-            format!("{}...", &short[..27])
-        } else {
-            short.to_string()
-        }
+            .trim_end_matches('\'')
+            .to_string()
     } else {
-        let short = cmd.split_whitespace().last().unwrap_or(cmd);
-        if short.len() > 30 {
-            format!("{}...", &short[..27])
-        } else {
-            short.to_string()
-        }
+        cmd.to_string()
     }
 }
 
@@ -301,12 +287,16 @@ mod tests {
     fn test_extract_shell_command() {
         assert_eq!(
             extract_shell_command(r#"/bin/zsh -lc "wc -l src/server.rs""#),
-            "wc"
+            "wc -l src/server.rs"
         );
         assert_eq!(
             extract_shell_command(r#"/bin/zsh -lc 'rg --files src -g *.rs'"#),
-            "rg"
+            "rg --files src -g *.rs"
         );
-        assert_eq!(extract_shell_command("echo hello"), "hello");
+        assert_eq!(extract_shell_command("echo hello"), "echo hello");
+        assert_eq!(
+            extract_shell_command(r#"/bin/zsh -lc "RUSTC_WRAPPER=sccache cargo check""#),
+            "RUSTC_WRAPPER=sccache cargo check"
+        );
     }
 }
