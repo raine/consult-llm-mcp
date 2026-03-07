@@ -24,7 +24,7 @@ cleanup() {
 	done <"$manifest"
 	rm -f "$manifest"
 }
-trap cleanup EXIT INT TERM
+trap cleanup INT TERM
 
 ts() {
 	python3 -c 'from datetime import datetime,timezone;print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3]+"Z")'
@@ -157,10 +157,10 @@ scenario_c() {
 	c2=$(new_uuid)
 
 	# Two overlapping consults
-	emit_consult_started "$file" "$c1" "gpt-5.4" "openai_api"
+	emit_consult_started "$file" "$c1" "gpt-5.4" "api"
 	echo "[C] consulting gpt-5.4..."
 	sleep 1
-	emit_consult_started "$file" "$c2" "deepseek-reasoner" "openai_api"
+	emit_consult_started "$file" "$c2" "deepseek-reasoner" "api"
 	echo "[C] consulting deepseek-reasoner (concurrent)..."
 
 	sleep 3
@@ -172,7 +172,7 @@ scenario_c() {
 	sleep 1
 
 	c3=$(new_uuid)
-	emit_consult_started "$file" "$c3" "gpt-5.4" "openai_api"
+	emit_consult_started "$file" "$c3" "gpt-5.4" "api"
 	echo "[C] consulting gpt-5.4..."
 	sleep 2
 	emit_consult_finished_ok "$file" "$c3" 2300
@@ -237,3 +237,8 @@ scenario_d &
 wait
 echo ""
 echo "all scenarios completed"
+echo "session files left in place for TUI inspection"
+echo "press 'p' in the TUI to prune, or ctrl-c here to clean up"
+# Keep the script alive so the TUI sees the PID as alive
+# and so ctrl-c triggers the cleanup trap
+read -r -p ""
