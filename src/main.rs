@@ -16,6 +16,7 @@ mod llm_query;
 mod logger;
 mod models;
 mod prompt_builder;
+mod logging_reader;
 mod schema;
 mod server;
 mod system_prompt;
@@ -84,9 +85,10 @@ async fn main() {
     let executor_provider = Arc::new(llm::ExecutorProvider::new());
     let server = server::ConsultServer::new(executor_provider);
 
-    let transport = rmcp::transport::io::stdio();
+    let stdin = logging_reader::LoggingReader::new(tokio::io::stdin());
+    let stdout = tokio::io::stdout();
     let service = server
-        .serve(transport)
+        .serve((stdin, stdout))
         .await
         .expect("Failed to start MCP server");
     service.waiting().await.expect("MCP server error");
