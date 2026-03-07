@@ -101,7 +101,7 @@ impl ConsultServer {
                 consult_llm_mcp::monitoring::emit(
                     consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
-                        duration_ms: start_time.elapsed().as_millis(),
+                        duration_ms: start_time.elapsed().as_millis() as u64,
                         success: true,
                         error: None,
                     },
@@ -111,7 +111,7 @@ impl ConsultServer {
                 consult_llm_mcp::monitoring::emit(
                     consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
-                        duration_ms: start_time.elapsed().as_millis(),
+                        duration_ms: start_time.elapsed().as_millis() as u64,
                         success: false,
                         error: Some(e.to_string()),
                     },

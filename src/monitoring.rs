@@ -22,7 +22,7 @@ pub enum MonitorEvent {
     },
     ConsultFinished {
         id: String,
-        duration_ms: u128,
+        duration_ms: u64,
         success: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<String>,
@@ -137,5 +137,45 @@ pub fn emit(event: MonitorEvent) {
 pub fn cleanup() {
     if let Some(w) = WRITER.get() {
         w.remove_file();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_consult_finished() {
+        let line = r#"{"ts":"2026-03-07T13:15:11.693Z","type":"consult_finished","id":"abc","duration_ms":3200,"success":true}"#;
+        let result = serde_json::from_str::<EventEnvelope>(line);
+        match &result {
+            Ok(env) => println!("Parsed: {:?}", env),
+            Err(e) => println!("Error: {}", e),
+        }
+        assert!(
+            result.is_ok(),
+            "Failed to parse ConsultFinished: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn parse_all_event_types() {
+        let lines = vec![
+            r#"{"ts":"T","type":"server_started","version":"2.5.5","pid":12345}"#,
+            r#"{"ts":"T","type":"consult_started","id":"a","model":"gpt","backend":"api"}"#,
+            r#"{"ts":"T","type":"consult_finished","id":"a","duration_ms":3200,"success":true}"#,
+            r#"{"ts":"T","type":"consult_finished","id":"b","duration_ms":5000,"success":false,"error":"timeout"}"#,
+            r#"{"ts":"T","type":"server_stopped"}"#,
+        ];
+        for line in lines {
+            let result = serde_json::from_str::<EventEnvelope>(line);
+            assert!(
+                result.is_ok(),
+                "Failed to parse '{}': {:?}",
+                line,
+                result.err()
+            );
+        }
     }
 }
