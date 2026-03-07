@@ -41,6 +41,7 @@ pub fn parse_codex_jsonl(output: &str) -> (Option<String>, String) {
                 && let Some(item) = event.get("item")
                 && item.get("type").and_then(|t| t.as_str()) == Some("agent_message")
                 && let Some(text) = item.get("text").and_then(|t| t.as_str())
+                && !text.is_empty()
             {
                 messages.push(text.to_string());
             }
