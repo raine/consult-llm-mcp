@@ -14,6 +14,8 @@ pub enum MonitorEvent {
     ServerStarted {
         version: String,
         pid: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        project: Option<String>,
     },
     ConsultStarted {
         id: String,
@@ -141,7 +143,9 @@ fn cleanup_orphans(dir: &Path) {
         for line in reader.lines().map_while(Result::ok) {
             if let Ok(env) = serde_json::from_str::<EventEnvelope>(&line) {
                 match env.event {
-                    MonitorEvent::ServerStarted { pid: p, .. } => pid = Some(p),
+                    MonitorEvent::ServerStarted { pid: p, .. } => {
+                        pid = Some(p);
+                    }
                     MonitorEvent::ServerStopped => stopped = true,
                     _ => {}
                 }
@@ -192,7 +196,7 @@ mod tests {
     #[test]
     fn parse_all_event_types() {
         let lines = vec![
-            r#"{"ts":"T","type":"server_started","version":"2.5.5","pid":12345}"#,
+            r#"{"ts":"T","type":"server_started","version":"2.5.5","pid":12345,"project":"my-app"}"#,
             r#"{"ts":"T","type":"consult_started","id":"a","model":"gpt","backend":"api"}"#,
             r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"thinking"}}"#,
             r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"tool_use","tool":"read_file"}}"#,

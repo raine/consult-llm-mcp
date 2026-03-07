@@ -50,9 +50,13 @@ async fn main() {
     config::init_config();
 
     monitoring::init();
+    let project = std::env::current_dir()
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
     monitoring::emit(monitoring::MonitorEvent::ServerStarted {
         version: format!("{VERSION}+{GIT_HASH}"),
         pid: std::process::id(),
+        project,
     });
 
     let server_version = format!("{VERSION}+{GIT_HASH}");

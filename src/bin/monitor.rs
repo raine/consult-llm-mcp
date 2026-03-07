@@ -41,6 +41,7 @@ struct ServerState {
     server_id: String,
     pid: u32,
     _version: String,
+    project: Option<String>,
     stopped: bool,
     dead: bool,
     active_consults: HashMap<String, ActiveConsult>,
@@ -95,7 +96,11 @@ impl AppState {
 
     fn process_event(&mut self, server_id: &str, envelope: &EventEnvelope) {
         match &envelope.event {
-            MonitorEvent::ServerStarted { version, pid } => {
+            MonitorEvent::ServerStarted {
+                version,
+                pid,
+                project,
+            } => {
                 if !self.server_order.contains(&server_id.to_string()) {
                     self.server_order.push(server_id.to_string());
                 }
@@ -105,6 +110,7 @@ impl AppState {
                         server_id: server_id.to_string(),
                         pid: *pid,
                         _version: version.clone(),
+                        project: project.clone(),
                         stopped: false,
                         dead: false,
                         active_consults: HashMap::new(),
@@ -297,7 +303,7 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 }
 
 fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
-    let header = Row::new(vec!["Server", "PID", "Status", "Consultation", "Elapsed"])
+    let header = Row::new(vec!["Project", "PID", "Status", "Consultation", "Elapsed"])
         .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
         .bottom_margin(1);
 
@@ -309,7 +315,10 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             continue;
         };
 
-        let short_id = &server.server_id[..8.min(server.server_id.len())];
+        let display_name = server
+            .project
+            .as_deref()
+            .unwrap_or(&server.server_id[..8.min(server.server_id.len())]);
         let pid = server.pid.to_string();
 
         let (status, status_color) = if server.dead {
@@ -337,7 +346,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                 "\u{2014}".to_string()
             };
             rows.push(Row::new(vec![
-                Span::styled(short_id.to_string(), Style::default().fg(DIM_WHITE)),
+                Span::styled(display_name.to_string(), Style::default().fg(DIM_WHITE)),
                 Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
                 Span::styled(status.to_string(), Style::default().fg(status_color)),
                 Span::styled(hist, Style::default().fg(DIM_WHITE)),
@@ -354,7 +363,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                 rows.push(Row::new(vec![
                     Span::styled(
                         if i == 0 {
-                            short_id.to_string()
+                            display_name.to_string()
                         } else {
                             String::new()
                         },
