@@ -758,50 +758,46 @@ forth before synthesizing and implementing. See
 
 To work on the MCP server locally and use your development version:
 
-1. Clone the repository and install dependencies:
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/raine/consult-llm-mcp.git
    cd consult-llm-mcp
-   npm install
    ```
 
-2. Build the project:
+2. Build and test:
 
    ```bash
-   npm run build
+   cargo build
+   cargo test
+   just check  # format, lint, test
    ```
 
-3. Install globally from the local directory:
-
+3. Add the MCP server to Claude Code using your local build:
    ```bash
-   npm link
+   claude mcp add consult-llm -- /path/to/consult-llm-mcp/target/debug/consult-llm-mcp
    ```
 
-4. Add the MCP server to Claude Code using the global command:
-   ```bash
-   claude mcp add consult-llm -- consult-llm-mcp
-   ```
+Now when you make changes, rebuild with `cargo build` and restart Claude Code.
 
-Now when you make changes:
+### Releasing
 
-1. Rebuild: `npm run build`
-2. Restart Claude Code to pick up the changes
-
-Alternatively, you can use the dev script for development without building:
+Requires [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and
+cross-compilation targets:
 
 ```bash
-claude mcp add consult-llm -- npm run dev
+rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu
+cargo install cargo-zigbuild
 ```
 
-This runs the TypeScript source directly with `tsx`, allowing faster iteration
-without rebuilding.
-
-To unlink the global version later:
+Publish a new version:
 
 ```bash
-npm unlink -g
+scripts/publish patch  # or minor, major
 ```
+
+This cross-compiles for all platforms, stages the binaries, publishes to npm,
+then commits and tags.
 
 ## Related projects
 
