@@ -36,6 +36,17 @@ for cmd in cargo cargo-zigbuild zig; do
 	fi
 done
 
+if [[ "$BETA" == false ]]; then
+	if ! command -v gh >/dev/null 2>&1; then
+		echo "error: gh is not installed" >&2
+		exit 1
+	fi
+	if ! gh auth status >/dev/null 2>&1; then
+		echo "error: gh is not authenticated. Run 'gh auth login'." >&2
+		exit 1
+	fi
+fi
+
 echo "Ensuring rust targets are installed..."
 rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 
@@ -94,6 +105,10 @@ STAGE_DIR="target/npm-package"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
 
+GH_RELEASE_DIR="target/gh-release"
+rm -rf "$GH_RELEASE_DIR"
+mkdir -p "$GH_RELEASE_DIR"
+
 # Platform mapping: rust_target:os:cpu:suffix[:libc]
 platforms=(
 	"aarch64-apple-darwin:darwin:arm64:darwin-arm64"
@@ -129,6 +144,11 @@ for plat in "${platforms[@]}"; do
 	cp "target/$target/release/consult-llm-mcp" "$pkg_dir/consult-llm-mcp"
 	chmod +x "$pkg_dir/consult-llm-mcp"
 
+	# Stage GitHub release assets
+	archive_name="consult-llm-mcp-$suffix.tar.gz"
+	tar -czf "$GH_RELEASE_DIR/$archive_name" -C "target/$target/release" consult-llm-mcp
+	(cd "$GH_RELEASE_DIR" && shasum -a 256 "$archive_name" > "${archive_name%.tar.gz}.sha256")
+
 	echo "Validating $pkg_name..."
 	(cd "$pkg_dir" && npm pack --dry-run)
 done
@@ -159,6 +179,9 @@ NPM_TAG_FLAG=""
 if [[ "$BETA" == true ]]; then
 	NPM_TAG_FLAG="--tag beta"
 fi
+
+# Disable rollback trap before irreversible npm publishes
+trap - EXIT
 
 # Publish platform packages first (skip if already published for resumability)
 for plat in "${platforms[@]}"; do
@@ -198,6 +221,11 @@ else
 	git tag "v$VERSION"
 	git push
 	git push --tags
+
+	echo "Creating GitHub release v${VERSION}..."
+	gh release create "v$VERSION" "$GH_RELEASE_DIR"/* \
+		--generate-notes \
+		--verify-tag
 
 	echo "Published v${VERSION}"
 fi
