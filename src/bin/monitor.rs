@@ -54,6 +54,8 @@ struct ActiveConsult {
     backend: String,
     /// Real start time from the event timestamp (survives TUI restart)
     started_at: DateTime<Utc>,
+    /// Latest progress stage from ConsultProgress events
+    last_progress: Option<String>,
 }
 
 // ── Terminal guard (RAII cleanup) ───────────────────────────────────────
@@ -124,8 +126,16 @@ impl AppState {
                             model: model.clone(),
                             backend: backend.clone(),
                             started_at,
+                            last_progress: None,
                         },
                     );
+                }
+            }
+            MonitorEvent::ConsultProgress { id, stage } => {
+                if let Some(server) = self.servers.get_mut(server_id)
+                    && let Some(consult) = server.active_consults.get_mut(id)
+                {
+                    consult.last_progress = Some(stage.to_string());
                 }
             }
             MonitorEvent::ConsultFinished { id, success, .. } => {
@@ -356,7 +366,10 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                     ),
                     Span::styled(status.to_string(), Style::default().fg(status_color)),
                     Span::styled(
-                        format!("{} ({})", consult.model, consult.backend),
+                        match &consult.last_progress {
+                            Some(progress) => format!("{} ({})", consult.model, progress),
+                            None => format!("{} ({})", consult.model, consult.backend),
+                        },
                         Style::default().fg(WHITE),
                     ),
                     Span::styled(elapsed_str, Style::default().fg(YELLOW)),
