@@ -1,31 +1,11 @@
 use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
 
 use consult_llm_core::monitoring::{self, ProgressStage};
 
 use super::types::Usage;
-
-/// Normalized event from any CLI's JSON stream.
-/// Each CLI adapter maps its raw JSON lines to these.
-#[derive(Debug, Clone)]
-pub enum ParsedStreamEvent {
-    SessionStarted {
-        id: String,
-    },
-    Thinking,
-    AssistantText {
-        text: String,
-    },
-    ToolStarted {
-        call_id: String,
-        label: String,
-    },
-    ToolFinished {
-        call_id: String,
-        #[allow(dead_code)]
-        success: bool,
-    },
-    Usage(Usage),
-}
+pub use consult_llm_core::stream_events::ParsedStreamEvent;
 
 /// Format a tool label with an optional detail (file path, pattern, etc.)
 /// e.g. ("read", Some("src/main.rs")) → "read src/main.rs"
@@ -44,10 +24,21 @@ pub struct StreamReducer {
     consultation_id: Option<String>,
     active_tools: HashMap<String, String>,
     last_stage: Option<String>,
+    sidecar: Option<BufWriter<File>>,
 }
 
 impl StreamReducer {
     pub fn new(consultation_id: Option<&str>) -> Self {
+        let sidecar = consultation_id.and_then(|cid| {
+            let dir = monitoring::sessions_dir();
+            let path = dir.join(format!("{cid}.events.jsonl"));
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .ok()
+                .map(BufWriter::new)
+        });
         Self {
             thread_id: None,
             response: String::new(),
@@ -55,12 +46,23 @@ impl StreamReducer {
             consultation_id: consultation_id.map(|s| s.to_string()),
             active_tools: HashMap::new(),
             last_stage: None,
+            sidecar,
+        }
+    }
+
+    fn write_sidecar(&mut self, event: &ParsedStreamEvent) {
+        if let Some(ref mut writer) = self.sidecar
+            && let Ok(line) = serde_json::to_string(event)
+        {
+            let _ = writeln!(writer, "{line}");
+            let _ = writer.flush();
         }
     }
 
     /// Process a batch of parsed events from a single line.
     pub fn process(&mut self, events: Vec<ParsedStreamEvent>) {
         for event in events {
+            self.write_sidecar(&event);
             match event {
                 ParsedStreamEvent::SessionStarted { id } => {
                     self.thread_id = Some(id);
@@ -79,8 +81,14 @@ impl StreamReducer {
                 ParsedStreamEvent::ToolFinished { call_id, .. } => {
                     self.active_tools.remove(&call_id);
                 }
-                ParsedStreamEvent::Usage(u) => {
-                    self.usage = Some(u);
+                ParsedStreamEvent::Usage {
+                    prompt_tokens,
+                    completion_tokens,
+                } => {
+                    self.usage = Some(Usage {
+                        prompt_tokens,
+                        completion_tokens,
+                    });
                 }
             }
         }

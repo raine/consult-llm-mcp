@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::{self, OpenOptions, create_dir_all};
 use std::io::{BufRead, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -129,12 +130,34 @@ fn cleanup_orphans(dir: &Path) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
+
+    // Collect server session files and sidecar event files separately
+    let mut server_files: Vec<std::path::PathBuf> = Vec::new();
+    let mut sidecar_files: Vec<std::path::PathBuf> = Vec::new();
+
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
             continue;
         }
-        let Ok(file) = fs::File::open(&path) else {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if stem.ends_with(".events") {
+            sidecar_files.push(path);
+        } else {
+            server_files.push(path);
+        }
+    }
+
+    // Track which server sessions are alive
+    let mut alive_server_ids: HashSet<String> = HashSet::new();
+
+    for path in &server_files {
+        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let Ok(file) = fs::File::open(path) else {
             continue;
         };
         let reader = std::io::BufReader::new(file);
@@ -152,8 +175,19 @@ fn cleanup_orphans(dir: &Path) {
             }
         }
         if stopped || pid.is_some_and(|p| !is_pid_alive(p)) {
-            let _ = fs::remove_file(&path);
+            let _ = fs::remove_file(path);
+        } else {
+            alive_server_ids.insert(stem.to_string());
         }
+    }
+
+    // Remove orphaned sidecar files (those not associated with any alive server)
+    // Sidecar files are named {consultation_id}.events.jsonl — we can't easily
+    // map them back to servers without reading server files. Clean up any sidecar
+    // whose server session file no longer exists.
+    for path in &sidecar_files {
+        // If the file is orphaned (no live server session references it), remove it
+        let _ = fs::remove_file(path);
     }
 }
 

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::cli_runner::run_cli_streaming;
 use super::stream::{ParsedStreamEvent, StreamReducer};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
+use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::config::config;
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
@@ -101,10 +101,10 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
             if let Some(u) = event.get("usage") {
                 let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                vec![ParsedStreamEvent::Usage(Usage {
+                vec![ParsedStreamEvent::Usage {
                     prompt_tokens: input,
                     completion_tokens: output,
-                })]
+                }]
             } else {
                 vec![]
             }
@@ -259,9 +259,13 @@ mod tests {
             r#"{"type":"turn.completed","usage":{"input_tokens":1000,"output_tokens":200}}"#,
         );
         assert_eq!(events.len(), 1);
-        assert!(
-            matches!(&events[0], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 1000 && u.completion_tokens == 200)
-        );
+        assert!(matches!(
+            &events[0],
+            ParsedStreamEvent::Usage {
+                prompt_tokens: 1000,
+                completion_tokens: 200
+            }
+        ));
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::cli_runner::run_cli_streaming;
 use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
+use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
 
@@ -112,10 +112,10 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
                     .get("output_tokens")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
-                vec![ParsedStreamEvent::Usage(Usage {
+                vec![ParsedStreamEvent::Usage {
                     prompt_tokens: input,
                     completion_tokens: output,
-                })]
+                }]
             } else {
                 vec![]
             }
@@ -277,9 +277,13 @@ mod tests {
             r#"{"type":"result","stats":{"input_tokens":300,"output_tokens":200}}"#,
         );
         assert_eq!(events.len(), 1);
-        assert!(
-            matches!(&events[0], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 300 && u.completion_tokens == 200)
-        );
+        assert!(matches!(
+            &events[0],
+            ParsedStreamEvent::Usage {
+                prompt_tokens: 300,
+                completion_tokens: 200
+            }
+        ));
     }
 
     #[test]

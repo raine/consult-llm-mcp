@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use super::cli_runner::{run_cli_streaming, truncate_at_char_boundary};
 use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
+use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::config::config;
 use crate::logger::log_cli_debug;
 
@@ -85,10 +85,10 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
             if let Some(u) = event.get("usage") {
                 let input = u.get("inputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 let output = u.get("outputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                events.push(ParsedStreamEvent::Usage(Usage {
+                events.push(ParsedStreamEvent::Usage {
                     prompt_tokens: input,
                     completion_tokens: output,
-                }));
+                });
             }
             events
         }
@@ -306,9 +306,13 @@ mod tests {
         assert!(
             matches!(&events[0], ParsedStreamEvent::AssistantText { text } if text == "Final answer")
         );
-        assert!(
-            matches!(&events[1], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 500 && u.completion_tokens == 100)
-        );
+        assert!(matches!(
+            &events[1],
+            ParsedStreamEvent::Usage {
+                prompt_tokens: 500,
+                completion_tokens: 100
+            }
+        ));
     }
 
     #[test]

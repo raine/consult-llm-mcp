@@ -8,11 +8,7 @@ pub struct LlmExecutorCapabilities {
     pub supports_file_refs: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct Usage {
-    pub prompt_tokens: u64,
-    pub completion_tokens: u64,
-}
+pub use consult_llm_core::stream_events::Usage;
 
 #[derive(Debug, Clone)]
 pub struct ExecuteResult {
