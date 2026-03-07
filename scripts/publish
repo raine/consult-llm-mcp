@@ -4,13 +4,18 @@ set -euo pipefail
 bump="${1:-}"
 
 if [[ -z "$bump" ]]; then
-	echo "usage: scripts/publish <patch|minor|major>" >&2
+	echo "usage: scripts/publish <patch|minor|major|beta>" >&2
 	exit 1
 fi
 
-if [[ "$bump" != "patch" && "$bump" != "minor" && "$bump" != "major" ]]; then
-	echo "error: bump must be patch, minor, or major (got: $bump)" >&2
+if [[ "$bump" != "patch" && "$bump" != "minor" && "$bump" != "major" && "$bump" != "beta" ]]; then
+	echo "error: bump must be patch, minor, major, or beta (got: $bump)" >&2
 	exit 1
+fi
+
+BETA=false
+if [[ "$bump" == "beta" ]]; then
+	BETA=true
 fi
 
 # Pre-flight checks
@@ -32,10 +37,12 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 	exit 1
 fi
 
-# Non-mutating checks
-echo "Running checks..."
-cargo clippy --workspace --all-targets -- -D clippy::all
-cargo test --workspace
+if [[ "$BETA" == false ]]; then
+	# Non-mutating checks
+	echo "Running checks..."
+	cargo clippy --workspace --all-targets -- -D clippy::all
+	cargo test --workspace
+fi
 
 # Rollback version files on any failure after this point
 cleanup() {
@@ -48,8 +55,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Bump version without creating a commit or tag
-npm version "$bump" --no-git-tag-version
+if [[ "$BETA" == true ]]; then
+	# Beta: bump to next patch prerelease (e.g., 2.5.4 -> 2.5.5-beta.0)
+	npm version prepatch --preid=beta --no-git-tag-version
+else
+	# Release: bump normally
+	npm version "$bump" --no-git-tag-version
+fi
 VERSION=$(node -p "require('./package.json').version")
 
 # Sync version to Cargo.toml
@@ -75,28 +87,117 @@ STAGE_DIR="target/npm-package"
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
 
-cp package.json README.md CHANGELOG.md LICENSE run.sh "$STAGE_DIR/"
-chmod +x "$STAGE_DIR/run.sh"
+# Platform mapping: rust_target:os:cpu:suffix[:libc]
+platforms=(
+	"aarch64-apple-darwin:darwin:arm64:darwin-arm64"
+	"x86_64-apple-darwin:darwin:x64:darwin-x64"
+	"x86_64-unknown-linux-gnu:linux:x64:linux-x64:glibc"
+	"aarch64-unknown-linux-gnu:linux:arm64:linux-arm64:glibc"
+)
 
-cp target/aarch64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-arm64"
-cp target/x86_64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-x64"
-cp target/x86_64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-x64"
-cp target/aarch64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-arm64"
-chmod +x "$STAGE_DIR"/consult-llm-mcp-*
+# Stage platform-specific packages
+for plat in "${platforms[@]}"; do
+	IFS=":" read -r target os cpu suffix libc <<< "$plat"
+	pkg_name="consult-llm-mcp-$suffix"
+	pkg_dir="$STAGE_DIR/$pkg_name"
+	mkdir -p "$pkg_dir"
 
-# Validate staged package
-echo "Validating package..."
-(cd "$STAGE_DIR" && npm pack --dry-run)
+	libc_field=""
+	if [ -n "$libc" ]; then
+		libc_field=$(printf ',\n  "libc": ["%s"]' "$libc")
+	fi
 
-# Publish from staging directory
-echo "Publishing v${VERSION} to npm..."
-(cd "$STAGE_DIR" && npm publish)
+	cat > "$pkg_dir/package.json" <<-PKGJSON
+	{
+	  "name": "$pkg_name",
+	  "version": "$VERSION",
+	  "description": "Platform binary for consult-llm-mcp ($suffix)",
+	  "os": ["$os"],
+	  "cpu": ["$cpu"]${libc_field},
+	  "files": ["consult-llm-mcp"],
+	  "license": "MIT"
+	}
+	PKGJSON
 
-# Commit and tag only after successful publish
-git add package.json Cargo.toml Cargo.lock
-git commit -m "$VERSION"
-git tag "v$VERSION"
-git push
-git push --tags
+	cp "target/$target/release/consult-llm-mcp" "$pkg_dir/consult-llm-mcp"
+	chmod +x "$pkg_dir/consult-llm-mcp"
 
-echo "Published v${VERSION}"
+	echo "Validating $pkg_name..."
+	(cd "$pkg_dir" && npm pack --dry-run)
+done
+
+# Stage root wrapper package
+root_dir="$STAGE_DIR/consult-llm-mcp"
+mkdir -p "$root_dir"
+cp package.json README.md CHANGELOG.md LICENSE run.sh "$root_dir/"
+chmod +x "$root_dir/run.sh"
+
+# Inject optionalDependencies into staged package.json
+ROOT_DIR="$root_dir" VERSION="$VERSION" node -e '
+const fs = require("fs");
+const pkg = JSON.parse(fs.readFileSync(process.env.ROOT_DIR + "/package.json", "utf8"));
+pkg.optionalDependencies = {
+  "consult-llm-mcp-darwin-arm64": process.env.VERSION,
+  "consult-llm-mcp-darwin-x64": process.env.VERSION,
+  "consult-llm-mcp-linux-x64": process.env.VERSION,
+  "consult-llm-mcp-linux-arm64": process.env.VERSION
+};
+fs.writeFileSync(process.env.ROOT_DIR + "/package.json", JSON.stringify(pkg, null, 2) + "\n");
+'
+
+echo "Validating root package..."
+(cd "$root_dir" && npm pack --dry-run)
+
+# Prompt for OTP once (use automation token to skip this)
+OTP_FLAG=""
+read -rp "npm OTP (leave empty if using automation token): " OTP
+if [ -n "$OTP" ]; then
+	OTP_FLAG="--otp=$OTP"
+fi
+
+NPM_TAG_FLAG=""
+if [[ "$BETA" == true ]]; then
+	NPM_TAG_FLAG="--tag beta"
+fi
+
+# Publish platform packages first (skip if already published for resumability)
+for plat in "${platforms[@]}"; do
+	IFS=":" read -r target os cpu suffix libc <<< "$plat"
+	pkg_name="consult-llm-mcp-$suffix"
+	pkg_dir="$STAGE_DIR/$pkg_name"
+
+	if npm view "$pkg_name@$VERSION" version >/dev/null 2>&1; then
+		echo "$pkg_name@$VERSION already published, skipping..."
+	else
+		echo "Publishing $pkg_name@$VERSION..."
+		(cd "$pkg_dir" && npm publish $OTP_FLAG $NPM_TAG_FLAG)
+	fi
+done
+
+# Publish root wrapper package
+if npm view "consult-llm-mcp@$VERSION" version >/dev/null 2>&1; then
+	echo "consult-llm-mcp@$VERSION already published, skipping..."
+else
+	echo "Publishing consult-llm-mcp@$VERSION..."
+	(cd "$root_dir" && npm publish $OTP_FLAG $NPM_TAG_FLAG)
+fi
+
+if [[ "$BETA" == true ]]; then
+	echo ""
+	echo "Published beta v${VERSION}"
+	echo "Test with: npx consult-llm-mcp@beta"
+	echo ""
+	echo "Rolling back version files (beta does not commit)..."
+	git restore package.json Cargo.toml Cargo.lock 2>/dev/null || true
+	# Disable cleanup trap since we handled rollback
+	trap - EXIT
+else
+	# Commit and tag only after successful publish
+	git add package.json Cargo.toml Cargo.lock
+	git commit -m "$VERSION"
+	git tag "v$VERSION"
+	git push
+	git push --tags
+
+	echo "Published v${VERSION}"
+fi
