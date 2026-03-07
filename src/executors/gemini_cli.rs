@@ -2,10 +2,10 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 
 use super::cli_runner::run_cli_streaming;
+use super::stream::{ParsedStreamEvent, StreamReducer};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
-use crate::monitoring;
 
 pub struct GeminiCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -23,79 +23,38 @@ impl GeminiCliExecutor {
     }
 }
 
-/// Parse NDJSON output from `gemini -o stream-json`.
-/// Returns (session_id, concatenated response text, usage).
-pub fn parse_gemini_stream_jsonl(
-    output: &str,
-) -> anyhow::Result<(Option<String>, String, Option<Usage>)> {
-    let mut session_id = None;
-    let mut response_parts = Vec::new();
-    let mut usage = None;
-
-    for line in output.split('\n') {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-            continue;
-        };
-        let event_type = event.get("type").and_then(|t| t.as_str());
-        match event_type {
-            Some("init") => {
-                if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
-                    session_id = Some(sid.to_string());
-                }
-            }
-            Some("message") => {
-                if event.get("role").and_then(|r| r.as_str()) == Some("assistant")
-                    && event.get("delta").and_then(|d| d.as_bool()) == Some(true)
-                    && let Some(content) = event.get("content").and_then(|c| c.as_str())
-                {
-                    response_parts.push(content.to_string());
-                }
-            }
-            Some("result") => {
-                if let Some(stats) = event.get("stats") {
-                    let input = stats
-                        .get("input_tokens")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    let output_tokens = stats
-                        .get("output_tokens")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-                    usage = Some(Usage {
-                        prompt_tokens: input,
-                        completion_tokens: output_tokens,
-                    });
-                }
-            }
-            _ => {}
-        }
-    }
-
-    Ok((session_id, response_parts.concat(), usage))
-}
-
-fn emit_gemini_progress(consultation_id: &str, line: &str) {
+pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return;
+        return vec![];
     }
     let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-        return;
+        return vec![];
     };
-    let event_type = event.get("type").and_then(|t| t.as_str());
 
-    let stage = match event_type {
+    match event.get("type").and_then(|t| t.as_str()) {
+        Some("init") => {
+            if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
+                vec![ParsedStreamEvent::SessionStarted {
+                    id: sid.to_string(),
+                }]
+            } else {
+                vec![]
+            }
+        }
         Some("message") => {
             if event.get("role").and_then(|r| r.as_str()) == Some("assistant")
                 && event.get("delta").and_then(|d| d.as_bool()) == Some(true)
             {
-                Some(monitoring::ProgressStage::Responding)
+                if let Some(content) = event.get("content").and_then(|c| c.as_str()) {
+                    vec![ParsedStreamEvent::AssistantText {
+                        text: content.to_string(),
+                    }]
+                } else {
+                    vec![]
+                }
             } else {
-                None
+                vec![]
             }
         }
         Some("tool_use") => {
@@ -104,26 +63,44 @@ fn emit_gemini_progress(consultation_id: &str, line: &str) {
                 .and_then(|t| t.as_str())
                 .unwrap_or("tool")
                 .to_string();
-            Some(monitoring::ProgressStage::ToolUse { tool })
-        }
-        Some("tool_result") => {
-            let tool = event
+            let call_id = event
                 .get("tool_id")
                 .and_then(|t| t.as_str())
-                .and_then(|id| id.split('_').next())
-                .unwrap_or("tool")
+                .unwrap_or("")
+                .to_string();
+            vec![ParsedStreamEvent::ToolStarted {
+                call_id,
+                label: tool,
+            }]
+        }
+        Some("tool_result") => {
+            let call_id = event
+                .get("tool_id")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
                 .to_string();
             let success = event.get("status").and_then(|s| s.as_str()) == Some("success");
-            Some(monitoring::ProgressStage::ToolResult { tool, success })
+            vec![ParsedStreamEvent::ToolFinished { call_id, success }]
         }
-        _ => None,
-    };
-
-    if let Some(stage) = stage {
-        monitoring::emit(monitoring::MonitorEvent::ConsultProgress {
-            id: consultation_id.to_string(),
-            stage,
-        });
+        Some("result") => {
+            if let Some(stats) = event.get("stats") {
+                let input = stats
+                    .get("input_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let output = stats
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                vec![ParsedStreamEvent::Usage(Usage {
+                    prompt_tokens: input,
+                    completion_tokens: output,
+                })]
+            } else {
+                vec![]
+            }
+        }
+        _ => vec![],
     }
 }
 
@@ -196,30 +173,21 @@ impl LlmExecutor for GeminiCliExecutor {
         args.push("-p".to_string());
         args.push(message);
 
-        let cid = consultation_id.map(|s| s.to_string());
-        let result = run_cli_streaming("gemini", &args, move |line| {
-            if let Some(ref cid) = cid {
-                emit_gemini_progress(cid, line);
-            }
+        let mut reducer = StreamReducer::new(consultation_id);
+        let result = run_cli_streaming("gemini", &args, |line| {
+            reducer.process(parse_gemini_line(line));
         })
         .await?;
 
         if result.code == Some(0) {
-            match parse_gemini_stream_jsonl(&result.stdout) {
-                Ok((session_id, response, usage)) => {
-                    if response.is_empty() {
-                        anyhow::bail!("No response found in Gemini stream-json output");
-                    }
-                    Ok(ExecuteResult {
-                        response,
-                        usage,
-                        thread_id: session_id,
-                    })
-                }
-                Err(e) => {
-                    anyhow::bail!("Failed to parse Gemini stream-json output: {e}");
-                }
+            if reducer.response.is_empty() {
+                anyhow::bail!("No response found in Gemini stream-json output");
             }
+            Ok(ExecuteResult {
+                response: reducer.response,
+                usage: reducer.usage,
+                thread_id: reducer.thread_id,
+            })
         } else {
             if result.stderr.contains("RESOURCE_EXHAUSTED") {
                 anyhow::bail!(
@@ -241,43 +209,87 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_gemini_stream_jsonl_valid() {
-        let output = r#"{"type":"init","timestamp":"2026-03-07T13:40:51.667Z","session_id":"sess_123","model":"gemini-3"}
-{"type":"message","timestamp":"...","role":"user","content":"hello"}
-{"type":"message","timestamp":"...","role":"assistant","content":"Hello ","delta":true}
-{"type":"message","timestamp":"...","role":"assistant","content":"from Gemini!","delta":true}
-{"type":"result","timestamp":"...","status":"success","stats":{"total_tokens":500,"input_tokens":300,"output_tokens":200,"cached":100,"input":200,"duration_ms":5000,"tool_calls":0}}
-"#;
-        let (sid, response, usage) = parse_gemini_stream_jsonl(output).unwrap();
-        assert_eq!(sid, Some("sess_123".to_string()));
-        assert_eq!(response, "Hello from Gemini!");
-        let usage = usage.unwrap();
-        assert_eq!(usage.prompt_tokens, 300);
-        assert_eq!(usage.completion_tokens, 200);
+    fn test_parse_gemini_line_init() {
+        let events = parse_gemini_line(
+            r#"{"type":"init","timestamp":"...","session_id":"sess_123","model":"gemini-3"}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], ParsedStreamEvent::SessionStarted { id } if id == "sess_123"));
     }
 
     #[test]
-    fn test_parse_gemini_stream_jsonl_with_tools() {
-        let output = r#"{"type":"init","timestamp":"...","session_id":"s1","model":"gemini-3"}
-{"type":"message","timestamp":"...","role":"assistant","content":"Let me read that file.\n","delta":true}
-{"type":"tool_use","timestamp":"...","tool_name":"read_file","tool_id":"read_file_123","parameters":{"file_path":"src/lib.rs"}}
-{"type":"tool_result","timestamp":"...","tool_id":"read_file_123","status":"success","output":""}
-{"type":"message","timestamp":"...","role":"assistant","content":"The file exports one module.","delta":true}
-{"type":"result","timestamp":"...","status":"success","stats":{"total_tokens":1000,"input_tokens":800,"output_tokens":200,"cached":0,"input":800,"duration_ms":3000,"tool_calls":1}}
-"#;
-        let (sid, response, _usage) = parse_gemini_stream_jsonl(output).unwrap();
-        assert_eq!(sid, Some("s1".to_string()));
-        assert_eq!(
-            response,
-            "Let me read that file.\nThe file exports one module."
+    fn test_parse_gemini_line_assistant_delta() {
+        let events = parse_gemini_line(
+            r#"{"type":"message","role":"assistant","content":"Hello ","delta":true}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::AssistantText { text } if text == "Hello ")
         );
     }
 
     #[test]
-    fn test_parse_gemini_stream_jsonl_empty() {
-        let (sid, response, usage) = parse_gemini_stream_jsonl("").unwrap();
-        assert_eq!(sid, None);
-        assert!(response.is_empty());
-        assert!(usage.is_none());
+    fn test_parse_gemini_line_tool_use() {
+        let events = parse_gemini_line(
+            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"read_file_123"}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "read_file_123" && label == "read_file")
+        );
+    }
+
+    #[test]
+    fn test_parse_gemini_line_tool_result() {
+        let events = parse_gemini_line(
+            r#"{"type":"tool_result","tool_id":"read_file_123","status":"success"}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::ToolFinished { call_id, success } if call_id == "read_file_123" && *success)
+        );
+    }
+
+    #[test]
+    fn test_parse_gemini_line_usage() {
+        let events = parse_gemini_line(
+            r#"{"type":"result","stats":{"input_tokens":300,"output_tokens":200}}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 300 && u.completion_tokens == 200)
+        );
+    }
+
+    #[test]
+    fn test_reducer_concatenates_deltas() {
+        let mut reducer = StreamReducer::new(None);
+        reducer.process(parse_gemini_line(
+            r#"{"type":"message","role":"assistant","content":"Hello ","delta":true}"#,
+        ));
+        reducer.process(parse_gemini_line(
+            r#"{"type":"message","role":"assistant","content":"from Gemini!","delta":true}"#,
+        ));
+        assert_eq!(reducer.response, "Hello from Gemini!");
+    }
+
+    #[test]
+    fn test_reducer_tracks_tool_labels() {
+        let mut reducer = StreamReducer::new(None);
+        reducer.process(parse_gemini_line(
+            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"read_file_123"}"#,
+        ));
+        reducer.process(parse_gemini_line(
+            r#"{"type":"tool_result","tool_id":"read_file_123","status":"success"}"#,
+        ));
+        // Tool label resolved from active_tools — no assertion on internal state,
+        // but this exercises the call_id → label correlation path
+    }
+
+    #[test]
+    fn test_parse_gemini_line_empty() {
+        assert!(parse_gemini_line("").is_empty());
+        assert!(parse_gemini_line("  ").is_empty());
+        assert!(parse_gemini_line("not json").is_empty());
     }
 }

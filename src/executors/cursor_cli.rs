@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::{run_cli, truncate_at_char_boundary};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::cli_runner::{run_cli_streaming, truncate_at_char_boundary};
+use super::stream::{ParsedStreamEvent, StreamReducer};
+use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::config::config;
 use crate::logger::log_cli_debug;
 
@@ -22,18 +23,113 @@ impl CursorCliExecutor {
     }
 }
 
-pub fn parse_cursor_json(output: &str) -> anyhow::Result<(Option<String>, String)> {
-    let parsed: serde_json::Value = serde_json::from_str(output)?;
-    let session_id = parsed
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let response = parsed
-        .get("result")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-    Ok((session_id, response))
+pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return vec![];
+    }
+    let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return vec![];
+    };
+    let event_type = event.get("type").and_then(|t| t.as_str());
+    let subtype = event.get("subtype").and_then(|t| t.as_str());
+
+    match event_type {
+        Some("system") if subtype == Some("init") => {
+            if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
+                vec![ParsedStreamEvent::SessionStarted {
+                    id: sid.to_string(),
+                }]
+            } else {
+                vec![]
+            }
+        }
+        Some("thinking") if subtype == Some("delta") => {
+            vec![ParsedStreamEvent::Thinking]
+        }
+        Some("tool_call") => {
+            let tc = event.get("tool_call");
+            let call_id = event
+                .get("call_id")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            match subtype {
+                Some("started") => {
+                    let label = tc
+                        .map(extract_cursor_tool_name)
+                        .unwrap_or_else(|| "tool".to_string());
+                    vec![ParsedStreamEvent::ToolStarted { call_id, label }]
+                }
+                Some("completed") => {
+                    let success = tc.map(is_cursor_tool_success).unwrap_or(false);
+                    vec![ParsedStreamEvent::ToolFinished { call_id, success }]
+                }
+                _ => vec![],
+            }
+        }
+        Some("assistant") => {
+            // Emit Responding progress without accumulating text —
+            // full response comes from the result event
+            vec![ParsedStreamEvent::AssistantText {
+                text: String::new(),
+            }]
+        }
+        Some("result") => {
+            let mut events = vec![];
+            if let Some(text) = event.get("result").and_then(|v| v.as_str()) {
+                events.push(ParsedStreamEvent::AssistantText {
+                    text: text.to_string(),
+                });
+            }
+            if let Some(u) = event.get("usage") {
+                let input = u.get("inputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let output = u.get("outputTokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                events.push(ParsedStreamEvent::Usage(Usage {
+                    prompt_tokens: input,
+                    completion_tokens: output,
+                }));
+            }
+            events
+        }
+        _ => vec![],
+    }
+}
+
+fn extract_cursor_tool_name(tool_call: &serde_json::Value) -> String {
+    if let Some(shell) = tool_call.get("shellToolCall") {
+        if let Some(desc) = shell.get("description").and_then(|d| d.as_str()) {
+            return desc.to_string();
+        }
+        if let Some(args) = shell.get("args") {
+            if let Some(desc) = args.get("description").and_then(|d| d.as_str()) {
+                return desc.to_string();
+            }
+            if let Some(cmds) = args.get("simpleCommands").and_then(|c| c.as_array())
+                && let Some(first) = cmds.first().and_then(|c| c.as_str())
+            {
+                return first.to_string();
+            }
+        }
+    }
+    if tool_call.get("readToolCall").is_some() {
+        return "read_file".to_string();
+    }
+    if tool_call.get("globToolCall").is_some() {
+        return "glob".to_string();
+    }
+    "tool".to_string()
+}
+
+fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
+    for key in ["readToolCall", "globToolCall", "shellToolCall"] {
+        if let Some(tc) = tool_call.get(key)
+            && let Some(result) = tc.get("result")
+        {
+            return result.get("success").is_some();
+        }
+    }
+    false
 }
 
 /// Map model IDs to cursor-agent model names
@@ -89,7 +185,7 @@ impl LlmExecutor for CursorCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        _consultation_id: Option<&str>,
+        consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
         let message_with_files = append_files(prompt, file_paths);
         let message = if thread_id.is_some() {
@@ -106,7 +202,7 @@ impl LlmExecutor for CursorCliExecutor {
             "--print".to_string(),
             "--trust".to_string(),
             "--output-format".to_string(),
-            "json".to_string(),
+            "stream-json".to_string(),
             "--mode".to_string(),
             "ask".to_string(),
             "--model".to_string(),
@@ -118,31 +214,29 @@ impl LlmExecutor for CursorCliExecutor {
         }
         args.push(message);
 
-        let result = run_cli("cursor-agent", &args).await?;
+        let mut reducer = StreamReducer::new(consultation_id);
+        let result = run_cli_streaming("cursor-agent", &args, |line| {
+            reducer.process(parse_cursor_line(line));
+        })
+        .await?;
 
         if result.code == Some(0) {
-            match parse_cursor_json(&result.stdout) {
-                Ok((session_id, response)) => {
-                    if response.is_empty() {
-                        anyhow::bail!("No result found in Cursor CLI JSON output");
-                    }
-                    Ok(ExecuteResult {
-                        response,
-                        usage: None,
-                        thread_id: session_id.or_else(|| thread_id.map(|s| s.to_string())),
-                    })
-                }
-                Err(_) => {
-                    log_cli_debug(
-                        "Failed to parse Cursor CLI JSON output",
-                        Some(&serde_json::json!({ "rawOutput": &result.stdout })),
-                    );
-                    anyhow::bail!(
-                        "Failed to parse Cursor CLI JSON output: {}",
-                        &result.stdout[..truncate_at_char_boundary(&result.stdout, 200)]
-                    );
-                }
+            if reducer.response.is_empty() {
+                log_cli_debug(
+                    "No result found in Cursor CLI stream-json output",
+                    Some(&serde_json::json!({
+                        "rawOutput": &result.stdout[..truncate_at_char_boundary(&result.stdout, 500)]
+                    })),
+                );
+                anyhow::bail!("No result found in Cursor CLI stream-json output");
             }
+            Ok(ExecuteResult {
+                response: reducer.response,
+                usage: reducer.usage,
+                thread_id: reducer
+                    .thread_id
+                    .or_else(|| thread_id.map(|s| s.to_string())),
+            })
         } else {
             anyhow::bail!(
                 "Cursor CLI exited with code {}. Error: {}",
@@ -158,23 +252,80 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_cursor_json_valid() {
-        let output = r#"{"session_id":"sess_456","result":"Hello from Cursor"}"#;
-        let (sid, response) = parse_cursor_json(output).unwrap();
-        assert_eq!(sid, Some("sess_456".to_string()));
-        assert_eq!(response, "Hello from Cursor");
+    fn test_parse_cursor_line_init() {
+        let events =
+            parse_cursor_line(r#"{"type":"system","subtype":"init","session_id":"sess_456"}"#);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], ParsedStreamEvent::SessionStarted { id } if id == "sess_456"));
     }
 
     #[test]
-    fn test_parse_cursor_json_no_result() {
-        let output = r#"{"session_id":"sess_456"}"#;
-        let (sid, response) = parse_cursor_json(output).unwrap();
-        assert_eq!(sid, Some("sess_456".to_string()));
-        assert!(response.is_empty());
+    fn test_parse_cursor_line_thinking() {
+        let events =
+            parse_cursor_line(r#"{"type":"thinking","subtype":"delta","text":"**Starting"}"#);
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], ParsedStreamEvent::Thinking));
     }
 
     #[test]
-    fn test_parse_cursor_json_invalid() {
-        assert!(parse_cursor_json("not json").is_err());
+    fn test_parse_cursor_line_tool_started() {
+        let events = parse_cursor_line(
+            r#"{"type":"tool_call","subtype":"started","call_id":"c1","tool_call":{"readToolCall":{"path":"src/lib.rs"}}}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "c1" && label == "read_file")
+        );
+    }
+
+    #[test]
+    fn test_parse_cursor_line_assistant() {
+        let events = parse_cursor_line(
+            r#"{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello"}]},"session_id":"...","timestamp_ms":123}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(matches!(&events[0], ParsedStreamEvent::AssistantText { text } if text.is_empty()));
+    }
+
+    #[test]
+    fn test_parse_cursor_line_result() {
+        let events = parse_cursor_line(
+            r#"{"type":"result","result":"Final answer","usage":{"inputTokens":500,"outputTokens":100}}"#,
+        );
+        assert_eq!(events.len(), 2);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::AssistantText { text } if text == "Final answer")
+        );
+        assert!(
+            matches!(&events[1], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 500 && u.completion_tokens == 100)
+        );
+    }
+
+    #[test]
+    fn test_parse_cursor_line_empty() {
+        assert!(parse_cursor_line("").is_empty());
+        assert!(parse_cursor_line("not json").is_empty());
+    }
+
+    #[test]
+    fn test_extract_cursor_tool_name_shell() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"shellToolCall":{"args":{"simpleCommands":["ls -la"]}}}"#)
+                .unwrap();
+        assert_eq!(extract_cursor_tool_name(&tc), "ls -la");
+    }
+
+    #[test]
+    fn test_extract_cursor_tool_name_read() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"readToolCall":{"path":"src/lib.rs"}}"#).unwrap();
+        assert_eq!(extract_cursor_tool_name(&tc), "read_file");
+    }
+
+    #[test]
+    fn test_extract_cursor_tool_name_glob() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"globToolCall":{"pattern":"**/*.rs"}}"#).unwrap();
+        assert_eq!(extract_cursor_tool_name(&tc), "glob");
     }
 }

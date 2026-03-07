@@ -2,11 +2,11 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 
 use super::cli_runner::run_cli_streaming;
+use super::stream::{ParsedStreamEvent, StreamReducer};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::config::config;
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
-use crate::monitoring;
 
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -24,63 +24,27 @@ impl CodexCliExecutor {
     }
 }
 
-pub fn parse_codex_jsonl(output: &str) -> (Option<String>, String, Option<Usage>) {
-    let mut thread_id = None;
-    let mut messages = Vec::new();
-    let mut usage = None;
-
-    for line in output.split('\n') {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) {
-            let event_type = event.get("type").and_then(|t| t.as_str());
-            match event_type {
-                Some("thread.started") => {
-                    if let Some(tid) = event.get("thread_id").and_then(|t| t.as_str()) {
-                        thread_id = Some(tid.to_string());
-                    }
-                }
-                Some("item.completed") => {
-                    if let Some(item) = event.get("item")
-                        && item.get("type").and_then(|t| t.as_str()) == Some("agent_message")
-                        && let Some(text) = item.get("text").and_then(|t| t.as_str())
-                        && !text.is_empty()
-                    {
-                        messages.push(text.to_string());
-                    }
-                }
-                Some("turn.completed") => {
-                    if let Some(u) = event.get("usage") {
-                        let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                        let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                        usage = Some(Usage {
-                            prompt_tokens: input,
-                            completion_tokens: output,
-                        });
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-
-    (thread_id, messages.join("\n"), usage)
-}
-
-fn emit_codex_progress(consultation_id: &str, line: &str) {
+pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return;
+        return vec![];
     }
     let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-        return;
+        return vec![];
     };
     let event_type = event.get("type").and_then(|t| t.as_str());
 
-    let stage = match event_type {
-        Some("turn.started") => Some(monitoring::ProgressStage::Thinking),
+    match event_type {
+        Some("thread.started") => {
+            if let Some(tid) = event.get("thread_id").and_then(|t| t.as_str()) {
+                vec![ParsedStreamEvent::SessionStarted {
+                    id: tid.to_string(),
+                }]
+            } else {
+                vec![]
+            }
+        }
+        Some("turn.started") => vec![ParsedStreamEvent::Thinking],
         Some("item.started") => {
             if let Some(item) = event.get("item")
                 && item.get("type").and_then(|t| t.as_str()) == Some("command_execution")
@@ -89,42 +53,63 @@ fn emit_codex_progress(consultation_id: &str, line: &str) {
                     .get("command")
                     .and_then(|c| c.as_str())
                     .unwrap_or("command");
-                // Extract the actual command from `/bin/zsh -lc "..."` wrapper
-                let tool = extract_shell_command(cmd);
-                Some(monitoring::ProgressStage::ToolUse { tool })
+                vec![ParsedStreamEvent::ToolStarted {
+                    call_id: item
+                        .get("id")
+                        .and_then(|i| i.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    label: extract_shell_command(cmd),
+                }]
             } else {
-                None
+                vec![]
             }
         }
         Some("item.completed") => {
             if let Some(item) = event.get("item") {
-                let item_type = item.get("type").and_then(|t| t.as_str());
-                match item_type {
+                match item.get("type").and_then(|t| t.as_str()) {
                     Some("command_execution") => {
-                        let cmd = item
-                            .get("command")
-                            .and_then(|c| c.as_str())
-                            .unwrap_or("command");
-                        let tool = extract_shell_command(cmd);
                         let success =
                             item.get("status").and_then(|s| s.as_str()) == Some("completed");
-                        Some(monitoring::ProgressStage::ToolResult { tool, success })
+                        vec![ParsedStreamEvent::ToolFinished {
+                            call_id: item
+                                .get("id")
+                                .and_then(|i| i.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            success,
+                        }]
                     }
-                    Some("agent_message") => Some(monitoring::ProgressStage::Responding),
-                    _ => None,
+                    Some("agent_message") => {
+                        if let Some(text) = item.get("text").and_then(|t| t.as_str())
+                            && !text.is_empty()
+                        {
+                            vec![ParsedStreamEvent::AssistantText {
+                                text: format!("{text}\n"),
+                            }]
+                        } else {
+                            vec![]
+                        }
+                    }
+                    _ => vec![],
                 }
             } else {
-                None
+                vec![]
             }
         }
-        _ => None,
-    };
-
-    if let Some(stage) = stage {
-        monitoring::emit(monitoring::MonitorEvent::ConsultProgress {
-            id: consultation_id.to_string(),
-            stage,
-        });
+        Some("turn.completed") => {
+            if let Some(u) = event.get("usage") {
+                let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                vec![ParsedStreamEvent::Usage(Usage {
+                    prompt_tokens: input,
+                    completion_tokens: output,
+                })]
+            } else {
+                vec![]
+            }
+        }
+        _ => vec![],
     }
 }
 
@@ -232,23 +217,21 @@ impl LlmExecutor for CodexCliExecutor {
         }
         args.push(full_prompt);
 
-        let cid = consultation_id.map(|s| s.to_string());
-        let result = run_cli_streaming("codex", &args, move |line| {
-            if let Some(ref cid) = cid {
-                emit_codex_progress(cid, line);
-            }
+        let mut reducer = StreamReducer::new(consultation_id);
+        let result = run_cli_streaming("codex", &args, |line| {
+            reducer.process(parse_codex_line(line));
         })
         .await?;
 
         if result.code == Some(0) {
-            let (parsed_thread_id, response, usage) = parse_codex_jsonl(&result.stdout);
+            let response = reducer.response.trim_end().to_string();
             if response.is_empty() {
                 anyhow::bail!("No agent_message found in Codex JSONL output");
             }
             Ok(ExecuteResult {
                 response,
-                usage,
-                thread_id: parsed_thread_id,
+                usage: reducer.usage,
+                thread_id: reducer.thread_id,
             })
         } else {
             anyhow::bail!(
@@ -265,35 +248,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_codex_jsonl_valid() {
-        let output = r#"{"type":"thread.started","thread_id":"thread_abc123"}
-{"type":"item.completed","item":{"type":"agent_message","text":"Hello world"}}
-{"type":"item.completed","item":{"type":"agent_message","text":"Second message"}}
-{"type":"turn.completed","usage":{"input_tokens":1000,"output_tokens":200,"cached_input_tokens":500}}
-"#;
-        let (tid, response, usage) = parse_codex_jsonl(output);
-        assert_eq!(tid, Some("thread_abc123".to_string()));
-        assert_eq!(response, "Hello world\nSecond message");
-        let usage = usage.unwrap();
-        assert_eq!(usage.prompt_tokens, 1000);
-        assert_eq!(usage.completion_tokens, 200);
+    fn test_parse_codex_line_thread_started() {
+        let events = parse_codex_line(r#"{"type":"thread.started","thread_id":"thread_abc123"}"#);
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::SessionStarted { id } if id == "thread_abc123")
+        );
     }
 
     #[test]
-    fn test_parse_codex_jsonl_empty() {
-        let (tid, response, usage) = parse_codex_jsonl("");
-        assert_eq!(tid, None);
-        assert!(response.is_empty());
-        assert!(usage.is_none());
+    fn test_parse_codex_line_agent_message() {
+        let events = parse_codex_line(
+            r#"{"type":"item.completed","item":{"type":"agent_message","text":"Hello world"}}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::AssistantText { text } if text == "Hello world\n")
+        );
     }
 
     #[test]
-    fn test_parse_codex_jsonl_non_json_lines() {
-        let output =
-            "ERROR: some log line\n{\"type\":\"thread.started\",\"thread_id\":\"t1\"}\nnot json\n";
-        let (tid, response, _usage) = parse_codex_jsonl(output);
-        assert_eq!(tid, Some("t1".to_string()));
-        assert!(response.is_empty());
+    fn test_parse_codex_line_usage() {
+        let events = parse_codex_line(
+            r#"{"type":"turn.completed","usage":{"input_tokens":1000,"output_tokens":200}}"#,
+        );
+        assert_eq!(events.len(), 1);
+        assert!(
+            matches!(&events[0], ParsedStreamEvent::Usage(u) if u.prompt_tokens == 1000 && u.completion_tokens == 200)
+        );
+    }
+
+    #[test]
+    fn test_parse_codex_line_empty() {
+        assert!(parse_codex_line("").is_empty());
+        assert!(parse_codex_line("  ").is_empty());
+        assert!(parse_codex_line("not json").is_empty());
+    }
+
+    #[test]
+    fn test_reducer_joins_messages() {
+        let mut reducer = StreamReducer::new(None);
+        reducer.process(parse_codex_line(
+            r#"{"type":"item.completed","item":{"type":"agent_message","text":"Hello"}}"#,
+        ));
+        reducer.process(parse_codex_line(
+            r#"{"type":"item.completed","item":{"type":"agent_message","text":"World"}}"#,
+        ));
+        assert_eq!(reducer.response.trim_end(), "Hello\nWorld");
     }
 
     #[test]
