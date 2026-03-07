@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::monitoring::{self, ProgressStage};
+use consult_llm_core::monitoring::{self, ProgressStage};
 
 use super::types::Usage;
 

@@ -14,7 +14,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table};
 
-use consult_llm_mcp::monitoring::{EventEnvelope, MonitorEvent, is_pid_alive, sessions_dir};
+use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent, is_pid_alive, sessions_dir};
 
 // ── Colors (matching claude-history aesthetic) ──────────────────────────
 

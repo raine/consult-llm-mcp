@@ -85,8 +85,8 @@ impl ConsultServer {
         let consultation_id = uuid::Uuid::new_v4().simple().to_string();
         let backend_name = executor.backend_name().to_string();
 
-        consult_llm_mcp::monitoring::emit(
-            consult_llm_mcp::monitoring::MonitorEvent::ConsultStarted {
+        consult_llm_core::monitoring::emit(
+            consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
                 id: consultation_id.clone(),
                 model: model.clone(),
                 backend: backend_name,
@@ -100,8 +100,8 @@ impl ConsultServer {
 
         match &result {
             Ok(_) => {
-                consult_llm_mcp::monitoring::emit(
-                    consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
+                consult_llm_core::monitoring::emit(
+                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
                         duration_ms: start_time.elapsed().as_millis() as u64,
                         success: true,
@@ -110,8 +110,8 @@ impl ConsultServer {
                 );
             }
             Err(e) => {
-                consult_llm_mcp::monitoring::emit(
-                    consult_llm_mcp::monitoring::MonitorEvent::ConsultFinished {
+                consult_llm_core::monitoring::emit(
+                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
                         duration_ms: start_time.elapsed().as_millis() as u64,
                         success: false,

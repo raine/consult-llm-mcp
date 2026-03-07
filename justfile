@@ -41,13 +41,14 @@ build:
 test:
     cargo test --workspace
 
-# Install debug binary globally via symlink
+# Install debug binaries globally via symlink
 install-dev:
-    cargo build && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp
+    cargo build && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp && ln -sf $(pwd)/target/debug/consult-llm-monitor ~/.cargo/bin/consult-llm-monitor
 
-# Install release binary globally
+# Install release binaries globally
 install:
     cargo install --offline --path . --locked
+    cargo install --offline --path crates/monitor --locked
 
 # Run the application
 run *ARGS:
@@ -55,4 +56,4 @@ run *ARGS:
 
 # Run the TUI monitor
 monitor:
-    cargo run --bin consult-llm-monitor
+    cargo run -p consult-llm-monitor

@@ -1,0 +1,15 @@
+[package]
+name = "consult-llm-monitor"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "consult-llm-monitor"
+path = "src/main.rs"
+
+[dependencies]
+consult-llm-core = { path = "../core" }
+ratatui = "0.30"
+crossterm = "0.29"
+chrono = { workspace = true }
+serde_json = { workspace = true }

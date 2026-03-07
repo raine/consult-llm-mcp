@@ -1,35 +1,45 @@
-[package]
-name = "consult-llm-mcp"
+[workspace]
+members = [".", "crates/core", "crates/monitor"]
+
+[workspace.package]
 version = "2.5.6"
 edition = "2024"
-build = "build.rs"
-default-run = "consult-llm-mcp"
 
-[dependencies]
-rmcp = { version = "1.1", features = ["server", "transport-io"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "fs", "signal"] }
+[workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+libc = "0.2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "fs", "signal"] }
+anyhow = "1"
+
+[package]
+name = "consult-llm-mcp"
+version.workspace = true
+edition.workspace = true
+build = "build.rs"
+
+[dependencies]
+consult-llm-core = { path = "crates/core" }
+rmcp = { version = "1.1", features = ["server", "transport-io"] }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 async-trait = "0.1"
 thiserror = "2"
-anyhow = "1"
-dirs = "6"
+anyhow = { workspace = true }
+dirs = { workspace = true }
 arboard = "3"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono = { workspace = true }
 pathdiff = "0.2"
-uuid = { version = "1", features = ["v4"] }
-libc = "0.2"
-ratatui = "0.30"
-crossterm = "0.29"
+uuid = { workspace = true }
 
 [[bin]]
 name = "consult-llm-mcp"
 path = "src/main.rs"
-
-[[bin]]
-name = "consult-llm-monitor"
-path = "src/bin/monitor.rs"
 
 [profile.release]
 strip = true

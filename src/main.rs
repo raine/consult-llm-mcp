@@ -21,7 +21,7 @@ mod schema;
 mod server;
 mod system_prompt;
 
-use consult_llm_mcp::monitoring;
+use consult_llm_core::monitoring;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GIT_HASH: &str = env!("GIT_HASH");
