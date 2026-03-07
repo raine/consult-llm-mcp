@@ -12,7 +12,7 @@
   },
   "license": "MIT",
   "bin": {
-    "consult-llm-mcp": "./run.sh"
+    "consult-llm-mcp": "run.sh"
   },
   "files": [
     "run.sh",
