@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::run_cli;
+use super::cli_runner::{run_cli, truncate_at_char_boundary};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
@@ -122,7 +122,7 @@ impl LlmExecutor for GeminiCliExecutor {
                     );
                     anyhow::bail!(
                         "Failed to parse Gemini JSON output: {}",
-                        &result.stdout[..result.stdout.len().min(200)]
+                        &result.stdout[..truncate_at_char_boundary(&result.stdout, 200)]
                     );
                 }
             }

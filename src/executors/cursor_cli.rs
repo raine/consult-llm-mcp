@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::run_cli;
+use super::cli_runner::{run_cli, truncate_at_char_boundary};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::config::config;
 use crate::logger::log_cli_debug;
@@ -132,7 +132,7 @@ impl LlmExecutor for CursorCliExecutor {
                     );
                     anyhow::bail!(
                         "Failed to parse Cursor CLI JSON output: {}",
-                        &result.stdout[..result.stdout.len().min(200)]
+                        &result.stdout[..truncate_at_char_boundary(&result.stdout, 200)]
                     );
                 }
             }
