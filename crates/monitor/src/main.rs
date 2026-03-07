@@ -30,6 +30,8 @@ const YELLOW: Color = Color::Rgb(220, 200, 100);
 const DIM: Color = Color::Rgb(100, 100, 110);
 const SELECTED_BG: Color = Color::Rgb(40, 40, 50);
 
+const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 // ── State ───────────────────────────────────────────────────────────────
 
 enum AppMode {
@@ -50,6 +52,7 @@ struct AppState {
     pruned: HashSet<String>,
     selected: usize,
     row_count: usize,
+    tick: usize,
     mode: AppMode,
 }
 
@@ -125,6 +128,7 @@ impl AppState {
             pruned: HashSet::new(),
             selected: 0,
             row_count: 0,
+            tick: 0,
             mode: AppMode::Table,
         }
     }
@@ -570,9 +574,18 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                 } else {
                     Style::default()
                 };
+                let spinner = SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()];
+                let consult_text = match &consult.last_progress {
+                    Some(progress) => format!("{} ({})", consult.model, progress),
+                    None => format!("{} ({})", consult.model, consult.backend),
+                };
+                let consult_cell = Line::from(vec![
+                    Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
+                    Span::styled(consult_text, Style::default().fg(WHITE)),
+                ]);
                 rows.push(
-                    Row::new(vec![
-                        Span::styled(
+                    Row::new([
+                        Line::styled(
                             if show_server {
                                 display_name.to_string()
                             } else {
@@ -580,7 +593,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                             },
                             Style::default().fg(DIM_WHITE),
                         ),
-                        Span::styled(
+                        Line::styled(
                             if show_server {
                                 pid.clone()
                             } else {
@@ -588,15 +601,9 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                             },
                             Style::default().fg(DIM_WHITE),
                         ),
-                        Span::styled(status.to_string(), Style::default().fg(status_color)),
-                        Span::styled(
-                            match &consult.last_progress {
-                                Some(progress) => format!("{} ({})", consult.model, progress),
-                                None => format!("{} ({})", consult.model, consult.backend),
-                            },
-                            Style::default().fg(WHITE),
-                        ),
-                        Span::styled(elapsed_str, Style::default().fg(YELLOW)),
+                        Line::styled(status.to_string(), Style::default().fg(status_color)),
+                        consult_cell,
+                        Line::styled(elapsed_str, Style::default().fg(YELLOW)),
                     ])
                     .style(bg),
                 );
@@ -847,6 +854,7 @@ fn main() -> io::Result<()> {
         }
 
         guard.terminal.draw(|frame| render(frame, &state))?;
+        state.tick += 1;
 
         if event::poll(render_interval)?
             && let Event::Key(key) = event::read()?
