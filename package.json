@@ -22,7 +22,11 @@
     "README.md",
     "CHANGELOG.md"
   ],
-  "scripts": {
-    "publish:dry": "npm publish --dry-run"
-  }
+  "keywords": [
+    "mcp",
+    "openai",
+    "gemini",
+    "llm",
+    "ai"
+  ]
 }

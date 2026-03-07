@@ -2,7 +2,12 @@
 set -e
 
 # Resolve symlinks to find the actual script directory (npm creates symlinks in .bin/)
+# When invoked via PATH, $0 may be just the command name without a path
 script="$0"
+case "$script" in
+  */*) ;;
+  *) script="$(command -v "$script" 2>/dev/null || echo "$script")" ;;
+esac
 while [ -L "$script" ]; do
   target="$(readlink "$script")"
   case "$target" in

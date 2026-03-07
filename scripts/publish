@@ -17,6 +17,13 @@ fi
 echo "Checking npm auth..."
 npm whoami
 
+for cmd in cargo cargo-zigbuild zig; do
+	if ! command -v "$cmd" >/dev/null 2>&1; then
+		echo "error: $cmd is not installed" >&2
+		exit 1
+	fi
+done
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
 	echo "error: working tree has uncommitted changes" >&2
 	exit 1
@@ -65,10 +72,7 @@ echo "Publishing v${VERSION} to npm..."
 
 # Commit and tag only after successful publish
 git add package.json Cargo.toml Cargo.lock
-git commit -m "$(cat <<EOF
-$VERSION
-EOF
-)"
+git commit -m "$VERSION"
 git tag "v$VERSION"
 git push
 git push --tags
