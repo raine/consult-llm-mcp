@@ -45,13 +45,25 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
 ## Quick start
 
-1. **Add to Claude Code**:
+1. **Add to Claude Code** (choose one):
+
+   **With npx** (no install required):
 
    ```bash
    claude mcp add consult-llm \
      -e OPENAI_API_KEY=your_key \
      -e GEMINI_API_KEY=your_key \
      -- npx -y consult-llm-mcp
+   ```
+
+   **With binary** (no Node.js required):
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
+   claude mcp add consult-llm \
+     -e OPENAI_API_KEY=your_key \
+     -e GEMINI_API_KEY=your_key \
+     -- consult-llm-mcp
    ```
 
    For global availability across projects, add `--scope user`.
