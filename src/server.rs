@@ -94,7 +94,9 @@ impl ConsultServer {
         );
 
         let start_time = std::time::Instant::now();
-        let result = self.run_consult(args, &model, executor).await;
+        let result = self
+            .run_consult(args, &model, executor, &consultation_id)
+            .await;
 
         match &result {
             Ok(_) => {
@@ -127,6 +129,7 @@ impl ConsultServer {
         args: ConsultLlmArgs,
         model: &str,
         executor: Arc<dyn crate::executors::types::LlmExecutor>,
+        consultation_id: &str,
     ) -> anyhow::Result<String> {
         let (prompt, file_paths) = if args.web_mode || !executor.capabilities().supports_file_refs {
             // API mode or web mode: inline file contents
@@ -201,6 +204,7 @@ impl ConsultServer {
             file_paths.as_deref(),
             args.thread_id.as_deref(),
             args.task_mode,
+            Some(consultation_id),
         )
         .await?;
 

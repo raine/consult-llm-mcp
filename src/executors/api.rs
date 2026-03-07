@@ -78,6 +78,7 @@ impl LlmExecutor for ApiExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         _thread_id: Option<&str>,
+        _consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
         if let Some(fps) = file_paths
             && !fps.is_empty()

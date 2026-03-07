@@ -19,10 +19,18 @@ pub async fn query_llm(
     file_paths: Option<&[PathBuf]>,
     thread_id: Option<&str>,
     task_mode: TaskMode,
+    consultation_id: Option<&str>,
 ) -> anyhow::Result<QueryResult> {
     let system_prompt = get_system_prompt(executor.capabilities().is_cli, task_mode);
     let result = executor
-        .execute(prompt, model, &system_prompt, file_paths, thread_id)
+        .execute(
+            prompt,
+            model,
+            &system_prompt,
+            file_paths,
+            thread_id,
+            consultation_id,
+        )
         .await?;
 
     if result.response.is_empty() {

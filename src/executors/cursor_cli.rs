@@ -89,6 +89,7 @@ impl LlmExecutor for CursorCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
+        _consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
         let message_with_files = append_files(prompt, file_paths);
         let message = if thread_id.is_some() {

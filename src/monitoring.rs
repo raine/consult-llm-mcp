@@ -20,6 +20,10 @@ pub enum MonitorEvent {
         model: String,
         backend: String,
     },
+    ConsultProgress {
+        id: String,
+        stage: ProgressStage,
+    },
     ConsultFinished {
         id: String,
         duration_ms: u64,
@@ -28,6 +32,32 @@ pub enum MonitorEvent {
         error: Option<String>,
     },
     ServerStopped,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ProgressStage {
+    Thinking,
+    ToolUse { tool: String },
+    ToolResult { tool: String, success: bool },
+    Responding,
+}
+
+impl std::fmt::Display for ProgressStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProgressStage::Thinking => write!(f, "Thinking..."),
+            ProgressStage::ToolUse { tool } => write!(f, "Tool: {tool}"),
+            ProgressStage::ToolResult { tool, success } => {
+                if *success {
+                    write!(f, "Tool done: {tool}")
+                } else {
+                    write!(f, "Tool failed: {tool}")
+                }
+            }
+            ProgressStage::Responding => write!(f, "Responding..."),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -164,6 +194,10 @@ mod tests {
         let lines = vec![
             r#"{"ts":"T","type":"server_started","version":"2.5.5","pid":12345}"#,
             r#"{"ts":"T","type":"consult_started","id":"a","model":"gpt","backend":"api"}"#,
+            r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"thinking"}}"#,
+            r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"tool_use","tool":"read_file"}}"#,
+            r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"tool_result","tool":"read_file","success":true}}"#,
+            r#"{"ts":"T","type":"consult_progress","id":"a","stage":{"type":"responding"}}"#,
             r#"{"ts":"T","type":"consult_finished","id":"a","duration_ms":3200,"success":true}"#,
             r#"{"ts":"T","type":"consult_finished","id":"b","duration_ms":5000,"success":false,"error":"timeout"}"#,
             r#"{"ts":"T","type":"server_stopped"}"#,

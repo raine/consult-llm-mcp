@@ -32,5 +32,6 @@ pub trait LlmExecutor: Send + Sync {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
+        consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult>;
 }
