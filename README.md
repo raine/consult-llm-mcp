@@ -782,12 +782,14 @@ Now when you make changes, rebuild with `cargo build` and restart Claude Code.
 
 ### Releasing
 
-Requires [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and
+Requires [zig](https://ziglang.org/),
+[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild), and
 cross-compilation targets:
 
 ```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+brew install zig
 cargo install cargo-zigbuild
+rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 ```
 
 Publish a new version:
