@@ -685,21 +685,40 @@ always reliably triggered. See the [example skill](#example-skill) below.
 **Recommendation:** Start with no custom activation. Use slash commands if you
 need reliability or custom instructions.
 
-## Example skill
+## Installing skills
 
-Here's an example [Claude Code skill](https://code.claude.com/docs/en/skills)
-that uses the `consult_llm` MCP tool to create commands like "ask gemini" or
-"ask codex". See [skills/consult/SKILL.md](skills/consult/SKILL.md) for the full
-content.
+Install all skills globally with a single command:
 
-Save it as `~/.claude/skills/consult-llm/SKILL.md` and you can then use it by
-typing "ask gemini about X" or "ask codex about X" in Claude Code.
+```bash
+curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+```
 
-This one is not strictly necessary either, Claude (or other agent) can infer
-from the schema that "Ask gemini" should call this MCP, but it might be helpful
-in case you want to have more precise control over how the agent calls this MCP.
+This installs skills for all detected platforms:
 
-## Example slash command
+- **Claude Code** → `~/.claude/skills/`
+- **OpenCode** → `~/.config/opencode/skills/`
+- **Codex** → `~/.codex/skills/`
+
+To uninstall:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash -s uninstall
+```
+
+## Skills
+
+### consult
+
+An example [Claude Code skill](https://code.claude.com/docs/en/skills) that uses
+the `consult_llm` MCP tool to create commands like "ask gemini" or "ask codex".
+See [skills/consult/SKILL.md](skills/consult/SKILL.md) for the full content.
+
+Type "ask gemini about X" or "ask codex about X" in Claude Code. This is not
+strictly necessary since Claude can infer from the schema that "ask gemini"
+should call this MCP, but it gives more precise control over how the agent calls
+this MCP.
+
+## Slash command
 
 Here's an example
 [Claude Code slash command](https://code.claude.com/docs/en/slash-commands) that
