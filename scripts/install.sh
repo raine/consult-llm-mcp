@@ -195,27 +195,30 @@ install_from_release() {
 	fi
 
 	log_info "Installing to $install_dir..."
-	local tmp_binary="$install_dir/consult-llm-mcp.tmp.$$"
 
-	if [[ -w "$install_dir" ]]; then
-		cp consult-llm-mcp "$tmp_binary"
-		chmod +x "$tmp_binary"
-		mv -f "$tmp_binary" "$install_dir/consult-llm-mcp"
-	else
-		if ! sudo cp consult-llm-mcp "$tmp_binary"; then
-			log_error "Failed to install to $install_dir (sudo required)"
-			exit 1
+	for bin in consult-llm-mcp consult-llm-monitor; do
+		local tmp_binary="$install_dir/$bin.tmp.$$"
+
+		if [[ -w "$install_dir" ]]; then
+			cp "$bin" "$tmp_binary"
+			chmod +x "$tmp_binary"
+			mv -f "$tmp_binary" "$install_dir/$bin"
+		else
+			if ! sudo cp "$bin" "$tmp_binary"; then
+				log_error "Failed to install $bin to $install_dir (sudo required)"
+				exit 1
+			fi
+			sudo chmod +x "$tmp_binary"
+			sudo mv -f "$tmp_binary" "$install_dir/$bin"
 		fi
-		sudo chmod +x "$tmp_binary"
-		sudo mv -f "$tmp_binary" "$install_dir/consult-llm-mcp"
-	fi
 
-	# Remove macOS quarantine attribute if present
-	if [[ "$(uname -s)" == "Darwin" ]] && command -v xattr &>/dev/null; then
-		xattr -d com.apple.quarantine "$install_dir/consult-llm-mcp" 2>/dev/null || true
-	fi
+		# Remove macOS quarantine attribute if present
+		if [[ "$(uname -s)" == "Darwin" ]] && command -v xattr &>/dev/null; then
+			xattr -d com.apple.quarantine "$install_dir/$bin" 2>/dev/null || true
+		fi
 
-	log_success "consult-llm-mcp installed to $install_dir/consult-llm-mcp"
+		log_success "$bin installed to $install_dir/$bin"
+	done
 
 	if [[ ":$PATH:" != *":$install_dir:"* ]]; then
 		log_warning "$install_dir is not in your PATH"
@@ -233,17 +236,19 @@ install_from_release() {
 verify_installation() {
 	local install_dir="$1"
 
-	if [ ! -x "$install_dir/consult-llm-mcp" ]; then
-		log_error "consult-llm-mcp binary not found or not executable at $install_dir/consult-llm-mcp"
-		exit 1
-	fi
+	for bin in consult-llm-mcp consult-llm-monitor; do
+		if [ ! -x "$install_dir/$bin" ]; then
+			log_error "$bin binary not found or not executable at $install_dir/$bin"
+			exit 1
+		fi
 
-	if ! "$install_dir/consult-llm-mcp" --version &>/dev/null; then
-		log_error "consult-llm-mcp binary exists but failed to run"
-		exit 1
-	fi
+		if ! "$install_dir/$bin" --version &>/dev/null; then
+			log_error "$bin binary exists but failed to run"
+			exit 1
+		fi
+	done
 
-	log_success "consult-llm-mcp is installed and ready!"
+	log_success "consult-llm-mcp and consult-llm-monitor are installed and ready!"
 	echo ""
 	"$install_dir/consult-llm-mcp" --version
 	echo ""

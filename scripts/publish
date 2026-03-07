@@ -146,7 +146,7 @@ for plat in "${platforms[@]}"; do
 
 	# Stage GitHub release assets
 	archive_name="consult-llm-mcp-$suffix.tar.gz"
-	tar -czf "$GH_RELEASE_DIR/$archive_name" -C "target/$target/release" consult-llm-mcp
+	tar -czf "$GH_RELEASE_DIR/$archive_name" -C "target/$target/release" consult-llm-mcp consult-llm-monitor
 	(cd "$GH_RELEASE_DIR" && shasum -a 256 "$archive_name" > "${archive_name%.tar.gz}.sha256")
 
 	echo "Validating $pkg_name..."
