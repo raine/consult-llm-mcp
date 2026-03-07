@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.5.6 (2026-03-07)
+
+- Added bash installer (`curl | bash`) for installing without Node.js
+
 ## v2.5.4 (2026-03-07)
 
 - Rewrote server from TypeScript to Rust
