@@ -19,6 +19,7 @@
     "consult-llm-mcp-darwin-arm64",
     "consult-llm-mcp-darwin-x64",
     "consult-llm-mcp-linux-x64",
+    "consult-llm-mcp-linux-arm64",
     "README.md",
     "CHANGELOG.md"
   ],

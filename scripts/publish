@@ -52,6 +52,9 @@ cargo build --release --target x86_64-apple-darwin
 echo "Building x86_64-unknown-linux-gnu..."
 cargo zigbuild --release --target x86_64-unknown-linux-gnu
 
+echo "Building aarch64-unknown-linux-gnu..."
+cargo zigbuild --release --target aarch64-unknown-linux-gnu
+
 # Stage for publishing
 echo "Staging release..."
 STAGE_DIR="target/npm-package"
@@ -64,6 +67,7 @@ chmod +x "$STAGE_DIR/run.sh"
 cp target/aarch64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-arm64"
 cp target/x86_64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-darwin-x64"
 cp target/x86_64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-x64"
+cp target/aarch64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-arm64"
 chmod +x "$STAGE_DIR"/consult-llm-mcp-*
 
 # Publish from staging directory

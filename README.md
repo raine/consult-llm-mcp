@@ -786,7 +786,7 @@ Requires [cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild) and
 cross-compilation targets:
 
 ```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu
+rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
 cargo install cargo-zigbuild
 ```
 
