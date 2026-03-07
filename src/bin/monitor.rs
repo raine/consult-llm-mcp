@@ -338,9 +338,9 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             };
             rows.push(Row::new(vec![
                 Span::styled(short_id.to_string(), Style::default().fg(DIM_WHITE)),
-                Span::styled(pid.clone(), Style::default().fg(DIM)),
+                Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
                 Span::styled(status.to_string(), Style::default().fg(status_color)),
-                Span::styled(hist, Style::default().fg(DIM)),
+                Span::styled(hist, Style::default().fg(DIM_WHITE)),
                 Span::styled(String::new(), Style::default().fg(DIM)),
             ]));
         } else {
@@ -362,7 +362,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                     ),
                     Span::styled(
                         if i == 0 { pid.clone() } else { String::new() },
-                        Style::default().fg(DIM),
+                        Style::default().fg(DIM_WHITE),
                     ),
                     Span::styled(status.to_string(), Style::default().fg(status_color)),
                     Span::styled(
