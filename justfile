@@ -47,7 +47,7 @@ install-dev:
 
 # Install release binary globally
 install:
-    cargo install --path .
+    cargo install --offline --path . --locked
 
 # Run the application
 run *ARGS:
