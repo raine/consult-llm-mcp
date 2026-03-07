@@ -97,7 +97,7 @@ impl ConsultServer {
         let project = std::env::current_dir()
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-            .unwrap_or_default();
+            .unwrap_or_else(|| "unknown".to_string());
 
         let start_time = std::time::Instant::now();
         let result = self

@@ -92,11 +92,11 @@ pub fn append_history(record: &HistoryRecord) {
     let dir = sessions_dir();
     let _ = create_dir_all(&dir);
     let path = dir.join(HISTORY_FILE);
-    if let Ok(file) = OpenOptions::new().create(true).append(true).open(path)
-        && let Ok(line) = serde_json::to_string(record)
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path)
+        && let Ok(json) = serde_json::to_string(record)
     {
-        let mut writer = BufWriter::new(file);
-        let _ = writeln!(writer, "{line}");
+        let line = format!("{json}\n");
+        let _ = file.write_all(line.as_bytes());
     }
 }
 

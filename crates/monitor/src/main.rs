@@ -710,7 +710,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let table = Table::new(
         rows,
         [
-            Constraint::Min(14),
+            Constraint::Length(14),
             Constraint::Length(7),
             Constraint::Length(8),
             Constraint::Min(20),
@@ -931,7 +931,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState
         rows,
         [
             Constraint::Length(10),
-            Constraint::Min(14),
+            Constraint::Length(14),
             Constraint::Length(14),
             Constraint::Length(10),
             Constraint::Length(10),
