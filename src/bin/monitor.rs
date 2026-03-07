@@ -40,7 +40,7 @@ struct AppState {
 struct ServerState {
     server_id: String,
     pid: u32,
-    version: String,
+    _version: String,
     stopped: bool,
     dead: bool,
     active_consults: HashMap<String, ActiveConsult>,
@@ -102,7 +102,7 @@ impl AppState {
                     ServerState {
                         server_id: server_id.to_string(),
                         pid: *pid,
-                        version: version.clone(),
+                        _version: version.clone(),
                         stopped: false,
                         dead: false,
                         active_consults: HashMap::new(),
