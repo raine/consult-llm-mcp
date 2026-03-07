@@ -7,9 +7,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# Run all checks
-[parallel]
-check: format clippy-fix build test clippy
+# Run all checks sequentially (order matters!)
+check: clippy-fix format test
 
 # Run check and fail if there are uncommitted changes (for CI)
 check-ci: check
@@ -28,19 +27,19 @@ format:
 
 # Run clippy and fail on any warnings
 clippy:
-    cargo clippy -- -D clippy::all
+    cargo clippy --workspace --all-targets -- -D clippy::all
 
 # Auto-fix clippy warnings
 clippy-fix:
-    cargo clippy --fix --allow-dirty -- -W clippy::all
+    cargo clippy --workspace --all-targets --fix --allow-dirty --allow-staged -- -D clippy::all
 
 # Build the project
 build:
-    cargo build --all
+    cargo build --workspace --all-targets
 
 # Run tests
 test:
-    cargo test
+    cargo test --workspace
 
 # Run the application
 run *ARGS:
