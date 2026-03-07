@@ -412,9 +412,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 fn render_status_bar(frame: &mut ratatui::Frame, area: Rect) {
     let bar = Line::from(vec![
         Span::styled(" q", Style::default().fg(TEAL)),
-        Span::styled(" quit  ", Style::default().fg(DIM_WHITE)),
-        Span::styled("p", Style::default().fg(TEAL)),
-        Span::styled(" prune dead  ", Style::default().fg(DIM_WHITE)),
+        Span::styled(" quit", Style::default().fg(DIM_WHITE)),
     ]);
     frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
 }
@@ -436,6 +434,7 @@ fn main() -> io::Result<()> {
 
     state.poll_files(&dir);
     state.check_liveness();
+    state.prune_finished(&dir);
 
     let poll_interval = Duration::from_millis(500);
     let mut last_poll = std::time::Instant::now();
@@ -451,7 +450,6 @@ fn main() -> io::Result<()> {
             match key.code {
                 KeyCode::Char('q') | KeyCode::Esc => break,
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-                KeyCode::Char('p') => state.prune_finished(&dir),
                 _ => {}
             }
         }
@@ -459,6 +457,7 @@ fn main() -> io::Result<()> {
         if last_poll.elapsed() >= poll_interval {
             state.poll_files(&dir);
             state.check_liveness();
+            state.prune_finished(&dir);
             last_poll = std::time::Instant::now();
         }
     }
