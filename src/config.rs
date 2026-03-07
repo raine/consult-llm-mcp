@@ -84,6 +84,25 @@ impl ModelRegistry {
     }
 }
 
+/// Prefer CONSULT_LLM_-prefixed env var, fall back to unprefixed with deprecation warning.
+pub fn migrate_prefixed_env(
+    prefixed: Option<&str>,
+    unprefixed: Option<&str>,
+    unprefixed_name: &str,
+    prefixed_name: &str,
+) -> Option<String> {
+    if let Some(v) = prefixed {
+        return Some(v.to_string());
+    }
+    if let Some(v) = unprefixed {
+        log_to_file(&format!(
+            "DEPRECATED: {unprefixed_name}={v} → use {prefixed_name}={v} instead"
+        ));
+        return Some(v.to_string());
+    }
+    None
+}
+
 pub fn migrate_backend_env(
     new_var: Option<&str>,
     old_var: Option<&str>,
@@ -174,20 +193,33 @@ pub fn registry() -> &'static ModelRegistry {
 /// Must be called before MCP server starts.
 /// Exits process on fatal configuration errors.
 pub fn init_config() {
-    let resolved_gemini_backend = migrate_backend_env(
+    // Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
+    let gemini_backend_raw = migrate_prefixed_env(
+        env_non_empty("CONSULT_LLM_GEMINI_BACKEND").as_deref(),
         env_non_empty("GEMINI_BACKEND").as_deref(),
+        "GEMINI_BACKEND",
+        "CONSULT_LLM_GEMINI_BACKEND",
+    );
+    let resolved_gemini_backend = migrate_backend_env(
+        gemini_backend_raw.as_deref(),
         env_non_empty("GEMINI_MODE").as_deref(),
         "gemini-cli",
         "GEMINI_MODE",
-        "GEMINI_BACKEND",
+        "CONSULT_LLM_GEMINI_BACKEND",
     );
 
-    let resolved_openai_backend = migrate_backend_env(
+    let openai_backend_raw = migrate_prefixed_env(
+        env_non_empty("CONSULT_LLM_OPENAI_BACKEND").as_deref(),
         env_non_empty("OPENAI_BACKEND").as_deref(),
+        "OPENAI_BACKEND",
+        "CONSULT_LLM_OPENAI_BACKEND",
+    );
+    let resolved_openai_backend = migrate_backend_env(
+        openai_backend_raw.as_deref(),
         env_non_empty("OPENAI_MODE").as_deref(),
         "codex-cli",
         "OPENAI_MODE",
-        "OPENAI_BACKEND",
+        "CONSULT_LLM_OPENAI_BACKEND",
     );
 
     let catalog_models = build_model_catalog(
@@ -271,7 +303,12 @@ pub fn init_config() {
     }
 
     // Validate codex reasoning effort
-    let codex_reasoning_effort = env_non_empty("CODEX_REASONING_EFFORT");
+    let codex_reasoning_effort = migrate_prefixed_env(
+        env_non_empty("CONSULT_LLM_CODEX_REASONING_EFFORT").as_deref(),
+        env_non_empty("CODEX_REASONING_EFFORT").as_deref(),
+        "CODEX_REASONING_EFFORT",
+        "CONSULT_LLM_CODEX_REASONING_EFFORT",
+    );
     if let Some(ref effort) = codex_reasoning_effort {
         let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
         if !valid.contains(&effort.as_str()) {
@@ -407,6 +444,24 @@ mod tests {
             },
         );
         assert_eq!(result, vec!["custom-model"]);
+    }
+
+    #[test]
+    fn test_migrate_prefixed_env_prefixed_value() {
+        let result = migrate_prefixed_env(Some("codex-cli"), Some("api"), "OLD", "NEW");
+        assert_eq!(result, Some("codex-cli".into()));
+    }
+
+    #[test]
+    fn test_migrate_prefixed_env_fallback_unprefixed() {
+        let result = migrate_prefixed_env(None, Some("gemini-cli"), "OLD", "NEW");
+        assert_eq!(result, Some("gemini-cli".into()));
+    }
+
+    #[test]
+    fn test_migrate_prefixed_env_both_missing() {
+        let result = migrate_prefixed_env(None, None, "OLD", "NEW");
+        assert_eq!(result, None);
     }
 
     #[test]

@@ -101,16 +101,19 @@ impl LlmExecutor for CodexCliExecutor {
             args.push(format!("model_reasoning_effort=\"{effort}\""));
         }
 
-        let cwd = std::env::current_dir().unwrap_or_default();
-        let mut extra_dirs: Vec<String> = Vec::new();
-        if let Some(wt) = get_main_worktree_path() {
-            extra_dirs.push(wt.to_string());
-        }
-        let resolved_paths: Option<Vec<PathBuf>> = file_paths.map(|fps| fps.to_vec());
-        extra_dirs.extend(get_external_directories(resolved_paths.as_deref(), &cwd));
-        for dir in &extra_dirs {
-            args.push("--add-dir".to_string());
-            args.push(dir.clone());
+        // --add-dir is not supported by `codex exec resume`
+        if thread_id.is_none() {
+            let cwd = std::env::current_dir().unwrap_or_default();
+            let mut extra_dirs: Vec<String> = Vec::new();
+            if let Some(wt) = get_main_worktree_path() {
+                extra_dirs.push(wt.to_string());
+            }
+            let resolved_paths: Option<Vec<PathBuf>> = file_paths.map(|fps| fps.to_vec());
+            extra_dirs.extend(get_external_directories(resolved_paths.as_deref(), &cwd));
+            for dir in &extra_dirs {
+                args.push("--add-dir".to_string());
+                args.push(dir.clone());
+            }
         }
 
         args.push("-m".to_string());

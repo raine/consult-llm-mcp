@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.5.4 (2026-03-07)
+
+- Added `CONSULT_LLM_` prefix to backend and reasoning effort env vars:
+  `CONSULT_LLM_GEMINI_BACKEND`, `CONSULT_LLM_OPENAI_BACKEND`,
+  `CONSULT_LLM_CODEX_REASONING_EFFORT`. Old unprefixed names still work with a
+  deprecation warning.
+- Fixed Codex CLI thread resumption failing due to unsupported `--add-dir` flag
+  in `codex exec resume`
+- Added `install-skills` script for easy skill installation
+- Added `MCP_DEBUG_STDIN` env var for raw stdin transport logging
+
 ## v2.5.0 (2026-03-05)
 
 - Added gpt-5.4 model support ($2.50/$15 per million tokens)

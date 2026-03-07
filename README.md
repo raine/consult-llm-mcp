@@ -64,7 +64,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
      -e OPENAI_API_KEY=your_openai_key \
      -e GEMINI_API_KEY=your_gemini_key \
      -e DEEPSEEK_API_KEY=your_deepseek_key \
-     -e GEMINI_BACKEND=gemini-cli \
+     -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -- npx -y consult-llm-mcp
    ```
 
@@ -344,7 +344,7 @@ or use your Google AI Pro subscription.
 **Setup:**
 
 ```bash
-claude mcp add consult-llm -e GEMINI_BACKEND=gemini-cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli -- npx -y consult-llm-mcp
 ```
 
 #### Codex CLI
@@ -359,12 +359,12 @@ Use OpenAI's Codex CLI for OpenAI models.
 **Setup:**
 
 ```bash
-claude mcp add consult-llm -e OPENAI_BACKEND=codex-cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e CONSULT_LLM_OPENAI_BACKEND=codex-cli -- npx -y consult-llm-mcp
 ```
 
 <!-- prettier-ignore -->
 > [!TIP]
-> Set reasoning effort with `-e CODEX_REASONING_EFFORT=high`. Options:
+> Set reasoning effort with `-e CONSULT_LLM_CODEX_REASONING_EFFORT=high`. Options:
 > `none`, `minimal`, `low`, `medium`, `high`, `xhigh`.
 
 #### Cursor CLI
@@ -380,15 +380,17 @@ Use Cursor's agent CLI to route GPT and Gemini models through one tool.
 
 ```bash
 # Route GPT models through Cursor CLI
-claude mcp add consult-llm -e OPENAI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e CONSULT_LLM_OPENAI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
 
 # Route Gemini models through Cursor CLI
-claude mcp add consult-llm -e GEMINI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
+claude mcp add consult-llm -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli -- npx -y consult-llm-mcp
 
 # Route everything through Cursor CLI
 claude mcp add consult-llm \
-  -e OPENAI_BACKEND=cursor-cli \
-  -e GEMINI_BACKEND=cursor-cli \
+  -e CONSULT_LLM_OPENAI_BACKEND=cursor-cli \
+  -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli \
+  -e CONSULT_LLM_CODEX_REASONING_EFFORT=high \
+  -e CONSULT_LLM_ALLOWED_MODELS="gemini-3-pro-preview,gpt-5.3-codex" \
   -- npx -y consult-llm-mcp
 ```
 
@@ -459,11 +461,12 @@ See the "Using web mode..." example above for a concrete transcript.
   - Options: `gpt-5.2` (default), `gpt-5.4`, `gemini-2.5-pro`,
     `gemini-3-pro-preview`, `gemini-3.1-pro-preview`, `deepseek-reasoner`,
     `gpt-5.3-codex`, `gpt-5.2-codex`
-- `GEMINI_BACKEND` - Backend for Gemini models (optional)
+- `CONSULT_LLM_GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
-- `OPENAI_BACKEND` - Backend for OpenAI models (optional)
+- `CONSULT_LLM_OPENAI_BACKEND` - Backend for OpenAI models (optional)
   - Options: `api` (default), `codex-cli`, `cursor-cli`
-- `CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex CLI (optional)
+- `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
+  CLI (optional)
   - See [Codex CLI](#codex-cli) for details and available options
 - `CONSULT_LLM_EXTRA_MODELS` - Add models not in the built-in list (optional)
   - Comma-separated list, e.g., `grok-3,kimi-k2.5`
