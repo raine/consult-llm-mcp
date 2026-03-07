@@ -1,6 +1,6 @@
 {
   "name": "consult-llm-mcp",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "description": "MCP server for consulting powerful AI models",
   "repository": {
     "type": "git",
@@ -23,7 +23,10 @@
     "README.md",
     "CHANGELOG.md"
   ],
-  "os": ["darwin", "linux"],
+  "os": [
+    "darwin",
+    "linux"
+  ],
   "keywords": [
     "mcp",
     "openai",
