@@ -1,6 +1,7 @@
 .claude
 .workmux
 target/
+package-lock.json
 history
 consult-llm-mcp-darwin-*
 consult-llm-mcp-linux-*
