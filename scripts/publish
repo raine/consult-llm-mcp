@@ -24,6 +24,9 @@ for cmd in cargo cargo-zigbuild zig; do
 	fi
 done
 
+echo "Ensuring rust targets are installed..."
+rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+
 if ! git diff --quiet || ! git diff --cached --quiet; then
 	echo "error: working tree has uncommitted changes" >&2
 	exit 1
@@ -33,6 +36,17 @@ fi
 echo "Running checks..."
 cargo clippy --workspace --all-targets -- -D clippy::all
 cargo test --workspace
+
+# Rollback version files on any failure after this point
+cleanup() {
+	rc=$?
+	if [ $rc -ne 0 ]; then
+		echo "Failure detected, rolling back version changes..." >&2
+		git restore package.json Cargo.toml Cargo.lock 2>/dev/null || true
+	fi
+	exit $rc
+}
+trap cleanup EXIT
 
 # Bump version without creating a commit or tag
 npm version "$bump" --no-git-tag-version
@@ -69,6 +83,10 @@ cp target/x86_64-apple-darwin/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mc
 cp target/x86_64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-x64"
 cp target/aarch64-unknown-linux-gnu/release/consult-llm-mcp "$STAGE_DIR/consult-llm-mcp-linux-arm64"
 chmod +x "$STAGE_DIR"/consult-llm-mcp-*
+
+# Validate staged package
+echo "Validating package..."
+(cd "$STAGE_DIR" && npm pack --dry-run)
 
 # Publish from staging directory
 echo "Publishing v${VERSION} to npm..."

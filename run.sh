@@ -21,20 +21,16 @@ OS="$(uname -s)"
 ARCH="$(uname -m)"
 
 case "$OS:$ARCH" in
-Darwin:arm64 | Darwin:aarch64)
-	exec "$DIR/consult-llm-mcp-darwin-arm64" "$@"
-	;;
-Darwin:x86_64)
-	exec "$DIR/consult-llm-mcp-darwin-x64" "$@"
-	;;
-Linux:x86_64 | Linux:amd64)
-	exec "$DIR/consult-llm-mcp-linux-x64" "$@"
-	;;
-Linux:aarch64 | Linux:arm64)
-	exec "$DIR/consult-llm-mcp-linux-arm64" "$@"
-	;;
+Darwin:arm64 | Darwin:aarch64) BIN="$DIR/consult-llm-mcp-darwin-arm64" ;;
+Darwin:x86_64) BIN="$DIR/consult-llm-mcp-darwin-x64" ;;
+Linux:x86_64 | Linux:amd64) BIN="$DIR/consult-llm-mcp-linux-x64" ;;
+Linux:aarch64 | Linux:arm64) BIN="$DIR/consult-llm-mcp-linux-arm64" ;;
 *)
 	echo "consult-llm-mcp: unsupported platform: $OS $ARCH" >&2
 	exit 1
 	;;
 esac
+
+# npm may strip executable bits on sidecar binaries during extraction
+[ -x "$BIN" ] || chmod +x "$BIN"
+exec "$BIN" "$@"

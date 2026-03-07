@@ -23,6 +23,7 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "os": ["darwin", "linux"],
   "keywords": [
     "mcp",
     "openai",
