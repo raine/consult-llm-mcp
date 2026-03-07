@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "consult-llm-mcp"
-version = "2.5.0"
+version = "2.5.4"
 dependencies = [
  "anyhow",
  "arboard",

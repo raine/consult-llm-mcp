@@ -2,14 +2,35 @@
 
 ## v2.5.4 (2026-03-07)
 
+- Rewrote server from TypeScript to Rust
+- Distributed as cross-compiled native binaries (macOS arm64/x64, Linux
+  x64/arm64) via npm with a POSIX sh launcher
+- Added `MCP_DEBUG_STDIN` env var for raw stdin transport logging
+
+## v2.5.3 (2026-03-06)
+
 - Added `CONSULT_LLM_` prefix to backend and reasoning effort env vars:
   `CONSULT_LLM_GEMINI_BACKEND`, `CONSULT_LLM_OPENAI_BACKEND`,
   `CONSULT_LLM_CODEX_REASONING_EFFORT`. Old unprefixed names still work with a
   deprecation warning.
+
+## v2.5.2 (2026-03-06)
+
 - Fixed Codex CLI thread resumption failing due to unsupported `--add-dir` flag
   in `codex exec resume`
+
+## v2.5.1 (2026-03-06)
+
+- Consult skill now queries both Gemini and Codex in parallel by default, with
+  `--gemini` and `--codex` flags for single-model consultation
+- CLI backends now receive main worktree path as additional context when running
+  inside a git worktree
+- CLI backends now detect external file directories (outside workspace) and pass
+  them to Gemini/Codex so referenced files are accessible
+- Debate skill now supports multi-round debates via `--rounds` flag (default 2,
+  max 3)
+- Reduced anchoring bias in debate/debate-vs final review phase
 - Added `install-skills` script for easy skill installation
-- Added `MCP_DEBUG_STDIN` env var for raw stdin transport logging
 
 ## v2.5.0 (2026-03-05)
 
