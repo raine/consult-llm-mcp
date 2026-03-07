@@ -18,6 +18,13 @@ if [[ "$bump" == "beta" ]]; then
 	BETA=true
 fi
 
+# Set up npm auth from automation token (no 2FA needed)
+if [ -z "${CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN:-}" ]; then
+	echo "error: CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN is not set" >&2
+	exit 1
+fi
+export NPM_CONFIG_TOKEN="$CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN"
+
 # Pre-flight checks
 echo "Checking npm auth..."
 npm whoami
@@ -147,12 +154,6 @@ fs.writeFileSync(process.env.ROOT_DIR + "/package.json", JSON.stringify(pkg, nul
 
 echo "Validating root package..."
 (cd "$root_dir" && npm pack --dry-run)
-
-# Use automation token if available (no 2FA needed)
-if [ -n "${CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN:-}" ]; then
-	export NPM_CONFIG_TOKEN="$CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN"
-	echo "Using CONSULT_LLM_MCP_NPM_PUBLISH_TOKEN for auth"
-fi
 
 NPM_TAG_FLAG=""
 if [[ "$BETA" == true ]]; then
