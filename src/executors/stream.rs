@@ -8,12 +8,32 @@ use super::types::Usage;
 /// Each CLI adapter maps its raw JSON lines to these.
 #[derive(Debug, Clone)]
 pub enum ParsedStreamEvent {
-    SessionStarted { id: String },
+    SessionStarted {
+        id: String,
+    },
     Thinking,
-    AssistantText { text: String },
-    ToolStarted { call_id: String, label: String },
-    ToolFinished { call_id: String, success: bool },
+    AssistantText {
+        text: String,
+    },
+    ToolStarted {
+        call_id: String,
+        label: String,
+    },
+    ToolFinished {
+        call_id: String,
+        #[allow(dead_code)]
+        success: bool,
+    },
     Usage(Usage),
+}
+
+/// Format a tool label with an optional detail (file path, pattern, etc.)
+/// e.g. ("read", Some("src/main.rs")) → "read src/main.rs"
+pub fn tool_label(name: &str, detail: Option<&str>) -> String {
+    match detail {
+        Some(d) => format!("{name} {d}"),
+        None => name.to_string(),
+    }
 }
 
 /// Accumulates stream events into a final result and emits monitoring progress.
@@ -56,15 +76,8 @@ impl StreamReducer {
                     self.active_tools.insert(call_id.clone(), label.clone());
                     self.emit_progress(ProgressStage::ToolUse { tool: label });
                 }
-                ParsedStreamEvent::ToolFinished { call_id, success } => {
-                    let label = self
-                        .active_tools
-                        .remove(&call_id)
-                        .unwrap_or_else(|| "tool".to_string());
-                    self.emit_progress(ProgressStage::ToolResult {
-                        tool: label,
-                        success,
-                    });
+                ParsedStreamEvent::ToolFinished { call_id, .. } => {
+                    self.active_tools.remove(&call_id);
                 }
                 ParsedStreamEvent::Usage(u) => {
                     self.usage = Some(u);

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 
 use super::cli_runner::run_cli_streaming;
-use super::stream::{ParsedStreamEvent, StreamReducer};
+use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
@@ -34,13 +34,16 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
 
     match event.get("type").and_then(|t| t.as_str()) {
         Some("init") => {
+            let mut events = vec![ParsedStreamEvent::Thinking];
             if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
-                vec![ParsedStreamEvent::SessionStarted {
-                    id: sid.to_string(),
-                }]
-            } else {
-                vec![]
+                events.insert(
+                    0,
+                    ParsedStreamEvent::SessionStarted {
+                        id: sid.to_string(),
+                    },
+                );
             }
+            events
         }
         Some("message") => {
             if event.get("role").and_then(|r| r.as_str()) == Some("assistant")
@@ -58,20 +61,37 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
             }
         }
         Some("tool_use") => {
-            let tool = event
+            let tool_name = event
                 .get("tool_name")
                 .and_then(|t| t.as_str())
-                .unwrap_or("tool")
-                .to_string();
+                .unwrap_or("tool");
+            let params = event.get("parameters");
+            let (short_name, detail) = match tool_name {
+                "read_file" => (
+                    "read",
+                    params
+                        .and_then(|p| p.get("file_path"))
+                        .and_then(|v| v.as_str()),
+                ),
+                "glob" => (
+                    "glob",
+                    params
+                        .and_then(|p| p.get("pattern"))
+                        .and_then(|v| v.as_str()),
+                ),
+                "grep_search" => (
+                    "grep",
+                    params.and_then(|p| p.get("query")).and_then(|v| v.as_str()),
+                ),
+                _ => (tool_name, None),
+            };
+            let label = tool_label(short_name, detail);
             let call_id = event
                 .get("tool_id")
                 .and_then(|t| t.as_str())
                 .unwrap_or("")
                 .to_string();
-            vec![ParsedStreamEvent::ToolStarted {
-                call_id,
-                label: tool,
-            }]
+            vec![ParsedStreamEvent::ToolStarted { call_id, label }]
         }
         Some("tool_result") => {
             let call_id = event
@@ -213,8 +233,9 @@ mod tests {
         let events = parse_gemini_line(
             r#"{"type":"init","timestamp":"...","session_id":"sess_123","model":"gemini-3"}"#,
         );
-        assert_eq!(events.len(), 1);
+        assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], ParsedStreamEvent::SessionStarted { id } if id == "sess_123"));
+        assert!(matches!(&events[1], ParsedStreamEvent::Thinking));
     }
 
     #[test]
@@ -231,11 +252,11 @@ mod tests {
     #[test]
     fn test_parse_gemini_line_tool_use() {
         let events = parse_gemini_line(
-            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"read_file_123"}"#,
+            r#"{"type":"tool_use","tool_name":"read_file","tool_id":"rf_123","parameters":{"file_path":"src/main.rs"}}"#,
         );
         assert_eq!(events.len(), 1);
         assert!(
-            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "read_file_123" && label == "read_file")
+            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "rf_123" && label == "read src/main.rs")
         );
     }
 
@@ -291,5 +312,26 @@ mod tests {
         assert!(parse_gemini_line("").is_empty());
         assert!(parse_gemini_line("  ").is_empty());
         assert!(parse_gemini_line("not json").is_empty());
+    }
+
+    #[test]
+    fn test_reducer_full_sequence_with_tools() {
+        let mut reducer = StreamReducer::new(None);
+        let lines = vec![
+            r#"{"type":"init","timestamp":"...","session_id":"sess1","model":"gemini-3"}"#,
+            r#"{"type":"message","timestamp":"...","role":"user","content":"analyze README.md"}"#,
+            r#"{"type":"tool_use","timestamp":"...","tool_name":"read_file","tool_id":"read_file_001","parameters":{"file_path":"README.md"}}"#,
+            r#"{"type":"tool_result","timestamp":"...","tool_id":"read_file_001","status":"success","output":""}"#,
+            r#"{"type":"tool_use","timestamp":"...","tool_name":"read_file","tool_id":"read_file_002","parameters":{"file_path":"src/main.rs"}}"#,
+            r#"{"type":"tool_result","timestamp":"...","tool_id":"read_file_002","status":"success","output":""}"#,
+            r#"{"type":"message","timestamp":"...","role":"assistant","content":"Here is the analysis.","delta":true}"#,
+            r#"{"type":"result","timestamp":"...","status":"success","stats":{"input_tokens":1000,"output_tokens":100}}"#,
+        ];
+        for line in &lines {
+            reducer.process(parse_gemini_line(line));
+        }
+        assert_eq!(reducer.thread_id, Some("sess1".to_string()));
+        assert_eq!(reducer.response, "Here is the analysis.");
+        assert!(reducer.usage.is_some());
     }
 }

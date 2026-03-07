@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 
 use super::cli_runner::{run_cli_streaming, truncate_at_char_boundary};
-use super::stream::{ParsedStreamEvent, StreamReducer};
+use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::config::config;
 use crate::logger::log_cli_debug;
@@ -112,11 +112,21 @@ fn extract_cursor_tool_name(tool_call: &serde_json::Value) -> String {
             }
         }
     }
-    if tool_call.get("readToolCall").is_some() {
-        return "read_file".to_string();
+    if let Some(read) = tool_call.get("readToolCall") {
+        let path = read
+            .get("args")
+            .and_then(|a| a.get("path"))
+            .or_else(|| read.get("path"))
+            .and_then(|v| v.as_str());
+        return tool_label("read", path);
     }
-    if tool_call.get("globToolCall").is_some() {
-        return "glob".to_string();
+    if let Some(glob) = tool_call.get("globToolCall") {
+        let pattern = glob
+            .get("args")
+            .and_then(|a| a.get("globPattern"))
+            .or_else(|| glob.get("pattern"))
+            .and_then(|v| v.as_str());
+        return tool_label("glob", pattern);
     }
     "tool".to_string()
 }
@@ -274,7 +284,7 @@ mod tests {
         );
         assert_eq!(events.len(), 1);
         assert!(
-            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "c1" && label == "read_file")
+            matches!(&events[0], ParsedStreamEvent::ToolStarted { call_id, label } if call_id == "c1" && label == "read src/lib.rs")
         );
     }
 
@@ -319,13 +329,13 @@ mod tests {
     fn test_extract_cursor_tool_name_read() {
         let tc: serde_json::Value =
             serde_json::from_str(r#"{"readToolCall":{"path":"src/lib.rs"}}"#).unwrap();
-        assert_eq!(extract_cursor_tool_name(&tc), "read_file");
+        assert_eq!(extract_cursor_tool_name(&tc), "read src/lib.rs");
     }
 
     #[test]
     fn test_extract_cursor_tool_name_glob() {
         let tc: serde_json::Value =
             serde_json::from_str(r#"{"globToolCall":{"pattern":"**/*.rs"}}"#).unwrap();
-        assert_eq!(extract_cursor_tool_name(&tc), "glob");
+        assert_eq!(extract_cursor_tool_name(&tc), "glob **/*.rs");
     }
 }
