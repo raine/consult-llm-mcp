@@ -248,10 +248,7 @@ verify_installation() {
 	"$install_dir/consult-llm-mcp" --version
 	echo ""
 
-	echo "Add to Claude Code:"
-	echo "  claude mcp add consult-llm \\"
-	echo "    -e GEMINI_API_KEY=your_key \\"
-	echo "    -- $install_dir/consult-llm-mcp"
+	echo "Get started: https://github.com/raine/consult-llm-mcp#quick-start"
 	echo ""
 }
 
