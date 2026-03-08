@@ -5,9 +5,9 @@ use tokio::process::Command;
 use crate::logger::log_cli_debug;
 
 pub struct CliResult {
+    pub stdout_bytes: usize,
     pub stderr: String,
     pub code: Option<i32>,
-    pub stdout_bytes: usize,
     pub duration_ms: u128,
 }
 
@@ -59,8 +59,8 @@ where
     let mut stdout_bytes: usize = 0;
 
     while let Some(line) = reader.next_line().await? {
-        on_line(&line);
         stdout_bytes += line.len() + 1;
+        on_line(&line);
     }
 
     let status = child.wait().await?;
@@ -68,9 +68,9 @@ where
     let stderr = stderr_task.await??;
 
     let result = CliResult {
+        stdout_bytes,
         stderr,
         code: status.code(),
-        stdout_bytes,
         duration_ms,
     };
 
