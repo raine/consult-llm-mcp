@@ -95,6 +95,8 @@ impl LlmExecutor for CursorCliExecutor {
 
         let cursor_model = map_cursor_model(model);
 
+        // --trust is required for headless (--print) mode to skip the interactive
+        // workspace trust prompt. --mode ask restricts to read-only operations.
         let mut args: Vec<String> = vec![
             "--print".to_string(),
             "--trust".to_string(),
