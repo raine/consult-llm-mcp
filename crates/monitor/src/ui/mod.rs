@@ -9,6 +9,8 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 
+pub(crate) use markdown::init_syntax;
+
 pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(BG)), area);

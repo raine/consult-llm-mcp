@@ -65,6 +65,11 @@ fn main() -> io::Result<()> {
 
     let (update_rx, cmd_tx, _poll_thread) = poller::spawn(dir.clone(), poll_interval);
 
+    // Pre-initialize syntect data on a background thread so the first code
+    // block render doesn't stutter. The OnceLock ensures the render path
+    // blocks only if init hasn't finished yet.
+    std::thread::spawn(ui::init_syntax);
+
     let mut row_infos = Vec::new();
 
     loop {

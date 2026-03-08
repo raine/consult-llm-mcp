@@ -517,6 +517,12 @@ fn render_table(rows: &[Vec<String>]) -> Vec<Vec<StyledSpan>> {
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
 static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
 
+/// Pre-initialize syntax and theme sets to avoid UI stutter on first code block.
+pub fn init_syntax() {
+    get_syntax_set();
+    get_theme_set();
+}
+
 fn get_syntax_set() -> &'static SyntaxSet {
     SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
 }
