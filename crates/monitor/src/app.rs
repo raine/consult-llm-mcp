@@ -21,7 +21,10 @@ impl AppState {
             Action::Quit => unreachable!("handled in main loop"),
             Action::ToggleFocus => {
                 self.focus = match self.focus {
-                    Focus::Active => Focus::History,
+                    Focus::Active => {
+                        self.history_selected = 0;
+                        Focus::History
+                    }
                     Focus::History => Focus::Active,
                 };
             }
