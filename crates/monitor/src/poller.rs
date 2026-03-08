@@ -23,7 +23,10 @@ pub(crate) enum PollUpdate {
     /// Server IDs that were pruned (session files deleted)
     Pruned(Vec<String>),
     /// New events for the current detail view
-    DetailEvents(Vec<ParsedStreamEvent>),
+    DetailEvents {
+        consultation_id: String,
+        events: Vec<ParsedStreamEvent>,
+    },
 }
 
 pub(crate) enum PollCommand {
@@ -70,76 +73,130 @@ pub(crate) fn spawn(
     (update_rx, cmd_tx, handle)
 }
 
+/// Apply a command, returning true if the poller should shut down.
+fn apply_command(
+    cmd: PollCommand,
+    detail: &mut Option<DetailPollState>,
+    next_detail: &mut Option<std::time::Instant>,
+    history_offset: &mut u64,
+) -> bool {
+    match cmd {
+        PollCommand::Shutdown => return true,
+        PollCommand::EnterDetail {
+            consultation_id,
+            file_offset,
+        } => {
+            *detail = Some(DetailPollState {
+                consultation_id,
+                file_offset,
+            });
+            *next_detail = Some(std::time::Instant::now());
+        }
+        PollCommand::ExitDetail => {
+            *detail = None;
+            *next_detail = None;
+        }
+        PollCommand::ResetHistory => {
+            *history_offset = 0;
+        }
+    }
+    false
+}
+
 fn run(
     dir: PathBuf,
-    poll_interval: Duration,
+    heavy_interval: Duration,
     tx: mpsc::Sender<PollUpdate>,
     cmd_rx: mpsc::Receiver<PollCommand>,
 ) {
+    let detail_interval = Duration::from_millis(100);
+
     let mut file_offsets: HashMap<String, u64> = HashMap::new();
     let mut pruned: HashSet<String> = HashSet::new();
     let mut history_offset: u64 = 0;
     let mut server_info: HashMap<String, ServerInfo> = HashMap::new();
     let mut detail: Option<DetailPollState> = None;
 
+    // Fire heavy poll immediately on first iteration
+    let mut next_heavy = std::time::Instant::now();
+    let mut next_detail: Option<std::time::Instant> = None;
+
     loop {
         // Drain pending commands
         loop {
             match cmd_rx.try_recv() {
-                Ok(PollCommand::Shutdown) => return,
-                Ok(PollCommand::EnterDetail {
-                    consultation_id,
-                    file_offset,
-                }) => {
-                    detail = Some(DetailPollState {
-                        consultation_id,
-                        file_offset,
-                    });
-                }
-                Ok(PollCommand::ExitDetail) => {
-                    detail = None;
-                }
-                Ok(PollCommand::ResetHistory) => {
-                    history_offset = 0;
+                Ok(cmd) => {
+                    if apply_command(cmd, &mut detail, &mut next_detail, &mut history_offset) {
+                        return;
+                    }
                 }
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => return,
             }
         }
 
-        // Poll files
-        let events = poll_files(&dir, &mut file_offsets, &pruned, &mut server_info);
-        if !events.is_empty() && tx.send(PollUpdate::Events(events)).is_err() {
-            return;
+        let now = std::time::Instant::now();
+
+        // Detail poll (fast cadence) — run first for better perceived latency
+        if let Some(deadline) = next_detail
+            && now >= deadline
+        {
+            if let Some(ref mut d) = detail {
+                let new_events = poll_detail_events(&dir, &d.consultation_id, &mut d.file_offset);
+                if !new_events.is_empty()
+                    && tx
+                        .send(PollUpdate::DetailEvents {
+                            consultation_id: d.consultation_id.clone(),
+                            events: new_events,
+                        })
+                        .is_err()
+                {
+                    return;
+                }
+            }
+            next_detail = Some(std::time::Instant::now() + detail_interval);
         }
 
-        // Poll history
-        let records = poll_history(&dir, &mut history_offset);
-        if !records.is_empty() && tx.send(PollUpdate::HistoryRecords(records)).is_err() {
-            return;
-        }
-
-        // Check liveness
-        let deaths = check_liveness(&mut server_info);
-        if !deaths.is_empty() && tx.send(PollUpdate::Deaths(deaths)).is_err() {
-            return;
-        }
-
-        // Prune finished
-        let pruned_ids = prune_finished(&dir, &mut server_info, &mut file_offsets, &mut pruned);
-        if !pruned_ids.is_empty() && tx.send(PollUpdate::Pruned(pruned_ids)).is_err() {
-            return;
-        }
-
-        // Poll detail events
-        if let Some(ref mut d) = detail {
-            let new_events = poll_detail_events(&dir, &d.consultation_id, &mut d.file_offset);
-            if !new_events.is_empty() && tx.send(PollUpdate::DetailEvents(new_events)).is_err() {
+        // Heavy poll (slow cadence)
+        if now >= next_heavy {
+            let events = poll_files(&dir, &mut file_offsets, &pruned, &mut server_info);
+            if !events.is_empty() && tx.send(PollUpdate::Events(events)).is_err() {
                 return;
             }
+
+            let records = poll_history(&dir, &mut history_offset);
+            if !records.is_empty() && tx.send(PollUpdate::HistoryRecords(records)).is_err() {
+                return;
+            }
+
+            let deaths = check_liveness(&mut server_info);
+            if !deaths.is_empty() && tx.send(PollUpdate::Deaths(deaths)).is_err() {
+                return;
+            }
+
+            let pruned_ids = prune_finished(&dir, &mut server_info, &mut file_offsets, &mut pruned);
+            if !pruned_ids.is_empty() && tx.send(PollUpdate::Pruned(pruned_ids)).is_err() {
+                return;
+            }
+
+            next_heavy = std::time::Instant::now() + heavy_interval;
         }
 
-        thread::sleep(poll_interval);
+        // Sleep until the next deadline, waking early for commands
+        let next_deadline = match next_detail {
+            Some(d) => d.min(next_heavy),
+            None => next_heavy,
+        };
+        let wait = next_deadline.saturating_duration_since(std::time::Instant::now());
+        match cmd_rx.recv_timeout(wait) {
+            Ok(cmd) => {
+                if apply_command(cmd, &mut detail, &mut next_detail, &mut history_offset) {
+                    return;
+                }
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => return,
+        }
     }
 }
 

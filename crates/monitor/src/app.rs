@@ -367,8 +367,12 @@ impl AppState {
                 }
                 self.server_order.retain(|id| self.servers.contains_key(id));
             }
-            PollUpdate::DetailEvents(events) => {
+            PollUpdate::DetailEvents {
+                consultation_id,
+                events,
+            } => {
                 if let AppMode::Detail(ref mut detail) = self.mode
+                    && detail.consultation_id == consultation_id
                     && !events.is_empty()
                 {
                     detail.events.extend(events);
