@@ -90,85 +90,33 @@ impl AppState {
             Action::ExitDetail => {
                 self.mode = AppMode::Table;
             }
-            Action::ScrollDown => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    detail.scroll = detail.scroll.saturating_add(1);
-                }
-                AppMode::ThreadDetail(detail) => {
-                    detail.scroll = detail.scroll.saturating_add(1);
-                }
-                _ => {}
-            },
-            Action::ScrollUp => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    detail.scroll = detail.scroll.saturating_sub(1);
-                    detail.auto_scroll = false;
-                }
-                AppMode::ThreadDetail(detail) => {
-                    detail.scroll = detail.scroll.saturating_sub(1);
-                    detail.auto_scroll = false;
-                }
-                _ => {}
-            },
-            Action::HalfPageDown => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    let half = self.detail_inner_height / 2;
-                    detail.scroll = detail.scroll.saturating_add(half.max(1));
-                }
-                AppMode::ThreadDetail(detail) => {
-                    let half = self.detail_inner_height / 2;
-                    detail.scroll = detail.scroll.saturating_add(half.max(1));
-                }
-                _ => {}
-            },
-            Action::HalfPageUp => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    let half = self.detail_inner_height / 2;
-                    detail.scroll = detail.scroll.saturating_sub(half.max(1));
-                    detail.auto_scroll = false;
-                }
-                AppMode::ThreadDetail(detail) => {
-                    let half = self.detail_inner_height / 2;
-                    detail.scroll = detail.scroll.saturating_sub(half.max(1));
-                    detail.auto_scroll = false;
-                }
-                _ => {}
-            },
-            Action::PageDown => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    let page = self.detail_inner_height;
-                    detail.scroll = detail.scroll.saturating_add(page.max(1));
-                }
-                AppMode::ThreadDetail(detail) => {
-                    let page = self.detail_inner_height;
-                    detail.scroll = detail.scroll.saturating_add(page.max(1));
-                }
-                _ => {}
-            },
-            Action::PageUp => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    let page = self.detail_inner_height;
-                    detail.scroll = detail.scroll.saturating_sub(page.max(1));
-                    detail.auto_scroll = false;
-                }
-                AppMode::ThreadDetail(detail) => {
-                    let page = self.detail_inner_height;
-                    detail.scroll = detail.scroll.saturating_sub(page.max(1));
-                    detail.auto_scroll = false;
-                }
-                _ => {}
-            },
-            Action::ScrollToBottom => match &mut self.mode {
-                AppMode::Detail(detail) => {
-                    detail.scroll = usize::MAX;
-                    detail.auto_scroll = true;
-                }
-                AppMode::ThreadDetail(detail) => {
-                    detail.scroll = usize::MAX;
-                    detail.auto_scroll = true;
-                }
-                _ => {}
-            },
+            Action::ScrollDown => self.mutate_scroll(|scroll, _, _| {
+                *scroll = scroll.saturating_add(1);
+            }),
+            Action::ScrollUp => self.mutate_scroll(|scroll, auto_scroll, _| {
+                *scroll = scroll.saturating_sub(1);
+                *auto_scroll = false;
+            }),
+            Action::HalfPageDown => self.mutate_scroll(|scroll, _, height| {
+                let half = height / 2;
+                *scroll = scroll.saturating_add(half.max(1));
+            }),
+            Action::HalfPageUp => self.mutate_scroll(|scroll, auto_scroll, height| {
+                let half = height / 2;
+                *scroll = scroll.saturating_sub(half.max(1));
+                *auto_scroll = false;
+            }),
+            Action::PageDown => self.mutate_scroll(|scroll, _, height| {
+                *scroll = scroll.saturating_add(height.max(1));
+            }),
+            Action::PageUp => self.mutate_scroll(|scroll, auto_scroll, height| {
+                *scroll = scroll.saturating_sub(height.max(1));
+                *auto_scroll = false;
+            }),
+            Action::ScrollToBottom => self.mutate_scroll(|scroll, auto_scroll, _| {
+                *scroll = usize::MAX;
+                *auto_scroll = true;
+            }),
             Action::PromptClearHistory => {
                 self.mode = AppMode::ConfirmClearHistory;
             }
@@ -531,6 +479,16 @@ impl AppState {
         self.servers
             .values()
             .any(|s| s.active_consults.contains_key(consultation_id))
+    }
+
+    /// Apply a scroll mutation to whichever detail mode is active.
+    fn mutate_scroll(&mut self, f: impl Fn(&mut usize, &mut bool, usize)) {
+        let height = self.detail_inner_height;
+        match &mut self.mode {
+            AppMode::Detail(d) => f(&mut d.scroll, &mut d.auto_scroll, height),
+            AppMode::ThreadDetail(d) => f(&mut d.scroll, &mut d.auto_scroll, height),
+            _ => {}
+        }
     }
 
     /// Clamp history_selected to the filtered list length.
