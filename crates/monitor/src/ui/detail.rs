@@ -203,7 +203,7 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
 
 // ── Pass 2: RenderedBlock → Line ────────────────────────────────────────
 
-fn render_blocks<'a>(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> Vec<Line<'a>> {
+fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
 
@@ -268,22 +268,38 @@ fn render_blocks<'a>(blocks: &[RenderedBlock], inner_width: usize, tick: usize) 
 
 // ── Tool line ───────────────────────────────────────────────────────────
 
-fn render_tool_line<'a>(
+fn render_tool_line(
     label: &str,
     success: Option<bool>,
     inner_width: usize,
     tick: usize,
-) -> Line<'a> {
+) -> Line<'static> {
     match success {
         Some(ok) => {
             // Completed: "  ▶ {label} ··· ✓"
-            let prefix = format!("  \u{25b6} {label} ");
             let icon_char = if ok { "\u{2713}" } else { "\u{2717}" };
             let icon_color = if ok { GREEN } else { RED };
             let suffix = format!(" {icon_char}");
-
-            let prefix_len = prefix.chars().count();
             let suffix_len = suffix.chars().count();
+
+            // Truncate label if it would push the icon off-screen
+            // Reserve: 4 (indent+"▶ ") + 1 (space) + suffix + 3 (min dots)
+            let overhead = 5 + suffix_len + 3;
+            let max_label = inner_width.saturating_sub(overhead);
+            let display_label = if label.chars().count() > max_label && max_label > 0 {
+                format!(
+                    "{}…",
+                    label
+                        .chars()
+                        .take(max_label.saturating_sub(1))
+                        .collect::<String>()
+                )
+            } else {
+                label.to_string()
+            };
+
+            let prefix = format!("  \u{25b6} {display_label} ");
+            let prefix_len = prefix.chars().count();
             let dots_count = inner_width.saturating_sub(prefix_len + suffix_len);
             let dots = "\u{b7}".repeat(dots_count);
 
