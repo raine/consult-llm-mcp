@@ -308,7 +308,10 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
                 blocks.push(RenderedBlock::Prompt(text.clone()));
             }
             ParsedStreamEvent::Thinking => {
-                blocks.push(RenderedBlock::Thinking);
+                // Collapse consecutive Thinking events into one block
+                if !matches!(blocks.last(), Some(RenderedBlock::Thinking)) {
+                    blocks.push(RenderedBlock::Thinking);
+                }
             }
             ParsedStreamEvent::ToolStarted { call_id, label } => {
                 let idx = blocks.len();
