@@ -246,15 +246,14 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
 fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
+    let mut response_header_shown = false;
 
     for block in blocks {
         let next_phase = block.phase();
 
         // Insert blank line on phase transitions (but not from Start or Prompt)
-        if next_phase != current_phase
-            && current_phase != Phase::Start
-            && current_phase != Phase::Prompt
-        {
+        let phase_changed = next_phase != current_phase;
+        if phase_changed && current_phase != Phase::Start && current_phase != Phase::Prompt {
             lines.push(Line::default());
         }
         current_phase = next_phase;
@@ -285,6 +284,13 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                 lines.push(render_tool_line(label, *success, inner_width, tick));
             }
             RenderedBlock::Text(text) => {
+                if !response_header_shown {
+                    response_header_shown = true;
+                    lines.push(Line::from(vec![Span::styled(
+                        "  Response:",
+                        Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
+                    )]));
+                }
                 let indent = "    ";
                 let wrap_width = inner_width.saturating_sub(indent.len());
                 let md_lines = super::markdown::render_markdown(text, wrap_width);
