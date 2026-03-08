@@ -602,8 +602,7 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 
 fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let header = Row::new(vec!["Project", "PID", "Status", "Consultation", "Elapsed"])
-        .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
-        .bottom_margin(1);
+        .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let mut rows: Vec<Row> = Vec::new();
@@ -940,8 +939,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     let header = Row::new(vec![
         "Time", "Project", "Model", "Backend", "Duration", "Tokens", "✓",
     ])
-    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
-    .bottom_margin(1);
+    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let rows: Vec<Row> = state
