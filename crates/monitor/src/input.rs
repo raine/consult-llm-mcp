@@ -15,6 +15,7 @@ pub(crate) fn handle_key(
     match &state.mode {
         AppMode::Table => handle_table_key(state, row_infos, key, dir),
         AppMode::Detail(_) => handle_detail_key(key),
+        AppMode::ConfirmClearHistory => handle_confirm_clear_key(key),
     }
 }
 
@@ -30,6 +31,7 @@ fn handle_table_key(
         KeyCode::Tab | KeyCode::BackTab => Some(Action::ToggleFocus),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::MoveDown),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::MoveUp),
+        KeyCode::Char('X') => Some(Action::PromptClearHistory),
         KeyCode::Enter => match state.focus {
             Focus::Active => {
                 if let Some(info) = row_infos.get(state.selected)
@@ -57,6 +59,13 @@ fn handle_table_key(
             }
         },
         _ => None,
+    }
+}
+
+fn handle_confirm_clear_key(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') => Some(Action::ClearHistory),
+        _ => Some(Action::CancelClear),
     }
 }
 

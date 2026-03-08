@@ -5,7 +5,7 @@ use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
-use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent};
+use consult_llm_core::monitoring::{EventEnvelope, HISTORY_FILE, MonitorEvent};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use crate::action::Action;
@@ -89,6 +89,22 @@ impl AppState {
                     detail.scroll = usize::MAX;
                     detail.auto_scroll = true;
                 }
+            }
+            Action::PromptClearHistory => {
+                self.mode = AppMode::ConfirmClearHistory;
+            }
+            Action::ClearHistory => {
+                self.history.clear();
+                self.history_offset = 0;
+                self.history_selected = 0;
+                let path = dir.join(HISTORY_FILE);
+                let _ = File::create(&path); // truncate
+                self.mode = AppMode::Table;
+                self.flash = Some(("History cleared".into(), 20));
+            }
+            Action::CancelClear => {
+                self.mode = AppMode::Table;
+                self.flash = None;
             }
             Action::Flash(msg, ttl) => {
                 self.flash = Some((msg, ttl));

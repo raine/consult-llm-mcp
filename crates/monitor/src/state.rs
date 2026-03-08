@@ -27,6 +27,7 @@ pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', 
 pub(crate) enum AppMode {
     Table,
     Detail(DetailState),
+    ConfirmClearHistory,
 }
 
 pub(crate) struct DetailState {

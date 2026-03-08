@@ -11,4 +11,7 @@ pub(crate) enum Action {
     HalfPageUp,
     ScrollToBottom,
     Flash(String, u8),
+    PromptClearHistory,
+    ClearHistory,
+    CancelClear,
 }
