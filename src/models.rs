@@ -16,6 +16,29 @@ impl Default for TaskMode {
     }
 }
 
+/// Known LLM provider families, determined by model ID prefix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Provider {
+    OpenAI,
+    Gemini,
+    DeepSeek,
+}
+
+impl Provider {
+    /// Determine the provider for a model ID based on its prefix.
+    pub fn from_model(model: &str) -> Option<Self> {
+        if model.starts_with("gpt-") {
+            Some(Provider::OpenAI)
+        } else if model.starts_with("gemini-") {
+            Some(Provider::Gemini)
+        } else if model.starts_with("deepseek-") {
+            Some(Provider::DeepSeek)
+        } else {
+            None
+        }
+    }
+}
+
 pub const ALL_MODELS: &[&str] = &[
     "gemini-2.5-pro",
     "gemini-3-pro-preview",

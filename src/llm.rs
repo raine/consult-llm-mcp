@@ -7,6 +7,7 @@ use crate::executors::codex_cli::CodexCliExecutor;
 use crate::executors::cursor_cli::CursorCliExecutor;
 use crate::executors::gemini_cli::GeminiCliExecutor;
 use crate::executors::types::LlmExecutor;
+use crate::models::Provider;
 
 pub struct ExecutorProvider {
     cache: Mutex<HashMap<String, Arc<dyn LlmExecutor>>>,
@@ -26,12 +27,11 @@ impl ExecutorProvider {
 
     pub fn get_executor(&self, model: &str) -> anyhow::Result<Arc<dyn LlmExecutor>> {
         let cfg = config();
-        let cache_key = if model.starts_with("gpt-") {
-            format!("{model}-{:?}", cfg.openai_backend)
-        } else if model.starts_with("gemini-") {
-            format!("{model}-{:?}", cfg.gemini_backend)
-        } else {
-            model.to_string()
+        let provider = Provider::from_model(model);
+        let cache_key = match provider {
+            Some(Provider::OpenAI) => format!("{model}-{:?}", cfg.openai_backend),
+            Some(Provider::Gemini) => format!("{model}-{:?}", cfg.gemini_backend),
+            _ => model.to_string(),
         };
 
         let mut cache = self.cache.lock().unwrap();
@@ -39,8 +39,8 @@ impl ExecutorProvider {
             return Ok(exec.clone());
         }
 
-        let executor: Arc<dyn LlmExecutor> = if model.starts_with("gpt-") {
-            match cfg.openai_backend {
+        let executor: Arc<dyn LlmExecutor> = match provider {
+            Some(Provider::OpenAI) => match cfg.openai_backend {
                 Backend::CodexCli => Arc::new(CodexCliExecutor::new()),
                 Backend::CursorCli => Arc::new(CursorCliExecutor::new()),
                 Backend::Api => {
@@ -56,20 +56,20 @@ impl ExecutorProvider {
                     ))
                 }
                 _ => anyhow::bail!("Invalid backend for GPT model"),
+            },
+            Some(Provider::DeepSeek) => {
+                let key = cfg.deepseek_api_key.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "DEEPSEEK_API_KEY environment variable is required for DeepSeek models"
+                    )
+                })?;
+                Arc::new(ApiExecutor::new(
+                    self.http_client.clone(),
+                    key.clone(),
+                    Some("https://api.deepseek.com".to_string()),
+                ))
             }
-        } else if model.starts_with("deepseek-") {
-            let key = cfg.deepseek_api_key.as_ref().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "DEEPSEEK_API_KEY environment variable is required for DeepSeek models"
-                )
-            })?;
-            Arc::new(ApiExecutor::new(
-                self.http_client.clone(),
-                key.clone(),
-                Some("https://api.deepseek.com".to_string()),
-            ))
-        } else if model.starts_with("gemini-") {
-            match cfg.gemini_backend {
+            Some(Provider::Gemini) => match cfg.gemini_backend {
                 Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
                 Backend::CursorCli => Arc::new(CursorCliExecutor::new()),
                 Backend::Api => {
@@ -87,9 +87,8 @@ impl ExecutorProvider {
                     ))
                 }
                 _ => anyhow::bail!("Invalid backend for Gemini model"),
-            }
-        } else {
-            anyhow::bail!("Unable to determine LLM provider for model: {model}")
+            },
+            None => anyhow::bail!("Unable to determine LLM provider for model: {model}"),
         };
 
         cache.insert(cache_key, executor.clone());

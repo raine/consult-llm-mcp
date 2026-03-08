@@ -2,7 +2,7 @@ use std::env;
 use std::sync::{Arc, OnceLock};
 
 use crate::logger::log_to_file;
-use crate::models::ALL_MODELS;
+use crate::models::{ALL_MODELS, Provider};
 
 /// Read env var, treating empty strings as unset.
 fn env_non_empty(key: &str) -> Option<String> {
@@ -164,16 +164,15 @@ pub fn build_model_catalog(
 pub fn filter_by_availability(models: &[String], providers: &ProviderAvailability) -> Vec<String> {
     models
         .iter()
-        .filter(|model| {
-            if model.starts_with("gemini-") {
+        .filter(|model| match Provider::from_model(model) {
+            Some(Provider::Gemini) => {
                 providers.gemini_backend != Backend::Api || providers.gemini_api_key.is_some()
-            } else if model.starts_with("gpt-") {
-                providers.openai_backend != Backend::Api || providers.openai_api_key.is_some()
-            } else if model.starts_with("deepseek-") {
-                providers.deepseek_api_key.is_some()
-            } else {
-                true // Unknown prefix (user-added extras) — always include
             }
+            Some(Provider::OpenAI) => {
+                providers.openai_backend != Backend::Api || providers.openai_api_key.is_some()
+            }
+            Some(Provider::DeepSeek) => providers.deepseek_api_key.is_some(),
+            None => true, // Unknown prefix (user-added extras) — always include
         })
         .cloned()
         .collect()
