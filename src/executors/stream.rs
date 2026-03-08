@@ -42,6 +42,11 @@ impl SidecarWriter {
             && let Ok(line) = serde_json::to_string(event)
         {
             let _ = writeln!(w, "{line}");
+        }
+    }
+
+    pub fn flush(&mut self) {
+        if let Some(ref mut w) = self.writer {
             let _ = w.flush();
         }
     }
@@ -78,6 +83,7 @@ impl StreamReducer {
     }
 
     /// Process a batch of parsed events from a single line.
+    /// Flushes the sidecar file once per batch rather than per event.
     pub fn process(&mut self, events: Vec<ParsedStreamEvent>) {
         for event in events {
             self.sidecar.write(&event);
@@ -111,6 +117,7 @@ impl StreamReducer {
                 }
             }
         }
+        self.sidecar.flush();
     }
 
     fn emit_progress(&mut self, stage: ProgressStage) {
