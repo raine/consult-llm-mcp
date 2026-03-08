@@ -166,8 +166,18 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                 ]));
             }
 
-            // Render completed consultations with dimmed styling
-            for (i, cc) in server.completed_consults.iter().enumerate() {
+            // Render completed consultations with dimmed styling (last per backend only)
+            let mut seen_backends = std::collections::HashSet::new();
+            let deduped_completed: Vec<_> = server
+                .completed_consults
+                .iter()
+                .rev()
+                .filter(|cc| seen_backends.insert(&cc.backend))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            for (i, cc) in deduped_completed.iter().enumerate() {
                 let show_server = is_first_row && server.active_consults.is_empty() && i == 0;
                 let duration_str = format_duration_friendly(cc.duration_ms);
                 let result_indicator = if cc.success {
