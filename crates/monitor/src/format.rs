@@ -52,7 +52,7 @@ pub(crate) fn format_tokens(tokens_in: Option<u64>, tokens_out: Option<u64>) -> 
     }
 }
 
-fn format_token_count(n: u64) -> String {
+pub(crate) fn format_token_count(n: u64) -> String {
     if n >= 1_000_000 {
         let m = n as f64 / 1_000_000.0;
         if n >= 100_000_000 {
