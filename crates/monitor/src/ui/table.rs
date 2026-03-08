@@ -364,6 +364,12 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     model.clone()
                 };
 
+                let turns_suffix = if area.width >= 100 {
+                    format!(" ({turn_count} turns)")
+                } else {
+                    format!(" \u{21b3}{turn_count}")
+                };
+
                 Row::new(vec![
                     Line::from(Span::styled(
                         format_relative_time(*latest_parsed_ts, now),
@@ -371,7 +377,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     )),
                     Line::from(vec![
                         Span::styled(project.clone(), Style::default().fg(DIM_WHITE)),
-                        Span::styled(format!(" ({} turns)", turn_count), Style::default().fg(DIM)),
+                        Span::styled(turns_suffix, Style::default().fg(DIM)),
                     ]),
                     Line::from(Span::styled(model_display, Style::default().fg(DIM_WHITE))),
                     Line::from(Span::styled(backend.clone(), Style::default().fg(DIM))),
