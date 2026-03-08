@@ -1,13 +1,17 @@
 use std::process::Command;
 
-/// Generate git diff. Returns error string on failure (never propagates as Err).
-pub fn generate_git_diff(repo_path: Option<&str>, files: &[String], base_ref: &str) -> String {
+/// Generate git diff. Returns an error if git fails or inputs are invalid.
+pub fn generate_git_diff(
+    repo_path: Option<&str>,
+    files: &[String],
+    base_ref: &str,
+) -> anyhow::Result<String> {
     if files.is_empty() {
-        return "Error generating git diff: No files specified for git diff".to_string();
+        anyhow::bail!("No files specified for git diff");
     }
 
     if base_ref.starts_with('-') {
-        return "Error generating git diff: invalid base_ref".to_string();
+        anyhow::bail!("invalid base_ref");
     }
 
     let cwd = repo_path.unwrap_or(".");
@@ -16,13 +20,13 @@ pub fn generate_git_diff(repo_path: Option<&str>, files: &[String], base_ref: &s
 
     match Command::new("git").args(&args).current_dir(cwd).output() {
         Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout).to_string()
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            format!("Error generating git diff: {}", stderr.trim())
+            anyhow::bail!("{}", stderr.trim())
         }
-        Err(e) => format!("Error generating git diff: {e}"),
+        Err(e) => anyhow::bail!("{e}"),
     }
 }
 
@@ -33,12 +37,14 @@ mod tests {
     #[test]
     fn test_rejects_leading_dash_base_ref() {
         let result = generate_git_diff(None, &["file.rs".to_string()], "--output=/tmp/pwned");
-        assert_eq!(result, "Error generating git diff: invalid base_ref");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("invalid base_ref"));
     }
 
     #[test]
     fn test_rejects_empty_files() {
         let result = generate_git_diff(None, &[], "HEAD");
-        assert!(result.contains("No files specified"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No files specified"));
     }
 }
