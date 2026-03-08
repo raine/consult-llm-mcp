@@ -83,13 +83,17 @@ impl StreamReducer {
     }
 
     /// Process a batch of parsed events from a single line.
-    /// Flushes the sidecar file once per batch rather than per event.
+    /// Flushes the sidecar on tool and lifecycle boundaries for monitor
+    /// visibility, but skips flushing on high-frequency text deltas to
+    /// avoid a syscall per streamed token.
     pub fn process(&mut self, events: Vec<ParsedStreamEvent>) {
+        let mut needs_flush = false;
         for event in events {
             self.sidecar.write(&event);
             match event {
                 ParsedStreamEvent::SessionStarted { id } => {
                     self.thread_id = Some(id);
+                    needs_flush = true;
                 }
                 ParsedStreamEvent::Thinking { .. } => {
                     self.emit_progress(ProgressStage::Thinking);
@@ -101,9 +105,11 @@ impl StreamReducer {
                 ParsedStreamEvent::ToolStarted { call_id, label } => {
                     self.active_tools.insert(call_id.clone(), label.clone());
                     self.emit_progress(ProgressStage::ToolUse { tool: label });
+                    needs_flush = true;
                 }
                 ParsedStreamEvent::ToolFinished { call_id, .. } => {
                     self.active_tools.remove(&call_id);
+                    needs_flush = true;
                 }
                 ParsedStreamEvent::Prompt { .. } => {}
                 ParsedStreamEvent::Usage {
@@ -114,10 +120,13 @@ impl StreamReducer {
                         prompt_tokens,
                         completion_tokens,
                     });
+                    needs_flush = true;
                 }
             }
         }
-        self.sidecar.flush();
+        if needs_flush {
+            self.sidecar.flush();
+        }
     }
 
     fn emit_progress(&mut self, stage: ProgressStage) {
