@@ -80,11 +80,46 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         .border_type(BorderType::Rounded)
         .border_style(Style::default().fg(SEPARATOR));
 
-    let header_text = Line::from(vec![Span::styled(
-        format!(" {} events", detail.events.len()),
-        Style::default().fg(DIM_WHITE),
-    )]);
-    frame.render_widget(Paragraph::new(header_text).block(block), chunks[0]);
+    let mut header_spans: Vec<Span> = Vec::new();
+    header_spans.push(Span::styled(" ", Style::default()));
+
+    if let Some(ref model) = detail.model {
+        header_spans.push(Span::styled(model.clone(), Style::default().fg(WHITE)));
+    }
+    if let Some(ref backend) = detail.backend {
+        header_spans.push(Span::styled(
+            format!("  {backend}"),
+            Style::default().fg(DIM),
+        ));
+    }
+
+    // Show token totals from Usage events
+    let (total_in, total_out) = detail.events.iter().fold((0u64, 0u64), |(i, o), e| {
+        if let ParsedStreamEvent::Usage {
+            prompt_tokens,
+            completion_tokens,
+        } = e
+        {
+            (i + prompt_tokens, o + completion_tokens)
+        } else {
+            (i, o)
+        }
+    });
+    if total_in > 0 || total_out > 0 {
+        header_spans.push(Span::styled(
+            format!(
+                "  {}/{}",
+                format_token_count(total_in),
+                format_token_count(total_out)
+            ),
+            Style::default().fg(DIM_WHITE),
+        ));
+    }
+
+    frame.render_widget(
+        Paragraph::new(Line::from(header_spans)).block(block),
+        chunks[0],
+    );
 
     // ── Pass 1: normalize events → blocks ───────────────────────────
     let blocks = normalize_events(&detail.events);

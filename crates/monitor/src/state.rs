@@ -36,6 +36,8 @@ pub(crate) struct DetailState {
     pub(crate) file_offset: u64,
     pub(crate) scroll: usize,
     pub(crate) auto_scroll: bool,
+    pub(crate) model: Option<String>,
+    pub(crate) backend: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]

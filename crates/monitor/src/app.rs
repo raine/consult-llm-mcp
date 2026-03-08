@@ -275,13 +275,47 @@ impl AppState {
         }
 
         let is_active = self.is_consultation_active(&consultation_id);
+
+        // Look up model/backend from active consults, completed consults, or history
+        let (model, backend) = self.lookup_consult_metadata(&consultation_id);
+
         self.mode = AppMode::Detail(DetailState {
             consultation_id,
             events,
             file_offset: offset,
             scroll: if is_active { usize::MAX } else { 0 },
             auto_scroll: is_active,
+            model,
+            backend,
         });
+    }
+
+    fn lookup_consult_metadata(&self, consultation_id: &str) -> (Option<String>, Option<String>) {
+        // Check active consults
+        for server in self.servers.values() {
+            if let Some(ac) = server.active_consults.get(consultation_id) {
+                return (Some(ac.model.clone()), Some(ac.backend.clone()));
+            }
+        }
+        // Check completed consults
+        for server in self.servers.values() {
+            if let Some(cc) = server
+                .completed_consults
+                .iter()
+                .find(|c| c.id == consultation_id)
+            {
+                return (Some(cc.model.clone()), Some(cc.backend.clone()));
+            }
+        }
+        // Check history
+        if let Some(hr) = self
+            .history
+            .iter()
+            .find(|h| h.consultation_id.as_deref() == Some(consultation_id))
+        {
+            return (Some(hr.model.clone()), Some(hr.backend.clone()));
+        }
+        (None, None)
     }
 
     /// Check if a consultation is still active (running) in any server.
