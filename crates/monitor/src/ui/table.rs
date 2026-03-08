@@ -369,10 +369,10 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                         format_relative_time(*latest_parsed_ts, now),
                         Style::default().fg(DIM),
                     )),
-                    Line::from(Span::styled(
-                        project.clone(),
-                        Style::default().fg(DIM_WHITE),
-                    )),
+                    Line::from(vec![
+                        Span::styled(project.clone(), Style::default().fg(DIM_WHITE)),
+                        Span::styled(format!(" ({} turns)", turn_count), Style::default().fg(DIM)),
+                    ]),
                     Line::from(Span::styled(model_display, Style::default().fg(DIM_WHITE))),
                     Line::from(Span::styled(backend.clone(), Style::default().fg(DIM))),
                     Line::from(Span::styled(
@@ -387,10 +387,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                         format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
                         Style::default().fg(DIM),
                     )),
-                    Line::from(vec![
-                        Span::styled(status_icon, Style::default().fg(status_color)),
-                        Span::styled(format!(" {turn_count}t"), Style::default().fg(TEAL)),
-                    ]),
+                    Line::from(Span::styled(status_icon, Style::default().fg(status_color))),
                 ])
             }
         })
@@ -405,7 +402,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
             Constraint::Length(10),
             Constraint::Length(duration_col_width),
             Constraint::Length(tokens_col_width),
-            Constraint::Length(6),
+            Constraint::Length(2),
         ],
     )
     .header(header)
