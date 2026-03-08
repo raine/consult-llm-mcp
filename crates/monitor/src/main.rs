@@ -118,7 +118,9 @@ impl Drop for TerminalGuard {
 
 // ── Row identity — maps table row index to a consultation ID ────────────
 
+#[derive(Clone, PartialEq)]
 struct RowInfo {
+    server_id: String,
     consultation_id: String,
 }
 
@@ -441,27 +443,61 @@ impl AppState {
         };
     }
 
+    /// Return server IDs sorted by status: active first, then idle, then stopped/dead.
+    /// Within each bucket, preserve insertion order as tiebreaker.
+    fn display_server_ids(&self) -> Vec<&str> {
+        let mut ids: Vec<(usize, &String)> = self
+            .server_order
+            .iter()
+            .enumerate()
+            .filter(|(_, id)| self.servers.contains_key(*id))
+            .collect();
+
+        ids.sort_by_key(|(insertion_idx, id)| {
+            let server = &self.servers[*id];
+            let bucket = if !server.active_consults.is_empty() {
+                0 // active first
+            } else if !server.stopped && !server.dead {
+                1 // idle
+            } else {
+                2 // stopped/dead
+            };
+            (bucket, *insertion_idx)
+        });
+
+        ids.into_iter().map(|(_, id)| id.as_str()).collect()
+    }
+
+    /// Return active consult entries sorted by start time (oldest first).
+    fn sorted_active_consults(server: &ServerState) -> Vec<(&String, &ActiveConsult)> {
+        let mut entries: Vec<_> = server.active_consults.iter().collect();
+        entries.sort_by_key(|(_, c)| c.started_at);
+        entries
+    }
+
     /// Build a list of RowInfo for the current table rows.
     fn build_row_infos(&self) -> Vec<RowInfo> {
         let mut infos = Vec::new();
-        for server_id in &self.server_order {
+        for server_id in self.display_server_ids() {
             let Some(server) = self.servers.get(server_id) else {
                 continue;
             };
 
             if server.active_consults.is_empty() && server.completed_consults.is_empty() {
-                // Server row with no consultations — not selectable for detail
                 infos.push(RowInfo {
+                    server_id: server_id.to_string(),
                     consultation_id: String::new(),
                 });
             } else {
-                for cid in server.active_consults.keys() {
+                for (cid, _) in Self::sorted_active_consults(server) {
                     infos.push(RowInfo {
+                        server_id: server_id.to_string(),
                         consultation_id: cid.clone(),
                     });
                 }
                 for cc in &server.completed_consults {
                     infos.push(RowInfo {
+                        server_id: server_id.to_string(),
                         consultation_id: cc.id.clone(),
                     });
                 }
@@ -556,7 +592,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let mut rows: Vec<Row> = Vec::new();
     let mut row_idx = 0usize;
 
-    for server_id in &state.server_order {
+    for server_id in state.display_server_ids() {
         let Some(server) = state.servers.get(server_id) else {
             continue;
         };
@@ -612,7 +648,10 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             row_idx += 1;
         } else {
             let is_first_row = true;
-            for (i, consult) in server.active_consults.values().enumerate() {
+            for (i, (_, consult)) in AppState::sorted_active_consults(server)
+                .into_iter()
+                .enumerate()
+            {
                 let elapsed = now
                     .signed_duration_since(consult.started_at)
                     .num_milliseconds()
@@ -1006,11 +1045,24 @@ fn main() -> io::Result<()> {
     let mut last_poll = std::time::Instant::now();
     let render_interval = Duration::from_millis(100);
 
+    let mut row_infos = Vec::new();
+
     loop {
-        // Update row_count before render for selection clamping
-        let row_infos = state.build_row_infos();
+        // Remember what was selected before rebuilding
+        let prev_selected = row_infos.get(state.selected).cloned();
+
+        // Rebuild sorted rows
+        row_infos = state.build_row_infos();
         state.row_count = row_infos.len();
-        if state.row_count > 0 && state.selected >= state.row_count {
+
+        // Restore selection by identity
+        if let Some(prev) = &prev_selected {
+            if let Some(new_idx) = row_infos.iter().position(|r| r == prev) {
+                state.selected = new_idx;
+            } else if state.row_count > 0 {
+                state.selected = state.selected.min(state.row_count - 1);
+            }
+        } else if state.row_count > 0 && state.selected >= state.row_count {
             state.selected = state.row_count - 1;
         }
 
