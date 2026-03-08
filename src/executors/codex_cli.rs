@@ -150,7 +150,7 @@ impl LlmExecutor for CodexCliExecutor {
     ) -> anyhow::Result<ExecuteResult> {
         let message = append_file_refs(prompt, file_paths);
         let full_prompt = if thread_id.is_some() {
-            message.clone()
+            message
         } else {
             format!("{system_prompt}\n\n{message}")
         };

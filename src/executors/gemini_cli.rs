@@ -147,7 +147,7 @@ impl LlmExecutor for GeminiCliExecutor {
     ) -> anyhow::Result<ExecuteResult> {
         let message_with_files = append_file_refs(prompt, file_paths);
         let message = if thread_id.is_some() {
-            message_with_files.clone()
+            message_with_files
         } else {
             format!("{system_prompt}\n\n{message_with_files}")
         };
