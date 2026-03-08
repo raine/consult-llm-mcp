@@ -3,10 +3,8 @@ use std::path::PathBuf;
 
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
-use super::{append_file_refs, run_cli_executor};
+use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 use crate::config::config;
-use crate::external_dirs::get_external_directories;
-use crate::git_worktree::get_main_worktree_path;
 
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -170,17 +168,7 @@ impl LlmExecutor for CodexCliExecutor {
 
         // --add-dir is not supported by `codex exec resume`
         if thread_id.is_none() {
-            let cwd = std::env::current_dir().unwrap_or_default();
-            let mut extra_dirs: Vec<String> = Vec::new();
-            if let Some(wt) = get_main_worktree_path() {
-                extra_dirs.push(wt.to_string());
-            }
-            let resolved_paths: Option<Vec<PathBuf>> = file_paths.map(|fps| fps.to_vec());
-            extra_dirs.extend(get_external_directories(resolved_paths.as_deref(), &cwd));
-            for dir in &extra_dirs {
-                args.push("--add-dir".to_string());
-                args.push(dir.clone());
-            }
+            args.extend(build_extra_dir_args(file_paths, "--add-dir"));
         }
 
         args.push("-m".to_string());

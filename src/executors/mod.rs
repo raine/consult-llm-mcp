@@ -12,6 +12,9 @@ use cli_runner::run_cli_streaming;
 use stream::{StreamEvents, StreamReducer};
 use types::ExecuteResult;
 
+use crate::external_dirs::get_external_directories;
+use crate::git_worktree::get_main_worktree_path;
+
 /// Format file paths as relative `@path` references appended to the prompt.
 /// Used by Codex and Gemini CLI executors.
 pub fn append_file_refs(text: &str, file_paths: Option<&[PathBuf]>) -> String {
@@ -29,6 +32,22 @@ pub fn append_file_refs(text: &str, file_paths: Option<&[PathBuf]>) -> String {
         }
         _ => text.to_string(),
     }
+}
+
+/// Build CLI args for extra directories (worktree + external file paths).
+pub fn build_extra_dir_args(file_paths: Option<&[PathBuf]>, flag: &str) -> Vec<String> {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let mut args = Vec::new();
+    if let Some(wt) = get_main_worktree_path() {
+        args.push(flag.to_string());
+        args.push(wt.to_string());
+    }
+    let resolved: Option<Vec<PathBuf>> = file_paths.map(|fps| fps.to_vec());
+    for dir in get_external_directories(resolved.as_deref(), &cwd) {
+        args.push(flag.to_string());
+        args.push(dir);
+    }
+    args
 }
 
 /// Run a CLI tool with streaming, parse output, and return the result.

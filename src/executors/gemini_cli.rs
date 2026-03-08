@@ -3,9 +3,7 @@ use std::path::PathBuf;
 
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
-use super::{append_file_refs, run_cli_executor};
-use crate::external_dirs::get_external_directories;
-use crate::git_worktree::get_main_worktree_path;
+use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 
 pub struct GeminiCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -163,17 +161,7 @@ impl LlmExecutor for GeminiCliExecutor {
             "stream-json".to_string(),
         ];
 
-        let cwd = std::env::current_dir().unwrap_or_default();
-        let mut extra_dirs: Vec<String> = Vec::new();
-        if let Some(wt) = get_main_worktree_path() {
-            extra_dirs.push(wt.to_string());
-        }
-        let resolved_paths: Option<Vec<PathBuf>> = file_paths.map(|fps| fps.to_vec());
-        extra_dirs.extend(get_external_directories(resolved_paths.as_deref(), &cwd));
-        for dir in &extra_dirs {
-            args.push("--include-directories".to_string());
-            args.push(dir.clone());
-        }
+        args.extend(build_extra_dir_args(file_paths, "--include-directories"));
 
         if let Some(tid) = thread_id {
             args.push("-r".to_string());
