@@ -166,7 +166,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                 ]));
             }
 
-            // Render completed consultations with dimmed styling (last per backend only)
+            // Render completed consultations (last per backend only)
             let mut seen_backends = std::collections::HashSet::new();
             let deduped_completed: Vec<_> = server
                 .completed_consults
@@ -180,16 +180,14 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
             for (i, cc) in deduped_completed.iter().enumerate() {
                 let show_server = is_first_row && server.active_consults.is_empty() && i == 0;
                 let duration_str = format_duration_friendly(cc.duration_ms);
-                let result_indicator = if cc.success {
-                    "\u{2713}" // ✓
+                let (indicator, indicator_color) = if cc.success {
+                    ("\u{2713}", GREEN) // ✓
                 } else {
-                    "\u{2717}" // ✗
+                    ("\u{2717}", RED) // ✗
                 };
-                let consult_text = match &cc.error {
-                    Some(err) => {
-                        format!("{} {} ({}) {}", result_indicator, cc.model, cc.backend, err)
-                    }
-                    None => format!("{} {} ({})", result_indicator, cc.model, cc.backend),
+                let rest = match &cc.error {
+                    Some(err) => format!(" {} ({}) {}", cc.model, cc.backend, err),
+                    None => format!(" {} ({})", cc.model, cc.backend),
                 };
                 rows.push(Row::new(vec![
                     Line::from(Span::styled(
@@ -198,7 +196,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                         } else {
                             String::new()
                         },
-                        Style::default().fg(DIM),
+                        Style::default().fg(DIM_WHITE),
                     )),
                     Line::from(Span::styled(
                         if show_server {
@@ -206,16 +204,19 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                         } else {
                             String::new()
                         },
-                        Style::default().fg(DIM),
+                        Style::default().fg(DIM_WHITE),
                     )),
-                    Line::from(Span::styled(consult_text, Style::default().fg(DIM))),
+                    Line::from(vec![
+                        Span::styled(indicator, Style::default().fg(indicator_color)),
+                        Span::styled(rest, Style::default().fg(DIM_WHITE)),
+                    ]),
                     Line::from(Span::styled(
                         format!(
                             "{:>width$}",
                             duration_str,
                             width = elapsed_col_width as usize
                         ),
-                        Style::default().fg(DIM),
+                        Style::default().fg(DIM_WHITE),
                     )),
                 ]));
             }
