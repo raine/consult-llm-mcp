@@ -182,7 +182,13 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
                 }
             }
             ParsedStreamEvent::AssistantText { text } if !text.is_empty() => {
-                blocks.push(RenderedBlock::Text(text.clone()));
+                // Merge consecutive text chunks into a single block so
+                // markdown renders correctly across streaming boundaries.
+                if let Some(RenderedBlock::Text(prev)) = blocks.last_mut() {
+                    prev.push_str(text);
+                } else {
+                    blocks.push(RenderedBlock::Text(text.clone()));
+                }
             }
             ParsedStreamEvent::Usage {
                 prompt_tokens,
@@ -246,15 +252,13 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                 lines.push(render_tool_line(label, *success, inner_width, tick));
             }
             RenderedBlock::Text(text) => {
-                let indent = 4;
-                let wrap_width = inner_width.saturating_sub(indent);
-                for line in text.lines() {
-                    for wrapped in wrap_line(line, wrap_width) {
-                        lines.push(Line::from(vec![Span::styled(
-                            format!("    {wrapped}"),
-                            Style::default().fg(WHITE),
-                        )]));
-                    }
+                let indent = "    ";
+                let wrap_width = inner_width.saturating_sub(indent.len());
+                let md_lines = super::markdown::render_markdown(text, wrap_width);
+                for line in md_lines {
+                    let mut indented = vec![Span::raw(indent.to_string())];
+                    indented.extend(line.spans);
+                    lines.push(Line::from(indented));
                 }
             }
             RenderedBlock::Usage {

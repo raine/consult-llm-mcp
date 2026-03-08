@@ -1,4 +1,5 @@
 mod detail;
+mod markdown;
 mod table;
 
 use crate::state::{AppMode, AppState, BG, DIM_WHITE, SEPARATOR, TEAL, WHITE};
