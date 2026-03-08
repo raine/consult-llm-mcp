@@ -1,0 +1,245 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::config::ModelRegistry;
+use crate::executors::types::{LlmExecutor, Usage};
+use crate::file::process_files;
+use crate::git::generate_git_diff;
+use crate::llm::ExecutorProvider;
+use crate::llm_query::query_llm;
+use crate::logger::{log_prompt, log_response};
+use crate::prompt_builder::build_prompt;
+use crate::schema::ConsultLlmArgs;
+use crate::system_prompt::get_system_prompt;
+
+pub enum ConsultOutcome {
+    Response {
+        body: String,
+        usage: Option<Usage>,
+    },
+    WebPrompt {
+        clipboard_text: String,
+        file_paths: Option<Vec<PathBuf>>,
+    },
+}
+
+pub struct ConsultService {
+    registry: Arc<ModelRegistry>,
+    executor_provider: Arc<ExecutorProvider>,
+}
+
+impl ConsultService {
+    pub fn new(registry: Arc<ModelRegistry>, executor_provider: Arc<ExecutorProvider>) -> Self {
+        Self {
+            registry,
+            executor_provider,
+        }
+    }
+
+    pub async fn consult(
+        &self,
+        args: ConsultLlmArgs,
+        model_explicitly_provided: bool,
+    ) -> anyhow::Result<ConsultOutcome> {
+        // Web mode short-circuits before model resolution
+        if args.web_mode {
+            return self.handle_web_mode(args).await;
+        }
+
+        let model = self
+            .registry
+            .resolve_model(args.model.as_deref(), model_explicitly_provided)?;
+
+        let executor = self.executor_provider.get_executor(&model)?;
+
+        if args.thread_id.is_some() && !executor.capabilities().supports_threads {
+            anyhow::bail!(
+                "thread_id is not supported by the configured backend for model: {model}"
+            );
+        }
+
+        let consultation_id = uuid::Uuid::new_v4().simple().to_string();
+        let backend_name = executor.backend_name().to_string();
+
+        consult_llm_core::monitoring::emit(
+            consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
+                id: consultation_id.clone(),
+                model: model.clone(),
+                backend: backend_name.clone(),
+            },
+        );
+
+        let project = std::env::current_dir()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let start_time = std::time::Instant::now();
+        let result = self
+            .run_consult(args, &model, executor, &consultation_id)
+            .await;
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        let history_consultation_id = consultation_id.clone();
+
+        match &result {
+            Ok(ConsultOutcome::Response { usage, .. }) => {
+                consult_llm_core::monitoring::emit(
+                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
+                        id: consultation_id,
+                        duration_ms,
+                        success: true,
+                        error: None,
+                    },
+                );
+                consult_llm_core::monitoring::append_history(
+                    &consult_llm_core::monitoring::HistoryRecord {
+                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        consultation_id: Some(history_consultation_id),
+                        project: project.clone(),
+                        model: model.clone(),
+                        backend: backend_name.clone(),
+                        duration_ms,
+                        success: true,
+                        error: None,
+                        tokens_in: usage.as_ref().map(|u| u.prompt_tokens),
+                        tokens_out: usage.as_ref().map(|u| u.completion_tokens),
+                    },
+                );
+            }
+            Ok(ConsultOutcome::WebPrompt { .. }) => {
+                // Web mode doesn't go through this path, but handle for completeness
+            }
+            Err(e) => {
+                consult_llm_core::monitoring::emit(
+                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
+                        id: consultation_id,
+                        duration_ms,
+                        success: false,
+                        error: Some(e.to_string()),
+                    },
+                );
+                consult_llm_core::monitoring::append_history(
+                    &consult_llm_core::monitoring::HistoryRecord {
+                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        consultation_id: Some(history_consultation_id),
+                        project: project.clone(),
+                        model: model.clone(),
+                        backend: backend_name.clone(),
+                        duration_ms,
+                        success: false,
+                        error: Some(e.to_string()),
+                        tokens_in: None,
+                        tokens_out: None,
+                    },
+                );
+            }
+        }
+
+        result
+    }
+
+    async fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
+        let context_files = args
+            .files
+            .as_ref()
+            .map(|f| process_files(f))
+            .transpose()?
+            .unwrap_or_default();
+
+        let git_diff = args
+            .git_diff
+            .as_ref()
+            .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
+
+        let prompt = build_prompt(&args.prompt, &context_files, git_diff.as_deref());
+        let system_prompt = get_system_prompt(false, args.task_mode);
+        let clipboard_text =
+            format!("# System Prompt\n\n{system_prompt}\n\n# User Prompt\n\n{prompt}");
+
+        Ok(ConsultOutcome::WebPrompt {
+            clipboard_text,
+            file_paths: None,
+        })
+    }
+
+    async fn run_consult(
+        &self,
+        args: ConsultLlmArgs,
+        model: &str,
+        executor: Arc<dyn LlmExecutor>,
+        consultation_id: &str,
+    ) -> anyhow::Result<ConsultOutcome> {
+        let (prompt, file_paths) = if !executor.capabilities().supports_file_refs {
+            // API mode: inline file contents
+            let context_files = args
+                .files
+                .as_ref()
+                .map(|f| process_files(f))
+                .transpose()?
+                .unwrap_or_default();
+
+            let git_diff = args
+                .git_diff
+                .as_ref()
+                .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
+
+            (
+                build_prompt(&args.prompt, &context_files, git_diff.as_deref()),
+                None,
+            )
+        } else {
+            // CLI mode: pass file paths, inline git diff only
+            let resolved: Option<Vec<PathBuf>> = args.files.as_ref().map(|files| {
+                let cwd = std::env::current_dir().unwrap_or_default();
+                files
+                    .iter()
+                    .map(|f| {
+                        let p = PathBuf::from(f);
+                        if p.is_absolute() { p } else { cwd.join(f) }
+                    })
+                    .collect()
+            });
+
+            let git_diff = args
+                .git_diff
+                .as_ref()
+                .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
+
+            let prompt = match git_diff {
+                Some(ref diff) if !diff.trim().is_empty() => {
+                    format!("## Git Diff\n```diff\n{diff}\n```\n\n{}", args.prompt)
+                }
+                _ => args.prompt.clone(),
+            };
+
+            (prompt, resolved)
+        };
+
+        log_prompt(model, &prompt);
+
+        let system_prompt = get_system_prompt(executor.capabilities().is_cli, args.task_mode);
+
+        let result = query_llm(
+            &prompt,
+            model,
+            &executor,
+            file_paths.as_deref(),
+            args.thread_id.as_deref(),
+            &system_prompt,
+            Some(consultation_id),
+        )
+        .await?;
+
+        log_response(model, &result.response, &result.cost_info);
+
+        let body = match result.thread_id {
+            Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),
+            None => result.response,
+        };
+        Ok(ConsultOutcome::Response {
+            body,
+            usage: result.usage,
+        })
+    }
+}

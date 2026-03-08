@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use crate::logger::log_to_file;
 use crate::models::ALL_MODELS;
@@ -192,7 +192,8 @@ pub fn registry() -> &'static ModelRegistry {
 /// Initialize config and model registry from environment variables.
 /// Must be called before MCP server starts.
 /// Exits process on fatal configuration errors.
-pub fn init_config() {
+/// Returns the ModelRegistry for explicit dependency injection.
+pub fn init_config() -> Arc<ModelRegistry> {
     // Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
     let gemini_backend_raw = migrate_prefixed_env(
         env_non_empty("CONSULT_LLM_GEMINI_BACKEND").as_deref(),
@@ -339,11 +340,19 @@ pub fn init_config() {
         allowed_models: enabled_models.clone(),
     });
 
-    let _ = REGISTRY.set(ModelRegistry {
+    let registry = Arc::new(ModelRegistry {
         allowed_models: enabled_models,
         fallback_model,
         default_model,
     });
+
+    let _ = REGISTRY.set(ModelRegistry {
+        allowed_models: registry.allowed_models.clone(),
+        fallback_model: registry.fallback_model.clone(),
+        default_model: registry.default_model.clone(),
+    });
+
+    registry
 }
 
 #[cfg(test)]

@@ -2,22 +2,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::config::registry;
-
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum TaskMode {
-    Review,
-    Debug,
-    Plan,
-    Create,
-    General,
-}
-
-impl Default for TaskMode {
-    fn default() -> Self {
-        Self::General
-    }
-}
+pub use crate::models::TaskMode;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct GitDiffArgs {

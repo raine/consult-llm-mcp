@@ -19,6 +19,7 @@ mod models;
 mod prompt_builder;
 mod schema;
 mod server;
+mod service;
 mod system_prompt;
 
 use consult_llm_core::monitoring;
@@ -47,7 +48,7 @@ async fn main() {
         return;
     }
 
-    config::init_config();
+    let registry = config::init_config();
 
     monitoring::init();
     let project = std::env::current_dir()
@@ -95,9 +96,10 @@ async fn main() {
     logger::log_configuration(&config_map);
 
     let executor_provider = Arc::new(llm::ExecutorProvider::new());
-    let server = server::ConsultServer::new(executor_provider);
+    let consult_service = Arc::new(service::ConsultService::new(registry, executor_provider));
+    let server = server::ConsultServer::new(consult_service);
 
-    let service = if std::env::var("MCP_DEBUG_STDIN").is_ok() {
+    let mcp_service = if std::env::var("MCP_DEBUG_STDIN").is_ok() {
         logger::log_to_file("MCP_DEBUG_STDIN enabled");
         let stdin = logging_reader::LoggingReader::new(tokio::io::stdin());
         let stdout = tokio::io::stdout();
@@ -114,7 +116,7 @@ async fn main() {
     };
 
     tokio::select! {
-        res = service.waiting() => {
+        res = mcp_service.waiting() => {
             if let Err(e) = res {
                 logger::log_to_file(&format!("MCP server error: {e}"));
             }

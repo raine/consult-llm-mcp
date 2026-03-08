@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::llm_cost::calculate_cost;
-use crate::schema::TaskMode;
-use crate::system_prompt::get_system_prompt;
 
 pub struct QueryResult {
     pub response: String,
@@ -19,15 +17,14 @@ pub async fn query_llm(
     executor: &Arc<dyn LlmExecutor>,
     file_paths: Option<&[PathBuf]>,
     thread_id: Option<&str>,
-    task_mode: TaskMode,
+    system_prompt: &str,
     consultation_id: Option<&str>,
 ) -> anyhow::Result<QueryResult> {
-    let system_prompt = get_system_prompt(executor.capabilities().is_cli, task_mode);
     let result = executor
         .execute(
             prompt,
             model,
-            &system_prompt,
+            system_prompt,
             file_paths,
             thread_id,
             consultation_id,
