@@ -363,17 +363,19 @@ impl AppState {
             .collect();
 
         // Load events from all completed turns (all except the last)
-        let mut historical_events = Vec::new();
+        let mut historical_turns: Vec<Vec<ParsedStreamEvent>> = Vec::new();
         for cid in turn_ids.iter().take(turn_ids.len().saturating_sub(1)) {
+            let mut turn_events = Vec::new();
             let path = dir.join(format!("{cid}.events.jsonl"));
             if let Ok(file) = File::open(&path) {
                 let reader = BufReader::new(file);
                 for line in reader.lines().map_while(Result::ok) {
                     if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(line.trim()) {
-                        historical_events.push(event);
+                        turn_events.push(event);
                     }
                 }
             }
+            historical_turns.push(turn_events);
         }
 
         // Load the latest turn's events with offset tracking
@@ -425,7 +427,7 @@ impl AppState {
         self.mode = AppMode::ThreadDetail(ThreadDetailState {
             thread_id,
             turn_ids,
-            historical_events,
+            historical_turns,
             active_events,
             active_file_offset,
             turn_line_offsets: Vec::new(), // computed during rendering

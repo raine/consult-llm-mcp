@@ -600,24 +600,7 @@ pub(super) fn render_thread_detail_view(
     let mut turn_line_offsets: Vec<usize> = Vec::new();
 
     // Render historical turns (all except the last)
-    let historical_turn_count = detail.turn_ids.len().saturating_sub(1);
-
-    // Split historical events by turn boundaries (SessionStarted events)
-    let mut turn_events: Vec<Vec<&ParsedStreamEvent>> = Vec::new();
-    let mut current_turn: Vec<&ParsedStreamEvent> = Vec::new();
-
-    for event in &detail.historical_events {
-        if matches!(event, ParsedStreamEvent::SessionStarted { .. }) && !current_turn.is_empty() {
-            turn_events.push(current_turn);
-            current_turn = Vec::new();
-        }
-        current_turn.push(event);
-    }
-    if !current_turn.is_empty() {
-        turn_events.push(current_turn);
-    }
-
-    for (i, events) in turn_events.iter().enumerate() {
+    for (i, turn_events) in detail.historical_turns.iter().enumerate() {
         // Turn separator
         turn_line_offsets.push(lines.len());
         let turn_num = i + 1;
@@ -634,13 +617,13 @@ pub(super) fn render_thread_detail_view(
         ]));
         lines.push(Line::default());
 
-        // Render events for this turn
-        let owned_events: Vec<ParsedStreamEvent> = events.iter().map(|e| (*e).clone()).collect();
-        let blocks = normalize_events(&owned_events);
+        let blocks = normalize_events(turn_events);
         let turn_lines = render_blocks(&blocks, inner_width, tick);
         lines.extend(turn_lines);
         lines.push(Line::default());
     }
+
+    let historical_turn_count = detail.historical_turns.len();
 
     // Render the active (latest) turn
     let active_turn_idx = detail.turn_ids.len().saturating_sub(1);

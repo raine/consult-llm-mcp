@@ -38,8 +38,8 @@ pub(crate) struct ThreadDetailState {
     pub(crate) thread_id: String,
     /// Consultation IDs in chronological order
     pub(crate) turn_ids: Vec<String>,
-    /// Pre-parsed events from completed turns (immutable)
-    pub(crate) historical_events: Vec<ParsedStreamEvent>,
+    /// Events per completed turn (immutable), one Vec per turn
+    pub(crate) historical_turns: Vec<Vec<ParsedStreamEvent>>,
     /// Events from the latest/active turn (may still be streaming)
     pub(crate) active_events: Vec<ParsedStreamEvent>,
     /// Byte offset for polling the active turn's .events.jsonl
