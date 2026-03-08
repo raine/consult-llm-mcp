@@ -23,7 +23,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 ```
 
 [Quick start](#quick-start) · [Configuration](#configuration) ·
-[Monitor](#monitor) · [Changelog](CHANGELOG.md)
+[Monitor TUI](#monitor) · [Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -32,6 +32,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 - Direct queries with optional file context
 - Include git changes for code review and analysis
 - Comprehensive logging with cost estimation
+- [Monitor TUI](#monitor): Real-time dashboard for watching active consultations
 - [Gemini CLI backend](#gemini-cli): Use the `gemini` CLI to take advantage of
   [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
 - [Codex CLI backend](#codex-cli): Use the `codex` CLI for OpenAI models
@@ -41,8 +42,9 @@ to bring in the heavy artillery. Supports multi-turn conversations.
   across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
-- [Monitor TUI](#monitor): Real-time dashboard for watching active consultations
 - Less is more: Single MCP tool to not clutter the context
+
+<img src="meta/monitor-screenshot.webp" alt="consult-llm-monitor screenshot" width="600">
 
 ## Quick start
 
@@ -680,6 +682,10 @@ Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.
 `consult-llm-monitor` is a real-time TUI dashboard for watching active
 consultations across all running MCP server instances. It shows what's being
 consulted, which models are in use, and how long each request takes.
+
+<p align="center">
+  <img src="meta/monitor-demo.gif" alt="consult-llm-monitor demo" width="800">
+</p>
 
 The monitor binary is included when you install via the install script (same
 script that installs `consult-llm-mcp`).
