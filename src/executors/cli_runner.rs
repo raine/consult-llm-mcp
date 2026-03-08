@@ -22,11 +22,13 @@ pub async fn run_cli_streaming<F>(
 where
     F: FnMut(&str) + Send,
 {
+    let cwd = std::env::current_dir().unwrap_or_default();
     log_cli_debug(
         &format!("Spawning {command} CLI (streaming)"),
         Some(&serde_json::json!({
             "args": args,
             "promptLength": args.last().map(|s| s.len()),
+            "cwd": cwd,
         })),
     );
 
