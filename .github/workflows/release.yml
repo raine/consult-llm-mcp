@@ -1,0 +1,252 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ matrix.suffix }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+            builder: cargo
+            suffix: darwin-arm64
+            os: darwin
+            cpu: arm64
+            libc: ""
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+            builder: cargo
+            suffix: darwin-x64
+            os: darwin
+            cpu: x64
+            libc: ""
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            builder: zigbuild
+            suffix: linux-x64
+            os: linux
+            cpu: x64
+            libc: glibc
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            builder: zigbuild
+            suffix: linux-arm64
+            os: linux
+            cpu: arm64
+            libc: glibc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Zig
+        if: matrix.builder == 'zigbuild'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install cargo-zigbuild
+        if: matrix.builder == 'zigbuild'
+        run: pipx install cargo-zigbuild
+
+      - name: Build binaries
+        run: |
+          if [ "${{ matrix.builder }}" = "zigbuild" ]; then
+            cargo zigbuild --release --target ${{ matrix.target }} --workspace --locked
+          else
+            cargo build --release --target ${{ matrix.target }} --workspace --locked
+          fi
+
+      - name: Stage npm platform package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG_NAME="consult-llm-mcp-${{ matrix.suffix }}"
+          PKG_DIR="npm-stage/$PKG_NAME"
+          mkdir -p "$PKG_DIR"
+
+          LIBC_FIELD=""
+          if [ -n "${{ matrix.libc }}" ]; then
+            LIBC_FIELD=$(printf ',\n  "libc": ["%s"]' "${{ matrix.libc }}")
+          fi
+
+          cat > "$PKG_DIR/package.json" <<-PKGJSON
+          {
+            "name": "$PKG_NAME",
+            "version": "$VERSION",
+            "description": "Platform binary for consult-llm-mcp (${{ matrix.suffix }})",
+            "repository": {
+              "type": "git",
+              "url": "git+https://github.com/raine/consult-llm-mcp.git"
+            },
+            "os": ["${{ matrix.os }}"],
+            "cpu": ["${{ matrix.cpu }}"]${LIBC_FIELD},
+            "files": ["consult-llm-mcp"],
+            "license": "MIT"
+          }
+          PKGJSON
+
+          cp "target/${{ matrix.target }}/release/consult-llm-mcp" "$PKG_DIR/consult-llm-mcp"
+          chmod +x "$PKG_DIR/consult-llm-mcp"
+
+          echo "Validating $PKG_NAME..."
+          (cd "$PKG_DIR" && npm pack --dry-run)
+
+      - name: Stage GitHub release archive
+        run: |
+          mkdir -p gh-release
+          ARCHIVE="consult-llm-mcp-${{ matrix.suffix }}.tar.gz"
+          tar -czf "gh-release/$ARCHIVE" \
+            -C "target/${{ matrix.target }}/release" \
+            consult-llm-mcp consult-llm-monitor
+          (cd gh-release && shasum -a 256 "$ARCHIVE" > "${ARCHIVE%.tar.gz}.sha256")
+
+      # Tar before uploading to preserve executable bits (GitHub artifacts use zip which strips +x)
+      - name: Tar npm package for upload
+        run: tar -cf npm-stage.tar -C npm-stage .
+
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.suffix }}
+          path: npm-stage.tar
+          retention-days: 1
+
+      - name: Upload GitHub release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-release-${{ matrix.suffix }}
+          path: gh-release/
+          retention-days: 1
+
+  publish-npm:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Validate tag matches package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "error: tag version ($TAG_VERSION) does not match package.json ($PKG_VERSION)" >&2
+            exit 1
+          fi
+
+      - name: Download npm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: npm-*
+
+      - name: Extract npm packages
+        run: |
+          mkdir -p npm-stage
+          for tarball in artifacts/npm-*/npm-stage.tar; do
+            tar -xf "$tarball" -C npm-stage
+          done
+
+      - name: Publish platform packages
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="latest"
+          if [[ "$VERSION" == *"beta"* ]]; then TAG="beta"; fi
+
+          for suffix in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            PKG_NAME="consult-llm-mcp-$suffix"
+            PKG_DIR="npm-stage/$PKG_NAME"
+
+            if npm view "$PKG_NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "$PKG_NAME@$VERSION already published, skipping..."
+            else
+              echo "Publishing $PKG_NAME@$VERSION..."
+              (cd "$PKG_DIR" && npm publish --provenance --access public --tag "$TAG")
+            fi
+          done
+
+      - name: Publish root wrapper package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="latest"
+          if [[ "$VERSION" == *"beta"* ]]; then TAG="beta"; fi
+
+          # Stage root package
+          mkdir -p root-stage
+          cp package.json README.md CHANGELOG.md LICENSE run.sh root-stage/
+          chmod +x root-stage/run.sh
+
+          # Inject optionalDependencies
+          VERSION="$VERSION" node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("root-stage/package.json", "utf8"));
+            pkg.optionalDependencies = {
+              "consult-llm-mcp-darwin-arm64": process.env.VERSION,
+              "consult-llm-mcp-darwin-x64": process.env.VERSION,
+              "consult-llm-mcp-linux-x64": process.env.VERSION,
+              "consult-llm-mcp-linux-arm64": process.env.VERSION
+            };
+            fs.writeFileSync("root-stage/package.json", JSON.stringify(pkg, null, 2) + "\n");
+          '
+
+          if npm view "consult-llm-mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "consult-llm-mcp@$VERSION already published, skipping..."
+          else
+            echo "Publishing consult-llm-mcp@$VERSION..."
+            (cd root-stage && npm publish --provenance --access public --tag "$TAG")
+          fi
+
+  github-release:
+    name: GitHub Release
+    needs: [build, publish-npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: gh-release-*
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PRERELEASE=""
+          if [[ "$GITHUB_REF_NAME" == *"beta"* ]]; then
+            PRERELEASE="--prerelease"
+          fi
+
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists, uploading assets..."
+            gh release upload "$GITHUB_REF_NAME" artifacts/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/* \
+              --verify-tag \
+              --generate-notes \
+              $PRERELEASE
+          fi
