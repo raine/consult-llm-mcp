@@ -2,7 +2,7 @@ mod action;
 mod app;
 mod format;
 mod input;
-mod polling;
+mod poller;
 mod state;
 mod ui;
 
@@ -18,7 +18,8 @@ use ratatui::backend::CrosstermBackend;
 use consult_llm_core::monitoring::sessions_dir;
 
 use crate::action::Action;
-use crate::state::AppState;
+use crate::poller::PollCommand;
+use crate::state::{AppMode, AppState};
 
 // ── Terminal guard ───────────────────────────────────────────────────────
 
@@ -59,18 +60,19 @@ fn main() -> io::Result<()> {
     let dir = sessions_dir();
     let _ = fs::create_dir_all(&dir);
 
-    state.poll_files(&dir);
-    state.poll_history(&dir);
-    state.check_liveness();
-    state.prune_finished(&dir);
-
     let poll_interval = Duration::from_millis(500);
-    let mut last_poll = std::time::Instant::now();
     let render_interval = Duration::from_millis(100);
+
+    let (update_rx, cmd_tx, _poll_thread) = poller::spawn(dir.clone(), poll_interval);
 
     let mut row_infos = Vec::new();
 
     loop {
+        // Drain all pending poll updates (non-blocking)
+        while let Ok(update) = update_rx.try_recv() {
+            state.apply_poll_update(update);
+        }
+
         // Remember what was selected before rebuilding
         let prev_selected = row_infos.get(state.selected).cloned();
 
@@ -107,18 +109,28 @@ fn main() -> io::Result<()> {
             && let Some(action) = input::handle_key(&state, &row_infos, key, &dir)
         {
             if matches!(action, Action::Quit) {
+                let _ = cmd_tx.send(PollCommand::Shutdown);
                 break;
             }
-            state.apply(action, &dir);
-        }
 
-        if last_poll.elapsed() >= poll_interval {
-            state.poll_files(&dir);
-            state.poll_history(&dir);
-            state.check_liveness();
-            state.prune_finished(&dir);
-            state.poll_detail_events(&dir);
-            last_poll = std::time::Instant::now();
+            let entering_detail = matches!(&action, Action::EnterDetail(_));
+            let exiting_detail = matches!(&action, Action::ExitDetail);
+            let clearing_history = matches!(&action, Action::ClearHistory);
+
+            state.apply(action, &dir);
+
+            if entering_detail {
+                if let AppMode::Detail(ref detail) = state.mode {
+                    let _ = cmd_tx.send(PollCommand::EnterDetail {
+                        consultation_id: detail.consultation_id.clone(),
+                        file_offset: detail.file_offset,
+                    });
+                }
+            } else if exiting_detail {
+                let _ = cmd_tx.send(PollCommand::ExitDetail);
+            } else if clearing_history {
+                let _ = cmd_tx.send(PollCommand::ResetHistory);
+            }
         }
     }
 

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 
 use chrono::{DateTime, Utc};
 use ratatui::style::Color;
@@ -47,8 +47,6 @@ pub(crate) enum Focus {
 pub(crate) struct AppState {
     pub(crate) servers: HashMap<String, ServerState>,
     pub(crate) server_order: Vec<String>,
-    /// Server IDs that have been pruned — skip on next poll
-    pub(crate) pruned: HashSet<String>,
     pub(crate) selected: usize,
     pub(crate) row_count: usize,
     pub(crate) tick: usize,
@@ -58,7 +56,6 @@ pub(crate) struct AppState {
     pub(crate) history_table_state: TableState,
     pub(crate) mode: AppMode,
     pub(crate) history: VecDeque<HistoryRecord>,
-    pub(crate) history_offset: u64,
     /// Transient message shown in status bar, cleared after a few renders
     pub(crate) flash: Option<(String, u8)>,
     /// Last known inner height of the detail view (for half-page scroll)
@@ -82,7 +79,6 @@ pub(crate) struct ServerState {
     pub(crate) completed_consults: Vec<CompletedConsult>,
     pub(crate) completed_count: u32,
     pub(crate) failed_count: u32,
-    pub(crate) file_offset: u64,
 }
 
 pub(crate) struct ActiveConsult {
@@ -114,7 +110,6 @@ impl AppState {
         Self {
             servers: HashMap::new(),
             server_order: Vec::new(),
-            pruned: HashSet::new(),
             selected: 0,
             row_count: 0,
             tick: 0,
@@ -124,7 +119,6 @@ impl AppState {
             history_table_state: TableState::default(),
             mode: AppMode::Table,
             history: VecDeque::new(),
-            history_offset: 0,
             flash: None,
             detail_inner_height: 0,
             show_help: false,

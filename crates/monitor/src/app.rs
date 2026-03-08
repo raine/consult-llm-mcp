@@ -10,6 +10,7 @@ use consult_llm_core::monitoring::{EventEnvelope, HISTORY_FILE, MonitorEvent};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use crate::action::Action;
+use crate::poller::PollUpdate;
 use crate::state::{
     ActiveConsult, AppMode, AppState, CompletedConsult, DetailState, Focus, RowInfo, ServerState,
 };
@@ -94,7 +95,6 @@ impl AppState {
             }
             Action::ClearHistory => {
                 self.history.clear();
-                self.history_offset = 0;
                 self.history_selected = 0;
                 let path = dir.join(HISTORY_FILE);
                 let _ = File::create(&path); // truncate
@@ -182,7 +182,6 @@ impl AppState {
                         completed_consults: Vec::new(),
                         completed_count: 0,
                         failed_count: 0,
-                        file_offset: 0,
                     },
                 );
             }
@@ -329,6 +328,56 @@ impl AppState {
         let mut entries: Vec<_> = server.active_consults.iter().collect();
         entries.sort_by_key(|(_, c)| c.started_at);
         entries
+    }
+
+    /// Apply a state update received from the background poller.
+    pub(crate) fn apply_poll_update(&mut self, update: PollUpdate) {
+        match update {
+            PollUpdate::Events(events) => {
+                for (server_id, envelope) in &events {
+                    self.process_event(server_id, envelope);
+                }
+            }
+            PollUpdate::HistoryRecords(records) => {
+                for record in records {
+                    self.history.push_front(record);
+                    if !self.history.is_empty() {
+                        self.history_selected =
+                            (self.history_selected + 1).min(self.history.len() - 1);
+                    }
+                    if self.history.len() > 100 {
+                        self.history.pop_back();
+                        if self.history_selected >= self.history.len() {
+                            self.history_selected = self.history.len().saturating_sub(1);
+                        }
+                    }
+                }
+            }
+            PollUpdate::Deaths(deaths) => {
+                for server_id in &deaths {
+                    if let Some(server) = self.servers.get_mut(server_id) {
+                        server.dead = true;
+                        server.active_consults.clear();
+                    }
+                }
+            }
+            PollUpdate::Pruned(pruned_ids) => {
+                for id in &pruned_ids {
+                    self.servers.remove(id);
+                }
+                self.server_order.retain(|id| self.servers.contains_key(id));
+            }
+            PollUpdate::DetailEvents(events) => {
+                if let AppMode::Detail(ref mut detail) = self.mode
+                    && !events.is_empty()
+                {
+                    detail.events.extend(events);
+                    if detail.auto_scroll {
+                        detail.scroll = usize::MAX;
+                    }
+                }
+            }
+        }
     }
 
     /// Build a list of RowInfo for the current table rows.
