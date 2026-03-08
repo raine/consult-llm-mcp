@@ -4,16 +4,14 @@ use tokio::process::Command;
 
 use crate::logger::log_cli_debug;
 
-#[allow(dead_code)]
 pub struct CliResult {
-    pub stdout: String,
     pub stderr: String,
     pub code: Option<i32>,
+    pub stdout_bytes: usize,
     pub duration_ms: u128,
 }
 
 /// Run a CLI command, calling `on_line` for each stdout line as it arrives.
-/// Still accumulates full stdout/stderr for the final CliResult.
 pub async fn run_cli_streaming<F>(
     command: &str,
     args: &[String],
@@ -58,12 +56,11 @@ where
     });
 
     let mut reader = BufReader::new(stdout).lines();
-    let mut all_stdout = String::new();
+    let mut stdout_bytes: usize = 0;
 
     while let Some(line) = reader.next_line().await? {
         on_line(&line);
-        all_stdout.push_str(&line);
-        all_stdout.push('\n');
+        stdout_bytes += line.len() + 1;
     }
 
     let status = child.wait().await?;
@@ -71,9 +68,9 @@ where
     let stderr = stderr_task.await??;
 
     let result = CliResult {
-        stdout: all_stdout,
         stderr,
         code: status.code(),
+        stdout_bytes,
         duration_ms,
     };
 
@@ -82,7 +79,7 @@ where
         Some(&serde_json::json!({
             "code": result.code,
             "duration": format!("{}ms", duration_ms),
-            "stdoutLength": result.stdout.len(),
+            "stdoutBytes": result.stdout_bytes,
             "stderrLength": result.stderr.len(),
         })),
     );
