@@ -217,7 +217,12 @@ pub fn filter_by_availability(models: &[String], providers: &ProviderAvailabilit
                 providers.openai_backend != Backend::Api || providers.openai_api_key.is_some()
             }
             Some(Provider::DeepSeek) => providers.deepseek_api_key.is_some(),
-            None => true, // Unknown prefix (user-added extras) — always include
+            None => {
+                log_to_file(&format!(
+                    "WARNING: dropping model '{model}' — unrecognized provider prefix"
+                ));
+                false
+            }
         })
         .cloned()
         .collect()
@@ -473,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn test_filter_by_availability_unknown_prefix() {
+    fn test_filter_by_availability_unknown_prefix_rejected() {
         let models = vec!["custom-model".into()];
         let result = filter_by_availability(
             &models,
@@ -485,7 +490,7 @@ mod tests {
                 deepseek_api_key: None,
             },
         );
-        assert_eq!(result, vec!["custom-model"]);
+        assert!(result.is_empty());
     }
 
     #[test]
