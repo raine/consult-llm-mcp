@@ -13,14 +13,8 @@ use crate::schema::ConsultLlmArgs;
 use crate::system_prompt::get_system_prompt;
 
 pub enum ConsultOutcome {
-    Response {
-        body: String,
-        usage: Option<Usage>,
-    },
-    WebPrompt {
-        clipboard_text: String,
-        file_paths: Option<Vec<PathBuf>>,
-    },
+    Response { body: String, usage: Option<Usage> },
+    WebPrompt { clipboard_text: String },
 }
 
 pub struct ConsultService {
@@ -157,10 +151,7 @@ impl ConsultService {
         let clipboard_text =
             format!("# System Prompt\n\n{system_prompt}\n\n# User Prompt\n\n{prompt}");
 
-        Ok(ConsultOutcome::WebPrompt {
-            clipboard_text,
-            file_paths: None,
-        })
+        Ok(ConsultOutcome::WebPrompt { clipboard_text })
     }
 
     async fn run_consult(

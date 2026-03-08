@@ -48,22 +48,10 @@ impl ConsultServer {
 
         match outcome {
             ConsultOutcome::Response { body, .. } => Ok(body),
-            ConsultOutcome::WebPrompt {
-                clipboard_text,
-                file_paths,
-            } => {
+            ConsultOutcome::WebPrompt { clipboard_text } => {
                 copy_to_clipboard(&clipboard_text).map_err(|e| format!("LLM query failed: {e}"))?;
 
-                let mut msg = "✓ Prompt copied to clipboard!\n\nPlease paste it into your browser-based LLM service and share the response here before I proceed with any implementation.".to_string();
-                if let Some(ref fps) = file_paths
-                    && !fps.is_empty()
-                {
-                    msg.push_str("\n\nNote: File paths were included:\n");
-                    for fp in fps {
-                        msg.push_str(&format!("  - {}\n", fp.display()));
-                    }
-                }
-                Ok(msg)
+                Ok("✓ Prompt copied to clipboard!\n\nPlease paste it into your browser-based LLM service and share the response here before I proceed with any implementation.".to_string())
             }
         }
     }

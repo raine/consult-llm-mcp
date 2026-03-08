@@ -340,19 +340,19 @@ pub fn init_config() -> Arc<ModelRegistry> {
         allowed_models: enabled_models.clone(),
     });
 
-    let registry = Arc::new(ModelRegistry {
+    let _ = REGISTRY.set(ModelRegistry {
         allowed_models: enabled_models,
         fallback_model,
         default_model,
     });
 
-    let _ = REGISTRY.set(ModelRegistry {
-        allowed_models: registry.allowed_models.clone(),
-        fallback_model: registry.fallback_model.clone(),
-        default_model: registry.default_model.clone(),
-    });
-
-    registry
+    // Return an Arc wrapping the same registry stored in REGISTRY
+    let reg = REGISTRY.get().unwrap();
+    Arc::new(ModelRegistry {
+        allowed_models: reg.allowed_models.clone(),
+        fallback_model: reg.fallback_model.clone(),
+        default_model: reg.default_model.clone(),
+    })
 }
 
 #[cfg(test)]
