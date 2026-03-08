@@ -112,8 +112,13 @@ impl StreamReducer {
                     self.emit_progress(ProgressStage::ToolUse { tool: label });
                     needs_flush = true;
                 }
-                ParsedStreamEvent::ToolFinished { call_id, .. } => {
-                    self.active_tools.remove(&call_id);
+                ParsedStreamEvent::ToolFinished { call_id, success } => {
+                    if let Some(label) = self.active_tools.remove(&call_id) {
+                        self.emit_progress(ProgressStage::ToolResult {
+                            tool: label,
+                            success,
+                        });
+                    }
                     needs_flush = true;
                 }
                 ParsedStreamEvent::Prompt { .. } => {}
