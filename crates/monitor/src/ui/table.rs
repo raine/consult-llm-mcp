@@ -17,10 +17,13 @@ pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &
     // Dynamic active table height: +3 for borders (2) + header row (1), minimum 4
     let active_height = (state.row_count as u16 + 3).min(area.height / 2).max(4);
 
+    let filter_height = if state.filter_editing { 1 } else { 0 };
+
     let chunks = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(active_height),
         Constraint::Min(8),
+        Constraint::Length(filter_height),
         Constraint::Length(1),
     ])
     .split(area);
@@ -28,7 +31,10 @@ pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &
     render_header(frame, chunks[0], state);
     render_table(frame, chunks[1], state);
     render_history_table(frame, chunks[2], state);
-    render_status_bar(frame, chunks[3], &state.flash);
+    if state.filter_editing {
+        render_filter_input(frame, chunks[3], &state.filter_text);
+    }
+    render_status_bar(frame, chunks[4], state);
 }
 
 fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
@@ -257,10 +263,11 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
-    let rows: Vec<Row> = state
-        .history
+    let filtered_indices = state.filtered_history_indices();
+    let rows: Vec<Row> = filtered_indices
         .iter()
-        .map(|record| {
+        .map(|&idx| {
+            let record = &state.history[idx];
             let status_icon = if record.success {
                 "\u{2713}"
             } else {
@@ -336,7 +343,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
             .border_style(Style::default().fg(SEPARATOR)),
     );
 
-    if state.focus == Focus::History && !state.history.is_empty() {
+    if state.focus == Focus::History && !filtered_indices.is_empty() {
         state
             .history_table_state
             .select(Some(state.history_selected));
@@ -346,8 +353,17 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     frame.render_stateful_widget(table, area, &mut state.history_table_state);
 }
 
-fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, flash: &Option<(String, u8)>) {
-    if let Some((msg, _)) = flash {
+fn render_filter_input(frame: &mut ratatui::Frame, area: Rect, text: &str) {
+    let bar = Line::from(vec![
+        Span::styled(" /", Style::default().fg(TEAL)),
+        Span::styled(text, Style::default().fg(WHITE)),
+        Span::styled("▎", Style::default().fg(TEAL)),
+    ]);
+    frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
+}
+
+fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
+    if let Some((msg, _)) = &state.flash {
         let bar = Line::from(vec![Span::styled(
             format!(" {msg}"),
             Style::default().fg(DIM),
@@ -355,15 +371,28 @@ fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, flash: &Option<(Str
         frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
         return;
     }
-    let bar = Line::from(vec![
+
+    let mut spans = vec![
         Span::styled(" j/k", Style::default().fg(TEAL)),
         Span::styled(" navigate  ", Style::default().fg(DIM_WHITE)),
         Span::styled("Tab", Style::default().fg(TEAL)),
         Span::styled(" switch  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("/", Style::default().fg(TEAL)),
+        Span::styled(" filter  ", Style::default().fg(DIM_WHITE)),
         Span::styled("Enter", Style::default().fg(TEAL)),
         Span::styled(" detail  ", Style::default().fg(DIM_WHITE)),
         Span::styled("q", Style::default().fg(TEAL)),
         Span::styled(" quit", Style::default().fg(DIM_WHITE)),
-    ]);
+    ];
+
+    if !state.filter_text.is_empty() && !state.filter_editing {
+        spans.push(Span::styled("  filter: ", Style::default().fg(DIM)));
+        spans.push(Span::styled(
+            &state.filter_text,
+            Style::default().fg(YELLOW),
+        ));
+    }
+
+    let bar = Line::from(spans);
     frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
 }

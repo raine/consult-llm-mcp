@@ -49,6 +49,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, is_detail_mode: bool) {
             ("k / ↑", "Move up"),
             ("Tab", "Switch focus"),
             ("Enter", "Open detail view"),
+            ("/", "Filter history"),
             ("X", "Clear history"),
             ("q", "Quit"),
             ("?", "Toggle this help"),

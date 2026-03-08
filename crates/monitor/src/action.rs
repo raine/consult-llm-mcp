@@ -16,4 +16,14 @@ pub(crate) enum Action {
     CancelClear,
     ToggleHelp,
     YankResponse,
+    /// Open filter input (or re-open with current text)
+    StartFilter,
+    /// User typed a character in filter input
+    FilterInput(char),
+    /// Backspace in filter input
+    FilterBackspace,
+    /// Enter: dismiss filter input but keep filter active
+    FilterAccept,
+    /// Esc: dismiss filter input and clear the filter
+    FilterCancel,
 }

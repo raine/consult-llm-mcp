@@ -65,6 +65,10 @@ pub(crate) struct AppState {
     pub(crate) detail_inner_height: usize,
     /// Whether the help/shortcuts overlay is visible
     pub(crate) show_help: bool,
+    /// Current filter text (always present, empty = no filter)
+    pub(crate) filter_text: String,
+    /// Whether the filter input is currently being edited
+    pub(crate) filter_editing: bool,
 }
 
 pub(crate) struct ServerState {
@@ -124,6 +128,28 @@ impl AppState {
             flash: None,
             detail_inner_height: 0,
             show_help: false,
+            filter_text: String::new(),
+            filter_editing: false,
         }
+    }
+
+    /// Return indices of history rows matching the current filter.
+    pub(crate) fn filtered_history_indices(&self) -> Vec<usize> {
+        if self.filter_text.is_empty() {
+            return (0..self.history.len()).collect();
+        }
+        let needle = self.filter_text.to_lowercase();
+        self.history
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                r.project.to_lowercase().contains(&needle)
+                    || r.model.to_lowercase().contains(&needle)
+                    || r.backend.to_lowercase().contains(&needle)
+                    || (r.success && "success".contains(&needle))
+                    || (!r.success && "failed".contains(&needle))
+            })
+            .map(|(i, _)| i)
+            .collect()
     }
 }

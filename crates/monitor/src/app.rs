@@ -31,9 +31,9 @@ impl AppState {
                     }
                 }
                 Focus::History => {
-                    if !self.history.is_empty() {
-                        self.history_selected =
-                            (self.history_selected + 1).min(self.history.len() - 1);
+                    let count = self.filtered_history_indices().len();
+                    if count > 0 {
+                        self.history_selected = (self.history_selected + 1).min(count - 1);
                     }
                 }
             },
@@ -134,6 +134,27 @@ impl AppState {
                         }
                     }
                 }
+            }
+            Action::StartFilter => {
+                self.filter_editing = true;
+                self.focus = Focus::History;
+            }
+            Action::FilterInput(c) => {
+                self.filter_text.push(c);
+                self.clamp_history_selection();
+            }
+            Action::FilterBackspace => {
+                self.filter_text.pop();
+                self.clamp_history_selection();
+            }
+            Action::FilterAccept => {
+                self.filter_editing = false;
+                // keep filter_text active
+            }
+            Action::FilterCancel => {
+                self.filter_editing = false;
+                self.filter_text.clear();
+                self.clamp_history_selection();
             }
         }
     }
@@ -266,6 +287,16 @@ impl AppState {
         self.servers
             .values()
             .any(|s| s.active_consults.contains_key(consultation_id))
+    }
+
+    /// Clamp history_selected to the filtered list length.
+    fn clamp_history_selection(&mut self) {
+        let count = self.filtered_history_indices().len();
+        if count == 0 {
+            self.history_selected = 0;
+        } else if self.history_selected >= count {
+            self.history_selected = count - 1;
+        }
     }
 
     /// Return server IDs sorted by status: active first, then idle, then stopped/dead.

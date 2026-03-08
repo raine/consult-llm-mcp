@@ -20,6 +20,11 @@ pub(crate) fn handle_key(
         };
     }
 
+    // When filter input is active, route all keys to filter handling
+    if state.filter_editing {
+        return handle_filter_key(key);
+    }
+
     match &state.mode {
         AppMode::Table => handle_table_key(state, row_infos, key, dir),
         AppMode::Detail(_) => handle_detail_key(key),
@@ -40,6 +45,7 @@ fn handle_table_key(
         KeyCode::Tab | KeyCode::BackTab => Some(Action::ToggleFocus),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::MoveDown),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::MoveUp),
+        KeyCode::Char('/') => Some(Action::StartFilter),
         KeyCode::Char('X') => Some(Action::PromptClearHistory),
         KeyCode::Enter => match state.focus {
             Focus::Active => {
@@ -51,7 +57,9 @@ fn handle_table_key(
                 None
             }
             Focus::History => {
-                if let Some(record) = state.history.get(state.history_selected) {
+                let indices = state.filtered_history_indices();
+                let actual_idx = indices.get(state.history_selected).copied();
+                if let Some(record) = actual_idx.and_then(|i| state.history.get(i)) {
                     if let Some(cid) = &record.consultation_id {
                         let path = dir.join(format!("{cid}.events.jsonl"));
                         if path.exists() {
@@ -75,6 +83,16 @@ fn handle_confirm_clear_key(key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('y') => Some(Action::ClearHistory),
         _ => Some(Action::CancelClear),
+    }
+}
+
+fn handle_filter_key(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Enter => Some(Action::FilterAccept),
+        KeyCode::Esc => Some(Action::FilterCancel),
+        KeyCode::Backspace => Some(Action::FilterBackspace),
+        KeyCode::Char(c) => Some(Action::FilterInput(c)),
+        _ => None,
     }
 }
 
