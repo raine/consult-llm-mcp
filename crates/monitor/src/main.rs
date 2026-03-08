@@ -488,16 +488,14 @@ fn render(frame: &mut ratatui::Frame, state: &AppState) {
     }
 }
 
-fn project_col_width(state: &AppState) -> u16 {
-    let active_max = state.servers.values().map(|s| {
-        s.project
-            .as_deref()
-            .unwrap_or(&s.server_id[..8.min(s.server_id.len())])
-            .len()
-    });
-    let history_max = state.history.iter().map(|h| h.project.len());
-    let max = active_max.chain(history_max).max().unwrap_or(7).max(7); // at least "Project" header width
-    (max as u16).min(30) // cap at 30
+const PROJECT_COL_WIDTH: u16 = 15;
+
+fn truncate_project(name: &str) -> String {
+    if name.len() > PROJECT_COL_WIDTH as usize {
+        format!("{}…", &name[..PROJECT_COL_WIDTH as usize - 1])
+    } else {
+        name.to_string()
+    }
 }
 
 fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
@@ -509,10 +507,9 @@ fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     ])
     .split(area);
 
-    let proj_w = project_col_width(state);
     render_header(frame, chunks[0], state);
-    render_table(frame, chunks[1], state, proj_w);
-    render_history_table(frame, chunks[2], state, proj_w);
+    render_table(frame, chunks[1], state);
+    render_history_table(frame, chunks[2], state);
     render_status_bar(frame, chunks[3]);
 }
 
@@ -550,7 +547,7 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(text).block(block), area);
 }
 
-fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w: u16) {
+fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let header = Row::new(vec!["Project", "PID", "Status", "Consultation", "Elapsed"])
         .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
         .bottom_margin(1);
@@ -601,7 +598,10 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w
             };
             rows.push(
                 Row::new(vec![
-                    Span::styled(display_name.to_string(), Style::default().fg(DIM_WHITE)),
+                    Span::styled(
+                        truncate_project(display_name),
+                        Style::default().fg(DIM_WHITE),
+                    ),
                     Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
                     Span::styled(status.to_string(), Style::default().fg(status_color)),
                     Span::styled(hist, Style::default().fg(DIM_WHITE)),
@@ -638,7 +638,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w
                     Row::new([
                         Line::styled(
                             if show_server {
-                                display_name.to_string()
+                                truncate_project(display_name)
                             } else {
                                 String::new()
                             },
@@ -685,7 +685,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w
                     Row::new(vec![
                         Span::styled(
                             if show_server {
-                                display_name.to_string()
+                                truncate_project(display_name)
                             } else {
                                 String::new()
                             },
@@ -723,7 +723,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w
     let table = Table::new(
         rows,
         [
-            Constraint::Length(proj_w),
+            Constraint::Length(PROJECT_COL_WIDTH),
             Constraint::Length(7),
             Constraint::Length(8),
             Constraint::Min(20),
@@ -902,7 +902,7 @@ fn format_token_count(n: u64) -> String {
     }
 }
 
-fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState, proj_w: u16) {
+fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     let header = Row::new(vec![
         "Time", "Project", "Model", "Backend", "Duration", "Tokens", "✓",
     ])
@@ -927,7 +927,10 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState
                     format_relative_time(&record.ts, now),
                     Style::default().fg(DIM),
                 ),
-                Span::styled(record.project.clone(), Style::default().fg(DIM_WHITE)),
+                Span::styled(
+                    truncate_project(&record.project),
+                    Style::default().fg(DIM_WHITE),
+                ),
                 Span::styled(record.model.clone(), Style::default().fg(DIM_WHITE)),
                 Span::styled(record.backend.clone(), Style::default().fg(DIM)),
                 Span::styled(duration_str, Style::default().fg(DIM_WHITE)),
@@ -944,7 +947,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState
         rows,
         [
             Constraint::Length(10),
-            Constraint::Length(proj_w),
+            Constraint::Length(PROJECT_COL_WIDTH),
             Constraint::Length(14),
             Constraint::Length(10),
             Constraint::Length(10),
