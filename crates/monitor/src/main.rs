@@ -12,7 +12,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table};
+use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table, TableState};
 
 use consult_llm_core::monitoring::{
     EventEnvelope, HISTORY_FILE, HistoryRecord, MonitorEvent, is_pid_alive, sessions_dir,
@@ -55,6 +55,7 @@ struct AppState {
     selected: usize,
     row_count: usize,
     tick: usize,
+    table_state: TableState,
     mode: AppMode,
     history: VecDeque<HistoryRecord>,
     history_offset: u64,
@@ -135,6 +136,7 @@ impl AppState {
             selected: 0,
             row_count: 0,
             tick: 0,
+            table_state: TableState::default(),
             mode: AppMode::Table,
             history: VecDeque::new(),
             history_offset: 0,
@@ -509,7 +511,7 @@ impl AppState {
 
 // ── Rendering ───────────────────────────────────────────────────────────
 
-fn render(frame: &mut ratatui::Frame, state: &AppState) {
+fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(BG)), area);
 
@@ -520,7 +522,10 @@ fn render(frame: &mut ratatui::Frame, state: &AppState) {
             events,
             scroll,
             ..
-        } => render_detail_view(frame, area, consultation_id, events, *scroll),
+        } => {
+            let (cid, events, scroll) = (consultation_id.clone(), events.clone(), *scroll);
+            render_detail_view(frame, area, &cid, &events, scroll);
+        }
     }
 }
 
@@ -534,7 +539,7 @@ fn truncate_project(name: &str) -> String {
     }
 }
 
-fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
+fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(5),
@@ -583,14 +588,13 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
     frame.render_widget(Paragraph::new(text).block(block), area);
 }
 
-fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
+fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let header = Row::new(vec!["Project", "PID", "Status", "Consultation", "Elapsed"])
         .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD))
         .bottom_margin(1);
 
     let now = Utc::now();
     let mut rows: Vec<Row> = Vec::new();
-    let mut row_idx = 0usize;
 
     for server_id in state.display_server_ids() {
         let Some(server) = state.servers.get(server_id) else {
@@ -627,25 +631,16 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             } else {
                 "\u{2014}".to_string()
             };
-            let bg = if row_idx == state.selected {
-                Style::default().bg(SELECTED_BG)
-            } else {
-                Style::default()
-            };
-            rows.push(
-                Row::new(vec![
-                    Span::styled(
-                        truncate_project(display_name),
-                        Style::default().fg(DIM_WHITE),
-                    ),
-                    Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
-                    Span::styled(status.to_string(), Style::default().fg(status_color)),
-                    Span::styled(hist, Style::default().fg(DIM_WHITE)),
-                    Span::styled(String::new(), Style::default().fg(DIM)),
-                ])
-                .style(bg),
-            );
-            row_idx += 1;
+            rows.push(Row::new(vec![
+                Span::styled(
+                    truncate_project(display_name),
+                    Style::default().fg(DIM_WHITE),
+                ),
+                Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
+                Span::styled(status.to_string(), Style::default().fg(status_color)),
+                Span::styled(hist, Style::default().fg(DIM_WHITE)),
+                Span::styled(String::new(), Style::default().fg(DIM)),
+            ]));
         } else {
             let is_first_row = true;
             for (i, (_, consult)) in AppState::sorted_active_consults(server)
@@ -659,11 +654,6 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                     / 1000.0;
                 let elapsed_str = format!("{elapsed:.1}s");
                 let show_server = is_first_row && i == 0;
-                let bg = if row_idx == state.selected {
-                    Style::default().bg(SELECTED_BG)
-                } else {
-                    Style::default()
-                };
                 let spinner = SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()];
                 let consult_text = match &consult.last_progress {
                     Some(progress) => format!("{} ({})", consult.model, progress),
@@ -673,31 +663,27 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                     Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
                     Span::styled(consult_text, Style::default().fg(WHITE)),
                 ]);
-                rows.push(
-                    Row::new([
-                        Line::styled(
-                            if show_server {
-                                truncate_project(display_name)
-                            } else {
-                                String::new()
-                            },
-                            Style::default().fg(DIM_WHITE),
-                        ),
-                        Line::styled(
-                            if show_server {
-                                pid.clone()
-                            } else {
-                                String::new()
-                            },
-                            Style::default().fg(DIM_WHITE),
-                        ),
-                        Line::styled(status.to_string(), Style::default().fg(status_color)),
-                        consult_cell,
-                        Line::styled(elapsed_str, Style::default().fg(DIM_WHITE)),
-                    ])
-                    .style(bg),
-                );
-                row_idx += 1;
+                rows.push(Row::new([
+                    Line::styled(
+                        if show_server {
+                            truncate_project(display_name)
+                        } else {
+                            String::new()
+                        },
+                        Style::default().fg(DIM_WHITE),
+                    ),
+                    Line::styled(
+                        if show_server {
+                            pid.clone()
+                        } else {
+                            String::new()
+                        },
+                        Style::default().fg(DIM_WHITE),
+                    ),
+                    Line::styled(status.to_string(), Style::default().fg(status_color)),
+                    consult_cell,
+                    Line::styled(elapsed_str, Style::default().fg(DIM_WHITE)),
+                ]));
             }
 
             // Render completed consultations with dimmed styling
@@ -715,36 +701,27 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
                     }
                     None => format!("{} {} ({})", result_indicator, cc.model, cc.backend),
                 };
-                let bg = if row_idx == state.selected {
-                    Style::default().bg(SELECTED_BG)
-                } else {
-                    Style::default()
-                };
-                rows.push(
-                    Row::new(vec![
-                        Span::styled(
-                            if show_server {
-                                truncate_project(display_name)
-                            } else {
-                                String::new()
-                            },
-                            Style::default().fg(DIM),
-                        ),
-                        Span::styled(
-                            if show_server {
-                                pid.clone()
-                            } else {
-                                String::new()
-                            },
-                            Style::default().fg(DIM),
-                        ),
-                        Span::styled("done", Style::default().fg(DIM)),
-                        Span::styled(consult_text, Style::default().fg(DIM)),
-                        Span::styled(duration_str, Style::default().fg(DIM)),
-                    ])
-                    .style(bg),
-                );
-                row_idx += 1;
+                rows.push(Row::new(vec![
+                    Span::styled(
+                        if show_server {
+                            truncate_project(display_name)
+                        } else {
+                            String::new()
+                        },
+                        Style::default().fg(DIM),
+                    ),
+                    Span::styled(
+                        if show_server {
+                            pid.clone()
+                        } else {
+                            String::new()
+                        },
+                        Style::default().fg(DIM),
+                    ),
+                    Span::styled("done", Style::default().fg(DIM)),
+                    Span::styled(consult_text, Style::default().fg(DIM)),
+                    Span::styled(duration_str, Style::default().fg(DIM)),
+                ]));
             }
         }
     }
@@ -770,6 +747,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
         ],
     )
     .header(header)
+    .row_highlight_style(Style::default().bg(SELECTED_BG))
     .block(
         Block::default()
             .borders(Borders::ALL)
@@ -777,7 +755,8 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             .border_style(Style::default().fg(SEPARATOR)),
     );
 
-    frame.render_widget(table, area);
+    state.table_state.select(Some(state.selected));
+    frame.render_stateful_widget(table, area, &mut state.table_state);
 }
 
 fn render_detail_view(
@@ -1066,7 +1045,7 @@ fn main() -> io::Result<()> {
             state.selected = state.row_count - 1;
         }
 
-        guard.terminal.draw(|frame| render(frame, &state))?;
+        guard.terminal.draw(|frame| render(frame, &mut state))?;
         state.tick += 1;
 
         if event::poll(render_interval)?
