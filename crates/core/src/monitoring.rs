@@ -198,6 +198,11 @@ fn cleanup_orphans(dir: &Path) {
         let mut pid: Option<u32> = None;
         let mut stopped = false;
         for line in reader.lines().map_while(Result::ok) {
+            // Fast-path: skip lines that can't be server_started or server_stopped
+            // to avoid expensive JSON deserialization of stream events.
+            if !line.contains("server_started") && !line.contains("server_stopped") {
+                continue;
+            }
             if let Ok(env) = serde_json::from_str::<EventEnvelope>(&line) {
                 match env.event {
                     MonitorEvent::ServerStarted { pid: p, .. } => {
