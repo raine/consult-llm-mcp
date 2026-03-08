@@ -325,8 +325,17 @@ impl AppState {
                     self.history_offset += bytes_read as u64;
                     if let Ok(record) = serde_json::from_str::<HistoryRecord>(buf.trim()) {
                         self.history.push_front(record);
+                        // Shift selection to track the same row after push_front
+                        if !self.history.is_empty() {
+                            self.history_selected =
+                                (self.history_selected + 1).min(self.history.len() - 1);
+                        }
                         if self.history.len() > 100 {
                             self.history.pop_back();
+                            // Clamp selection if the previously-last row was removed
+                            if self.history_selected >= self.history.len() {
+                                self.history_selected = self.history.len().saturating_sub(1);
+                            }
                         }
                     }
                 }
