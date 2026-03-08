@@ -84,7 +84,7 @@ pub fn consult_llm_schema() -> Map<String, Value> {
                         "description": "Git reference to compare against (e.g., \"HEAD\", \"main\", commit hash)"
                     }
                 },
-                "required": ["files", "base_ref"],
+                "required": ["files"],
                 "description": "Generate git diff output to include as context. Shows uncommitted changes by default."
             }
         },
