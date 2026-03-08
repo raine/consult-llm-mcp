@@ -134,6 +134,30 @@ impl AppState {
                 }
                 _ => {}
             },
+            Action::PageDown => match &mut self.mode {
+                AppMode::Detail(detail) => {
+                    let page = self.detail_inner_height;
+                    detail.scroll = detail.scroll.saturating_add(page.max(1));
+                }
+                AppMode::ThreadDetail(detail) => {
+                    let page = self.detail_inner_height;
+                    detail.scroll = detail.scroll.saturating_add(page.max(1));
+                }
+                _ => {}
+            },
+            Action::PageUp => match &mut self.mode {
+                AppMode::Detail(detail) => {
+                    let page = self.detail_inner_height;
+                    detail.scroll = detail.scroll.saturating_sub(page.max(1));
+                    detail.auto_scroll = false;
+                }
+                AppMode::ThreadDetail(detail) => {
+                    let page = self.detail_inner_height;
+                    detail.scroll = detail.scroll.saturating_sub(page.max(1));
+                    detail.auto_scroll = false;
+                }
+                _ => {}
+            },
             Action::ScrollToBottom => match &mut self.mode {
                 AppMode::Detail(detail) => {
                     detail.scroll = usize::MAX;
