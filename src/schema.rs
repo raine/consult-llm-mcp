@@ -88,7 +88,7 @@ pub fn consult_llm_schema() -> Map<String, Value> {
                 "description": "Generate git diff output to include as context. Shows uncommitted changes by default."
             }
         },
-        "required": ["prompt", "model", "task_mode", "web_mode"]
+        "required": ["prompt"]
     }))
     .expect("valid schema JSON")
 }
