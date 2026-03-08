@@ -44,7 +44,9 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
                 vec![]
             }
         }
-        Some("turn.started") => vec![ParsedStreamEvent::Thinking],
+        Some("turn.started") => vec![ParsedStreamEvent::Thinking {
+            text: String::new(),
+        }],
         Some("item.started") => {
             if let Some(item) = event.get("item")
                 && item.get("type").and_then(|t| t.as_str()) == Some("command_execution")

@@ -44,7 +44,12 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
             }
         }
         Some("thinking") if subtype == Some("delta") => {
-            vec![ParsedStreamEvent::Thinking]
+            let text = event
+                .get("text")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .to_string();
+            vec![ParsedStreamEvent::Thinking { text }]
         }
         Some("tool_call") => {
             let tc = event.get("tool_call");
@@ -262,7 +267,7 @@ mod tests {
         let events =
             parse_cursor_line(r#"{"type":"thinking","subtype":"delta","text":"**Starting"}"#);
         assert_eq!(events.len(), 1);
-        assert!(matches!(&events[0], ParsedStreamEvent::Thinking));
+        assert!(matches!(&events[0], ParsedStreamEvent::Thinking { text } if text == "**Starting"));
     }
 
     #[test]

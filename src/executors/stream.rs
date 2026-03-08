@@ -91,7 +91,7 @@ impl StreamReducer {
                 ParsedStreamEvent::SessionStarted { id } => {
                     self.thread_id = Some(id);
                 }
-                ParsedStreamEvent::Thinking => {
+                ParsedStreamEvent::Thinking { .. } => {
                     self.emit_progress(ProgressStage::Thinking);
                 }
                 ParsedStreamEvent::AssistantText { text } => {

@@ -14,7 +14,10 @@ pub enum ParsedStreamEvent {
     SessionStarted {
         id: String,
     },
-    Thinking,
+    Thinking {
+        #[serde(default)]
+        text: String,
+    },
     AssistantText {
         text: String,
     },
@@ -46,7 +49,9 @@ mod tests {
             ParsedStreamEvent::SessionStarted {
                 id: "sess-1".to_string(),
             },
-            ParsedStreamEvent::Thinking,
+            ParsedStreamEvent::Thinking {
+                text: "analyzing code".to_string(),
+            },
             ParsedStreamEvent::AssistantText {
                 text: "hello world".to_string(),
             },
@@ -85,6 +90,7 @@ mod tests {
         let lines = vec![
             r#"{"type":"session_started","id":"abc"}"#,
             r#"{"type":"thinking"}"#,
+            r#"{"type":"thinking","text":"analyzing"}"#,
             r#"{"type":"assistant_text","text":"hi"}"#,
             r#"{"type":"tool_started","call_id":"c1","label":"read foo.rs"}"#,
             r#"{"type":"tool_finished","call_id":"c1","success":true}"#,

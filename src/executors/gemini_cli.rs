@@ -34,7 +34,9 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
 
     match event.get("type").and_then(|t| t.as_str()) {
         Some("init") => {
-            let mut events = vec![ParsedStreamEvent::Thinking];
+            let mut events = vec![ParsedStreamEvent::Thinking {
+                text: String::new(),
+            }];
             if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
                 events.insert(
                     0,
@@ -203,7 +205,7 @@ mod tests {
         );
         assert_eq!(events.len(), 2);
         assert!(matches!(&events[0], ParsedStreamEvent::SessionStarted { id } if id == "sess_123"));
-        assert!(matches!(&events[1], ParsedStreamEvent::Thinking));
+        assert!(matches!(&events[1], ParsedStreamEvent::Thinking { text } if text.is_empty()));
     }
 
     #[test]

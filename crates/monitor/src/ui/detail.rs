@@ -19,7 +19,7 @@ use crate::state::{
 
 enum RenderedBlock {
     Prompt(String),
-    Thinking,
+    Thinking(String),
     Tool {
         label: String,
         success: Option<bool>,
@@ -45,7 +45,7 @@ impl RenderedBlock {
     fn phase(&self) -> Phase {
         match self {
             RenderedBlock::Prompt(_) => Phase::Prompt,
-            RenderedBlock::Thinking => Phase::Thinking,
+            RenderedBlock::Thinking(_) => Phase::Thinking,
             RenderedBlock::Tool { .. } => Phase::Tool,
             RenderedBlock::Text(_) => Phase::Text,
             RenderedBlock::Usage { .. } => Phase::Usage,
@@ -307,10 +307,12 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
             ParsedStreamEvent::Prompt { text } => {
                 blocks.push(RenderedBlock::Prompt(text.clone()));
             }
-            ParsedStreamEvent::Thinking => {
-                // Collapse consecutive Thinking events into one block
-                if !matches!(blocks.last(), Some(RenderedBlock::Thinking)) {
-                    blocks.push(RenderedBlock::Thinking);
+            ParsedStreamEvent::Thinking { text } => {
+                // Merge consecutive Thinking events into a single block
+                if let Some(RenderedBlock::Thinking(prev)) = blocks.last_mut() {
+                    prev.push_str(text);
+                } else {
+                    blocks.push(RenderedBlock::Thinking(text.clone()));
                 }
             }
             ParsedStreamEvent::ToolStarted { call_id, label } => {
@@ -386,11 +388,32 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                 }
                 lines.push(Line::default());
             }
-            RenderedBlock::Thinking => {
-                lines.push(Line::from(vec![Span::styled(
-                    "  Thinking...",
-                    Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
-                )]));
+            RenderedBlock::Thinking(text) => {
+                if text.is_empty() {
+                    lines.push(Line::from(vec![Span::styled(
+                        "  Thinking...",
+                        Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+                    )]));
+                } else {
+                    lines.push(Line::from(vec![Span::styled(
+                        "  Thinking:",
+                        Style::default().fg(DIM).add_modifier(Modifier::BOLD),
+                    )]));
+                    let indent = "    ";
+                    let wrap_width = inner_width.saturating_sub(indent.len());
+                    let md_lines = super::markdown::render_markdown(text, wrap_width);
+                    let dim_italic = Style::default().fg(DIM).add_modifier(Modifier::ITALIC);
+                    for line in md_lines {
+                        let mut indented: Vec<Span<'static>> = vec![Span::raw(indent.to_string())];
+                        for span in line.spans {
+                            indented.push(Span::styled(
+                                span.content.into_owned(),
+                                span.style.patch(dim_italic),
+                            ));
+                        }
+                        lines.push(Line::from(indented));
+                    }
+                }
             }
             RenderedBlock::Tool { label, success } => {
                 lines.push(render_tool_line(label, *success, inner_width, tick));
