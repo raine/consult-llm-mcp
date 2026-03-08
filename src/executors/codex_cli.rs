@@ -4,20 +4,20 @@ use std::path::PathBuf;
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
-use crate::config::config;
-
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
+    codex_reasoning_effort: Option<String>,
 }
 
 impl CodexCliExecutor {
-    pub fn new() -> Self {
+    pub fn new(codex_reasoning_effort: Option<String>) -> Self {
         Self {
             capabilities: LlmExecutorCapabilities {
                 is_cli: true,
                 supports_threads: true,
                 supports_file_refs: true,
             },
+            codex_reasoning_effort,
         }
     }
 }
@@ -155,13 +155,12 @@ impl LlmExecutor for CodexCliExecutor {
             format!("{system_prompt}\n\n{message}")
         };
 
-        let cfg = config();
         let mut args: Vec<String> = vec!["exec".to_string()];
         if thread_id.is_some() {
             args.push("resume".to_string());
         }
         args.extend(["--json".to_string(), "--skip-git-repo-check".to_string()]);
-        if let Some(ref effort) = cfg.codex_reasoning_effort {
+        if let Some(ref effort) = self.codex_reasoning_effort {
             args.push("-c".to_string());
             args.push(format!("model_reasoning_effort=\"{effort}\""));
         }
