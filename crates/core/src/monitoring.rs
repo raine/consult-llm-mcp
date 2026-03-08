@@ -75,6 +75,8 @@ pub const HISTORY_FILE: &str = "history.jsonl";
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistoryRecord {
     pub ts: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub consultation_id: Option<String>,
     pub project: String,
     pub model: String,
     pub backend: String,
@@ -213,14 +215,9 @@ fn cleanup_orphans(dir: &Path) {
         }
     }
 
-    // Remove orphaned sidecar files (those not associated with any alive server)
-    // Sidecar files are named {consultation_id}.events.jsonl — we can't easily
-    // map them back to servers without reading server files. Clean up any sidecar
-    // whose server session file no longer exists.
-    for path in &sidecar_files {
-        // If the file is orphaned (no live server session references it), remove it
-        let _ = fs::remove_file(path);
-    }
+    // Keep sidecar event files — they are referenced by history records
+    // for viewing past consultation logs in the monitor TUI.
+    let _ = sidecar_files;
 }
 
 pub fn init() {

@@ -106,6 +106,8 @@ impl ConsultServer {
 
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
+        let history_consultation_id = consultation_id.clone();
+
         match &result {
             Ok((_, usage)) => {
                 consult_llm_core::monitoring::emit(
@@ -119,6 +121,7 @@ impl ConsultServer {
                 consult_llm_core::monitoring::append_history(
                     &consult_llm_core::monitoring::HistoryRecord {
                         ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        consultation_id: Some(history_consultation_id),
                         project: project.clone(),
                         model: model.clone(),
                         backend: backend_name.clone(),
@@ -142,6 +145,7 @@ impl ConsultServer {
                 consult_llm_core::monitoring::append_history(
                     &consult_llm_core::monitoring::HistoryRecord {
                         ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                        consultation_id: Some(history_consultation_id),
                         project: project.clone(),
                         model: model.clone(),
                         backend: backend_name.clone(),

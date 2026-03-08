@@ -354,18 +354,8 @@ impl AppState {
             .collect();
 
         for id in &to_prune {
-            // Collect consultation IDs before removing the server
-            if let Some(server) = self.servers.get(id) {
-                for cid in server.active_consults.keys() {
-                    let sidecar = dir.join(format!("{cid}.events.jsonl"));
-                    let _ = fs::remove_file(&sidecar);
-                }
-                for cc in &server.completed_consults {
-                    let sidecar = dir.join(format!("{}.events.jsonl", cc.id));
-                    let _ = fs::remove_file(&sidecar);
-                }
-            }
-            // Delete the session file so it doesn't reappear on next poll
+            // Delete the session file so it doesn't reappear on next poll.
+            // Keep sidecar event files — they are needed for viewing history logs.
             let path = dir.join(format!("{id}.jsonl"));
             let _ = fs::remove_file(&path);
             self.servers.remove(id);
@@ -1111,15 +1101,33 @@ fn main() -> io::Result<()> {
                             state.history_selected = state.history_selected.saturating_sub(1);
                         }
                     },
-                    KeyCode::Enter => {
-                        if state.focus == Focus::Active
-                            && let Some(info) = row_infos.get(state.selected)
-                            && !info.consultation_id.is_empty()
-                        {
-                            let cid = info.consultation_id.clone();
-                            state.enter_detail(cid, &dir);
+                    KeyCode::Enter => match state.focus {
+                        Focus::Active => {
+                            if let Some(info) = row_infos.get(state.selected)
+                                && !info.consultation_id.is_empty()
+                            {
+                                let cid = info.consultation_id.clone();
+                                state.enter_detail(cid, &dir);
+                            }
                         }
-                    }
+                        Focus::History => {
+                            if let Some(record) = state.history.get(state.history_selected)
+                                && let Some(cid) = &record.consultation_id
+                            {
+                                state.enter_detail(cid.clone(), &dir);
+                                // History entries are complete — start at top
+                                if let AppMode::Detail {
+                                    scroll,
+                                    auto_scroll,
+                                    ..
+                                } = &mut state.mode
+                                {
+                                    *scroll = 0;
+                                    *auto_scroll = false;
+                                }
+                            }
+                        }
+                    },
                     _ => {}
                 },
                 AppMode::Detail { .. } => match key.code {
