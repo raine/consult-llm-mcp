@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::run_cli_streaming;
-use super::stream::{ParsedStreamEvent, StreamReducer};
+use super::stream::ParsedStreamEvent;
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::{append_file_refs, run_cli_executor};
 use crate::config::config;
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
@@ -127,23 +127,6 @@ fn extract_shell_command(cmd: &str) -> String {
     }
 }
 
-fn append_files(text: &str, file_paths: Option<&[PathBuf]>) -> String {
-    match file_paths {
-        Some(fps) if !fps.is_empty() => {
-            let cwd = std::env::current_dir().unwrap_or_default();
-            let file_refs: Vec<String> = fps
-                .iter()
-                .map(|p| {
-                    let rel = pathdiff::diff_paths(p, &cwd).unwrap_or_else(|| p.clone());
-                    format!("@{}", rel.display())
-                })
-                .collect();
-            format!("{text}\n\nFiles: {}", file_refs.join(" "))
-        }
-        _ => text.to_string(),
-    }
-}
-
 #[async_trait]
 impl LlmExecutor for CodexCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
@@ -163,7 +146,7 @@ impl LlmExecutor for CodexCliExecutor {
         thread_id: Option<&str>,
         consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
-        let message = append_files(prompt, file_paths);
+        let message = append_file_refs(prompt, file_paths);
         let full_prompt = if thread_id.is_some() {
             message.clone()
         } else {
@@ -203,35 +186,14 @@ impl LlmExecutor for CodexCliExecutor {
         }
         args.push(full_prompt);
 
-        let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
-        let result = run_cli_streaming("codex", &args, |line| {
-            reducer.process(parse_codex_line(line));
-        })
-        .await?;
-
-        if result.code == Some(0) {
-            let response = reducer.response.trim_end().to_string();
-            if response.is_empty() {
-                anyhow::bail!("No agent_message found in Codex JSONL output");
-            }
-            Ok(ExecuteResult {
-                response,
-                usage: reducer.usage,
-                thread_id: reducer.thread_id,
-            })
-        } else {
-            anyhow::bail!(
-                "Codex CLI exited with code {}. Error: {}",
-                result.code.unwrap_or(-1),
-                result.stderr.trim()
-            );
-        }
+        run_cli_executor("codex", &args, prompt, consultation_id, parse_codex_line).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executors::stream::StreamReducer;
 
     #[test]
     fn test_parse_codex_line_thread_started() {

@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::run_cli_streaming;
-use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
+use super::stream::{ParsedStreamEvent, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::{append_file_refs, run_cli_executor};
 use crate::external_dirs::get_external_directories;
 use crate::git_worktree::get_main_worktree_path;
 
@@ -124,23 +124,6 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
     }
 }
 
-fn append_files(text: &str, file_paths: Option<&[PathBuf]>) -> String {
-    match file_paths {
-        Some(fps) if !fps.is_empty() => {
-            let cwd = std::env::current_dir().unwrap_or_default();
-            let file_refs: Vec<String> = fps
-                .iter()
-                .map(|p| {
-                    let rel = pathdiff::diff_paths(p, &cwd).unwrap_or_else(|| p.clone());
-                    format!("@{}", rel.display())
-                })
-                .collect();
-            format!("{text}\n\nFiles: {}", file_refs.join(" "))
-        }
-        _ => text.to_string(),
-    }
-}
-
 #[async_trait]
 impl LlmExecutor for GeminiCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
@@ -160,7 +143,7 @@ impl LlmExecutor for GeminiCliExecutor {
         thread_id: Option<&str>,
         consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
-        let message_with_files = append_files(prompt, file_paths);
+        let message_with_files = append_file_refs(prompt, file_paths);
         let message = if thread_id.is_some() {
             message_with_files.clone()
         } else {
@@ -193,40 +176,25 @@ impl LlmExecutor for GeminiCliExecutor {
         args.push("-p".to_string());
         args.push(message);
 
-        let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
-        let result = run_cli_streaming("gemini", &args, |line| {
-            reducer.process(parse_gemini_line(line));
-        })
-        .await?;
-
-        if result.code == Some(0) {
-            if reducer.response.is_empty() {
-                anyhow::bail!("No response found in Gemini stream-json output");
-            }
-            Ok(ExecuteResult {
-                response: reducer.response,
-                usage: reducer.usage,
-                thread_id: reducer.thread_id,
+        run_cli_executor("gemini", &args, prompt, consultation_id, parse_gemini_line)
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("RESOURCE_EXHAUSTED") {
+                    anyhow::anyhow!(
+                        "Gemini quota exceeded. Consider using gemini-2.0-flash model. {msg}"
+                    )
+                } else {
+                    e
+                }
             })
-        } else {
-            if result.stderr.contains("RESOURCE_EXHAUSTED") {
-                anyhow::bail!(
-                    "Gemini quota exceeded. Consider using gemini-2.0-flash model. Error: {}",
-                    result.stderr.trim()
-                );
-            }
-            anyhow::bail!(
-                "Gemini CLI exited with code {}. Error: {}",
-                result.code.unwrap_or(-1),
-                result.stderr.trim()
-            );
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::executors::stream::StreamReducer;
 
     #[test]
     fn test_parse_gemini_line_init() {

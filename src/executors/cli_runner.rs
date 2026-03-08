@@ -12,18 +12,6 @@ pub struct CliResult {
     pub duration_ms: u128,
 }
 
-/// Find the largest byte index <= `max_bytes` that is a valid UTF-8 char boundary.
-pub fn truncate_at_char_boundary(s: &str, max_bytes: usize) -> usize {
-    if max_bytes >= s.len() {
-        return s.len();
-    }
-    let mut i = max_bytes;
-    while i > 0 && !s.is_char_boundary(i) {
-        i -= 1;
-    }
-    i
-}
-
 /// Run a CLI command, calling `on_line` for each stdout line as it arrives.
 /// Still accumulates full stdout/stderr for the final CliResult.
 pub async fn run_cli_streaming<F>(

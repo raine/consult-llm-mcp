@@ -1,11 +1,10 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::cli_runner::{run_cli_streaming, truncate_at_char_boundary};
-use super::stream::{ParsedStreamEvent, StreamReducer, tool_label};
+use super::run_cli_executor;
+use super::stream::{ParsedStreamEvent, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::config::config;
-use crate::logger::log_cli_debug;
 
 pub struct CursorCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -224,36 +223,14 @@ impl LlmExecutor for CursorCliExecutor {
         }
         args.push(message);
 
-        let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
-        let result = run_cli_streaming("cursor-agent", &args, |line| {
-            reducer.process(parse_cursor_line(line));
-        })
-        .await?;
-
-        if result.code == Some(0) {
-            if reducer.response.is_empty() {
-                log_cli_debug(
-                    "No result found in Cursor CLI stream-json output",
-                    Some(&serde_json::json!({
-                        "rawOutput": &result.stdout[..truncate_at_char_boundary(&result.stdout, 500)]
-                    })),
-                );
-                anyhow::bail!("No result found in Cursor CLI stream-json output");
-            }
-            Ok(ExecuteResult {
-                response: reducer.response,
-                usage: reducer.usage,
-                thread_id: reducer
-                    .thread_id
-                    .or_else(|| thread_id.map(|s| s.to_string())),
-            })
-        } else {
-            anyhow::bail!(
-                "Cursor CLI exited with code {}. Error: {}",
-                result.code.unwrap_or(-1),
-                result.stderr.trim()
-            );
+        let mut result =
+            run_cli_executor("cursor-agent", &args, prompt, consultation_id, parse_cursor_line)
+                .await?;
+        // Cursor doesn't always emit a session ID; preserve the input thread_id
+        if result.thread_id.is_none() {
+            result.thread_id = thread_id.map(|s| s.to_string());
         }
+        Ok(result)
     }
 }
 
