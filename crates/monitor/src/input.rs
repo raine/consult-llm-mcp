@@ -81,9 +81,8 @@ fn handle_confirm_clear_key(key: KeyEvent) -> Option<Action> {
 fn handle_detail_key(key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('?') => Some(Action::ToggleHelp),
-        KeyCode::Char('q') => Some(Action::Quit),
+        KeyCode::Char('q') | KeyCode::Esc => Some(Action::ExitDetail),
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::Quit),
-        KeyCode::Esc => Some(Action::ExitDetail),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::ScrollDown),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::ScrollUp),
         KeyCode::Char('d') => Some(Action::HalfPageDown),
