@@ -44,6 +44,19 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     let mut lines: Vec<Line> = Vec::new();
     for event in events.iter() {
         match event {
+            ParsedStreamEvent::Prompt { text } => {
+                lines.push(Line::from(vec![Span::styled(
+                    "  Prompt:",
+                    Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
+                )]));
+                for line in text.lines() {
+                    lines.push(Line::from(vec![Span::styled(
+                        format!("    {line}"),
+                        Style::default().fg(DIM_WHITE),
+                    )]));
+                }
+                lines.push(Line::from(""));
+            }
             ParsedStreamEvent::SessionStarted { id } => {
                 lines.push(Line::from(vec![Span::styled(
                     format!("  session: {id}"),

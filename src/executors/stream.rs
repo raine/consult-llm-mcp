@@ -28,7 +28,7 @@ pub struct StreamReducer {
 }
 
 impl StreamReducer {
-    pub fn new(consultation_id: Option<&str>) -> Self {
+    pub fn new(consultation_id: Option<&str>, prompt: Option<&str>) -> Self {
         let sidecar = consultation_id.and_then(|cid| {
             let dir = monitoring::sessions_dir();
             let path = dir.join(format!("{cid}.events.jsonl"));
@@ -39,7 +39,7 @@ impl StreamReducer {
                 .ok()
                 .map(BufWriter::new)
         });
-        Self {
+        let mut reducer = Self {
             thread_id: None,
             response: String::new(),
             usage: None,
@@ -47,7 +47,13 @@ impl StreamReducer {
             active_tools: HashMap::new(),
             last_stage: None,
             sidecar,
+        };
+        if let Some(text) = prompt {
+            reducer.write_sidecar(&ParsedStreamEvent::Prompt {
+                text: text.to_string(),
+            });
         }
+        reducer
     }
 
     fn write_sidecar(&mut self, event: &ParsedStreamEvent) {
@@ -81,6 +87,7 @@ impl StreamReducer {
                 ParsedStreamEvent::ToolFinished { call_id, .. } => {
                     self.active_tools.remove(&call_id);
                 }
+                ParsedStreamEvent::Prompt { .. } => {}
                 ParsedStreamEvent::Usage {
                     prompt_tokens,
                     completion_tokens,

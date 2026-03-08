@@ -1,6 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::PathBuf;
+
+use consult_llm_core::monitoring;
+use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
@@ -78,7 +83,7 @@ impl LlmExecutor for ApiExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         _thread_id: Option<&str>,
-        _consultation_id: Option<&str>,
+        consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
         if let Some(fps) = file_paths
             && !fps.is_empty()
@@ -88,6 +93,27 @@ impl LlmExecutor for ApiExecutor {
             );
             log_to_file(&format!("WARNING: {msg}"));
             eprintln!("Warning: {msg}");
+        }
+
+        // Write sidecar events for the monitor
+        let sidecar_path = consultation_id.map(|cid| {
+            let dir = monitoring::sessions_dir();
+            dir.join(format!("{cid}.events.jsonl"))
+        });
+        let write_sidecar = |path: &std::path::Path, event: &ParsedStreamEvent| {
+            if let Ok(line) = serde_json::to_string(event)
+                && let Ok(mut f) = OpenOptions::new().create(true).append(true).open(path)
+            {
+                let _ = writeln!(f, "{line}");
+            }
+        };
+        if let Some(ref path) = sidecar_path {
+            write_sidecar(
+                path,
+                &ParsedStreamEvent::Prompt {
+                    text: prompt.to_string(),
+                },
+            );
         }
 
         let base = if self.base_url.ends_with('/') {
@@ -137,6 +163,24 @@ impl LlmExecutor for ApiExecutor {
             prompt_tokens: u.prompt_tokens,
             completion_tokens: u.completion_tokens,
         });
+
+        if let Some(ref path) = sidecar_path {
+            write_sidecar(
+                path,
+                &ParsedStreamEvent::AssistantText {
+                    text: response.clone(),
+                },
+            );
+            if let Some(ref u) = usage {
+                write_sidecar(
+                    path,
+                    &ParsedStreamEvent::Usage {
+                        prompt_tokens: u.prompt_tokens,
+                        completion_tokens: u.completion_tokens,
+                    },
+                );
+            }
+        }
 
         Ok(ExecuteResult {
             response,

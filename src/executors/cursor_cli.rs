@@ -224,7 +224,7 @@ impl LlmExecutor for CursorCliExecutor {
         }
         args.push(message);
 
-        let mut reducer = StreamReducer::new(consultation_id);
+        let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
         let result = run_cli_streaming("cursor-agent", &args, |line| {
             reducer.process(parse_cursor_line(line));
         })

@@ -26,6 +26,9 @@ pub enum ParsedStreamEvent {
         call_id: String,
         success: bool,
     },
+    Prompt {
+        text: String,
+    },
     #[serde(rename = "usage")]
     Usage {
         prompt_tokens: u64,
@@ -59,6 +62,9 @@ mod tests {
                 call_id: "c2".to_string(),
                 success: false,
             },
+            ParsedStreamEvent::Prompt {
+                text: "What is Rust?".to_string(),
+            },
             ParsedStreamEvent::Usage {
                 prompt_tokens: 1000,
                 completion_tokens: 200,
@@ -82,6 +88,7 @@ mod tests {
             r#"{"type":"assistant_text","text":"hi"}"#,
             r#"{"type":"tool_started","call_id":"c1","label":"read foo.rs"}"#,
             r#"{"type":"tool_finished","call_id":"c1","success":true}"#,
+            r#"{"type":"prompt","text":"What is Rust?"}"#,
             r#"{"type":"usage","prompt_tokens":500,"completion_tokens":100}"#,
         ];
         for line in lines {
