@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.6.0 (2026-03-08)
+
+- Added `consult-llm-monitor` TUI dashboard for real-time monitoring of active
+  consultations, with history tracking, detail view, and keyboard navigation
+
 ## v2.5.6 (2026-03-07)
 
 - Added bash installer (`curl | bash`) for installing without Node.js
