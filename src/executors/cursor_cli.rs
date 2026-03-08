@@ -135,10 +135,13 @@ fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
         if let Some(tc) = tool_call.get(key)
             && let Some(result) = tc.get("result")
         {
-            return result
-                .get("success")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
+            // cursor-agent uses result.success as either a bool (true/false)
+            // or an object (containing content) for successful tool calls
+            return match result.get("success") {
+                Some(v) if v.is_boolean() => v.as_bool().unwrap_or(false),
+                Some(v) if v.is_object() => true,
+                _ => false,
+            };
         }
     }
     false
@@ -347,5 +350,14 @@ mod tests {
         let tc: serde_json::Value =
             serde_json::from_str(r#"{"readToolCall":{"result":{}}}"#).unwrap();
         assert!(!is_cursor_tool_success(&tc));
+    }
+
+    #[test]
+    fn test_is_cursor_tool_success_object() {
+        let tc: serde_json::Value = serde_json::from_str(
+            r#"{"readToolCall":{"result":{"success":{"content":"hello","isEmpty":false}}}}"#,
+        )
+        .unwrap();
+        assert!(is_cursor_tool_success(&tc));
     }
 }
