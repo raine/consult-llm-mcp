@@ -9,7 +9,7 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table, TableState};
@@ -554,9 +554,12 @@ fn truncate_project(name: &str) -> String {
 }
 
 fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
+    // Dynamic active table height: min(row_count + 2, height/2), minimum 3
+    let active_height = (state.row_count as u16 + 2).min(area.height / 2).max(3);
+
     let chunks = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Min(5),
+        Constraint::Length(1),
+        Constraint::Length(active_height),
         Constraint::Min(8),
         Constraint::Length(1),
     ])
@@ -580,31 +583,43 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
         .map(|s| s.active_consults.len())
         .sum();
 
-    let block = Block::default()
-        .title(Line::from(vec![Span::styled(
-            " consult-llm-monitor ",
+    let line = Line::from(vec![
+        Span::styled(
+            " consult-llm-monitor  ",
             Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
-        )]))
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .border_style(Style::default().fg(SEPARATOR));
-
-    let text = Line::from(vec![
-        Span::styled(format!(" {active}"), Style::default().fg(GREEN)),
+        ),
+        Span::styled(format!("{active}"), Style::default().fg(GREEN)),
         Span::styled(" servers  ", Style::default().fg(DIM_WHITE)),
         Span::styled(
             format!("{consulting}"),
             Style::default().fg(if consulting > 0 { YELLOW } else { DIM }),
         ),
-        Span::styled(" active consultations", Style::default().fg(DIM_WHITE)),
+        Span::styled(" active", Style::default().fg(DIM_WHITE)),
     ]);
 
-    frame.render_widget(Paragraph::new(text).block(block), area);
+    frame.render_widget(Paragraph::new(line).style(Style::default().bg(BG)), area);
+}
+
+fn format_duration_friendly(ms: u64) -> String {
+    let secs = ms as f64 / 1000.0;
+    if secs >= 60.0 {
+        let m = secs as u64 / 60;
+        let s = secs as u64 % 60;
+        format!("{m}m {s}s")
+    } else {
+        format!("{secs:.1}s")
+    }
 }
 
 fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
-    let header = Row::new(vec!["Project", "PID", "Status", "Consultation", "Elapsed"])
-        .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
+    let elapsed_col_width: u16 = 10;
+    let header = Row::new(vec![
+        Line::from("Project"),
+        Line::from("PID"),
+        Line::from("Consultation"),
+        Line::from(Span::raw("Elapsed")).alignment(Alignment::Right),
+    ])
+    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let mut rows: Vec<Row> = Vec::new();
@@ -619,16 +634,6 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
             .as_deref()
             .unwrap_or(&server.server_id[..8.min(server.server_id.len())]);
         let pid = server.pid.to_string();
-
-        let (status, status_color) = if server.dead {
-            ("dead", RED)
-        } else if !server.active_consults.is_empty() {
-            ("active", GREEN)
-        } else if server.stopped {
-            ("stopped", DIM)
-        } else {
-            ("idle", DIM)
-        };
 
         if server.active_consults.is_empty() && server.completed_consults.is_empty() {
             let hist = if server.completed_count > 0 || server.failed_count > 0 {
@@ -645,14 +650,16 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                 "\u{2014}".to_string()
             };
             rows.push(Row::new(vec![
-                Span::styled(
+                Line::from(Span::styled(
                     truncate_project(display_name),
                     Style::default().fg(DIM_WHITE),
-                ),
-                Span::styled(pid.clone(), Style::default().fg(DIM_WHITE)),
-                Span::styled(status.to_string(), Style::default().fg(status_color)),
-                Span::styled(hist, Style::default().fg(DIM_WHITE)),
-                Span::styled(String::new(), Style::default().fg(DIM)),
+                )),
+                Line::from(Span::styled(pid.clone(), Style::default().fg(DIM_WHITE))),
+                Line::from(Span::styled(hist, Style::default().fg(DIM_WHITE))),
+                Line::from(Span::styled(
+                    format!("{:>width$}", "\u{2014}", width = elapsed_col_width as usize),
+                    Style::default().fg(DIM),
+                )),
             ]));
         } else {
             let is_first_row = true;
@@ -660,12 +667,11 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                 .into_iter()
                 .enumerate()
             {
-                let elapsed = now
+                let elapsed_ms = now
                     .signed_duration_since(consult.started_at)
                     .num_milliseconds()
-                    .max(0) as f64
-                    / 1000.0;
-                let elapsed_str = format!("{elapsed:.1}s");
+                    .max(0) as u64;
+                let elapsed_str = format_duration_friendly(elapsed_ms);
                 let show_server = is_first_row && i == 0;
                 let spinner = SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()];
                 let consult_text = match &consult.last_progress {
@@ -676,33 +682,39 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
                     Span::styled(consult_text, Style::default().fg(WHITE)),
                 ]);
-                rows.push(Row::new([
-                    Line::styled(
+                rows.push(Row::new(vec![
+                    Line::from(Span::styled(
                         if show_server {
                             truncate_project(display_name)
                         } else {
                             String::new()
                         },
                         Style::default().fg(DIM_WHITE),
-                    ),
-                    Line::styled(
+                    )),
+                    Line::from(Span::styled(
                         if show_server {
                             pid.clone()
                         } else {
                             String::new()
                         },
                         Style::default().fg(DIM_WHITE),
-                    ),
-                    Line::styled(status.to_string(), Style::default().fg(status_color)),
+                    )),
                     consult_cell,
-                    Line::styled(elapsed_str, Style::default().fg(DIM_WHITE)),
+                    Line::from(Span::styled(
+                        format!(
+                            "{:>width$}",
+                            elapsed_str,
+                            width = elapsed_col_width as usize
+                        ),
+                        Style::default().fg(DIM_WHITE),
+                    )),
                 ]));
             }
 
             // Render completed consultations with dimmed styling
             for (i, cc) in server.completed_consults.iter().enumerate() {
                 let show_server = is_first_row && server.active_consults.is_empty() && i == 0;
-                let duration_str = format!("{:.1}s", cc.duration_ms as f64 / 1000.0);
+                let duration_str = format_duration_friendly(cc.duration_ms);
                 let result_indicator = if cc.success {
                     "\u{2713}" // ✓
                 } else {
@@ -715,25 +727,31 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     None => format!("{} {} ({})", result_indicator, cc.model, cc.backend),
                 };
                 rows.push(Row::new(vec![
-                    Span::styled(
+                    Line::from(Span::styled(
                         if show_server {
                             truncate_project(display_name)
                         } else {
                             String::new()
                         },
                         Style::default().fg(DIM),
-                    ),
-                    Span::styled(
+                    )),
+                    Line::from(Span::styled(
                         if show_server {
                             pid.clone()
                         } else {
                             String::new()
                         },
                         Style::default().fg(DIM),
-                    ),
-                    Span::styled("done", Style::default().fg(DIM)),
-                    Span::styled(consult_text, Style::default().fg(DIM)),
-                    Span::styled(duration_str, Style::default().fg(DIM)),
+                    )),
+                    Line::from(Span::styled(consult_text, Style::default().fg(DIM))),
+                    Line::from(Span::styled(
+                        format!(
+                            "{:>width$}",
+                            duration_str,
+                            width = elapsed_col_width as usize
+                        ),
+                        Style::default().fg(DIM),
+                    )),
                 ]));
             }
         }
@@ -754,9 +772,8 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         [
             Constraint::Length(PROJECT_COL_WIDTH),
             Constraint::Length(7),
-            Constraint::Length(8),
             Constraint::Min(20),
-            Constraint::Length(10),
+            Constraint::Length(elapsed_col_width),
         ],
     )
     .header(header)
@@ -938,8 +955,16 @@ fn format_token_count(n: u64) -> String {
 }
 
 fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
+    let duration_col_width: u16 = 10;
+    let tokens_col_width: u16 = 10;
     let header = Row::new(vec![
-        "Time", "Project", "Model", "Backend", "Duration", "Tokens", "✓",
+        Line::from("Time"),
+        Line::from("Project"),
+        Line::from("Model"),
+        Line::from("Backend"),
+        Line::from(Span::raw("Duration")).alignment(Alignment::Right),
+        Line::from(Span::raw("Tokens")).alignment(Alignment::Right),
+        Line::from("✓"),
     ])
     .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
@@ -954,25 +979,42 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 "\u{2717}"
             };
             let status_color = if record.success { GREEN } else { RED };
-            let duration_str = format!("{:.1}s", record.duration_ms as f64 / 1000.0);
+            let duration_str = format_duration_friendly(record.duration_ms);
+            let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
 
             Row::new(vec![
-                Span::styled(
+                Line::from(Span::styled(
                     format_relative_time(&record.ts, now),
                     Style::default().fg(DIM),
-                ),
-                Span::styled(
+                )),
+                Line::from(Span::styled(
                     truncate_project(&record.project),
                     Style::default().fg(DIM_WHITE),
-                ),
-                Span::styled(record.model.clone(), Style::default().fg(DIM_WHITE)),
-                Span::styled(record.backend.clone(), Style::default().fg(DIM)),
-                Span::styled(duration_str, Style::default().fg(DIM_WHITE)),
-                Span::styled(
-                    format_tokens(record.tokens_in, record.tokens_out),
+                )),
+                Line::from(Span::styled(
+                    record.model.clone(),
+                    Style::default().fg(DIM_WHITE),
+                )),
+                Line::from(Span::styled(
+                    record.backend.clone(),
                     Style::default().fg(DIM),
-                ),
-                Span::styled(status_icon.to_string(), Style::default().fg(status_color)),
+                )),
+                Line::from(Span::styled(
+                    format!(
+                        "{:>width$}",
+                        duration_str,
+                        width = duration_col_width as usize
+                    ),
+                    Style::default().fg(DIM_WHITE),
+                )),
+                Line::from(Span::styled(
+                    format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
+                    Style::default().fg(DIM),
+                )),
+                Line::from(Span::styled(
+                    status_icon.to_string(),
+                    Style::default().fg(status_color),
+                )),
             ])
         })
         .collect();
@@ -984,8 +1026,8 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
             Constraint::Length(PROJECT_COL_WIDTH),
             Constraint::Length(14),
             Constraint::Length(10),
-            Constraint::Length(10),
-            Constraint::Length(10),
+            Constraint::Length(duration_col_width),
+            Constraint::Length(tokens_col_width),
             Constraint::Length(3),
         ],
     )
