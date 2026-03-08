@@ -62,7 +62,6 @@ impl AppState {
             Action::ScrollDown => {
                 if let AppMode::Detail(ref mut detail) = self.mode {
                     detail.scroll = detail.scroll.saturating_add(1);
-                    detail.auto_scroll = false;
                 }
             }
             Action::ScrollUp => {
@@ -75,7 +74,6 @@ impl AppState {
                 if let AppMode::Detail(ref mut detail) = self.mode {
                     let half = self.detail_inner_height / 2;
                     detail.scroll = detail.scroll.saturating_add(half.max(1));
-                    detail.auto_scroll = false;
                 }
             }
             Action::HalfPageUp => {
@@ -253,13 +251,21 @@ impl AppState {
             }
         }
 
+        let is_active = self.is_consultation_active(&consultation_id);
         self.mode = AppMode::Detail(DetailState {
             consultation_id,
             events,
             file_offset: offset,
-            scroll: usize::MAX, // start at bottom
-            auto_scroll: true,
+            scroll: if is_active { usize::MAX } else { 0 },
+            auto_scroll: is_active,
         });
+    }
+
+    /// Check if a consultation is still active (running) in any server.
+    pub(crate) fn is_consultation_active(&self, consultation_id: &str) -> bool {
+        self.servers
+            .values()
+            .any(|s| s.active_consults.contains_key(consultation_id))
     }
 
     /// Return server IDs sorted by status: active first, then idle, then stopped/dead.

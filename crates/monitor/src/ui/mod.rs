@@ -37,7 +37,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, is_detail_mode: bool) {
             ("k / ↑", "Scroll up"),
             ("d", "Half page down"),
             ("u", "Half page up"),
-            ("G", "Scroll to bottom"),
+            ("G", "Follow / scroll to bottom"),
             ("y", "Yank response"),
             ("Esc", "Back to table"),
             ("q", "Quit"),

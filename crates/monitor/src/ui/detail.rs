@@ -137,14 +137,31 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     frame.render_widget(content, chunks[1]);
 
     // Status bar
-    let bar = Line::from(vec![
+    let is_live = state.is_consultation_active(&consultation_id);
+    let follow_on = matches!(state.mode, AppMode::Detail(ref d) if d.auto_scroll);
+
+    let mut bar_spans = vec![
         Span::styled(" q/Esc", Style::default().fg(TEAL)),
         Span::styled(" back  ", Style::default().fg(DIM_WHITE)),
         Span::styled("j/k", Style::default().fg(TEAL)),
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
         Span::styled("d/u", Style::default().fg(TEAL)),
         Span::styled(" half-page", Style::default().fg(DIM_WHITE)),
-    ]);
+    ];
+    if is_live {
+        bar_spans.push(Span::styled("  G", Style::default().fg(TEAL)));
+        bar_spans.push(Span::styled(" follow  ", Style::default().fg(DIM_WHITE)));
+        if follow_on {
+            bar_spans.push(Span::styled(
+                " FOLLOW ",
+                Style::default()
+                    .fg(BG)
+                    .bg(TEAL)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+    let bar = Line::from(bar_spans);
     frame.render_widget(
         Paragraph::new(bar).style(Style::default().bg(BG)),
         chunks[2],
