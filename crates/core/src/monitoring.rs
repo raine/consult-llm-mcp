@@ -166,8 +166,16 @@ impl EventWriter {
 }
 
 /// Check if a process is alive using kill(pid, 0).
+#[cfg(unix)]
 pub fn is_pid_alive(pid: u32) -> bool {
+    // SAFETY: kill(pid, 0) only checks if the process exists, sends no signal.
     unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+#[cfg(not(unix))]
+pub fn is_pid_alive(_pid: u32) -> bool {
+    // Cannot reliably check on non-unix; assume alive to avoid cleanup races.
+    true
 }
 
 /// Remove session files for dead servers that never wrote server_stopped.
