@@ -14,4 +14,5 @@ pub(crate) enum Action {
     PromptClearHistory,
     ClearHistory,
     CancelClear,
+    ToggleHelp,
 }

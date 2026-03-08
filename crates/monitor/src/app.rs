@@ -109,6 +109,9 @@ impl AppState {
             Action::Flash(msg, ttl) => {
                 self.flash = Some((msg, ttl));
             }
+            Action::ToggleHelp => {
+                self.show_help = !self.show_help;
+            }
         }
     }
 

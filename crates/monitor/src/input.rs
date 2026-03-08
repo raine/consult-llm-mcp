@@ -12,6 +12,14 @@ pub(crate) fn handle_key(
     key: KeyEvent,
     dir: &Path,
 ) -> Option<Action> {
+    // When help overlay is visible, only handle dismiss keys
+    if state.show_help {
+        return match key.code {
+            KeyCode::Char('?') | KeyCode::Esc => Some(Action::ToggleHelp),
+            _ => None,
+        };
+    }
+
     match &state.mode {
         AppMode::Table => handle_table_key(state, row_infos, key, dir),
         AppMode::Detail(_) => handle_detail_key(key),
@@ -26,6 +34,7 @@ fn handle_table_key(
     dir: &Path,
 ) -> Option<Action> {
     match key.code {
+        KeyCode::Char('?') => Some(Action::ToggleHelp),
         KeyCode::Char('q') => Some(Action::Quit),
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::Quit),
         KeyCode::Tab | KeyCode::BackTab => Some(Action::ToggleFocus),
@@ -71,6 +80,7 @@ fn handle_confirm_clear_key(key: KeyEvent) -> Option<Action> {
 
 fn handle_detail_key(key: KeyEvent) -> Option<Action> {
     match key.code {
+        KeyCode::Char('?') => Some(Action::ToggleHelp),
         KeyCode::Char('q') => Some(Action::Quit),
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::Quit),
         KeyCode::Esc => Some(Action::ExitDetail),

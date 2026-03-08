@@ -63,6 +63,8 @@ pub(crate) struct AppState {
     pub(crate) flash: Option<(String, u8)>,
     /// Last known inner height of the detail view (for half-page scroll)
     pub(crate) detail_inner_height: usize,
+    /// Whether the help/shortcuts overlay is visible
+    pub(crate) show_help: bool,
 }
 
 pub(crate) struct ServerState {
@@ -121,6 +123,7 @@ impl AppState {
             history_offset: 0,
             flash: None,
             detail_inner_height: 0,
+            show_help: false,
         }
     }
 }
