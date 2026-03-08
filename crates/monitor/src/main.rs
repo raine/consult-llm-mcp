@@ -1020,7 +1020,7 @@ fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, flash: &Option<(Str
     if let Some((msg, _)) = flash {
         let bar = Line::from(vec![Span::styled(
             format!(" {msg}"),
-            Style::default().fg(YELLOW),
+            Style::default().fg(DIM),
         )]);
         frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
         return;
