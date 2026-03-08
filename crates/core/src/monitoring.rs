@@ -142,6 +142,10 @@ impl EventWriter {
     }
 
     fn emit(&self, event: MonitorEvent) {
+        let flush_now = matches!(
+            event,
+            MonitorEvent::ConsultFinished { .. } | MonitorEvent::ServerStopped
+        );
         let envelope = EventEnvelope {
             ts: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             event,
@@ -150,7 +154,9 @@ impl EventWriter {
             && let Ok(mut f) = self.file.lock()
         {
             let _ = writeln!(f, "{line}");
-            let _ = f.flush();
+            if flush_now {
+                let _ = f.flush();
+            }
         }
     }
 
