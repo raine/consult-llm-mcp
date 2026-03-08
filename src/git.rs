@@ -6,6 +6,10 @@ pub fn generate_git_diff(repo_path: Option<&str>, files: &[String], base_ref: &s
         return "Error generating git diff: No files specified for git diff".to_string();
     }
 
+    if base_ref.starts_with('-') {
+        return "Error generating git diff: invalid base_ref".to_string();
+    }
+
     let cwd = repo_path.unwrap_or(".");
     let mut args = vec!["diff".to_string(), base_ref.to_string(), "--".to_string()];
     args.extend(files.iter().cloned());
@@ -19,5 +23,22 @@ pub fn generate_git_diff(repo_path: Option<&str>, files: &[String], base_ref: &s
             format!("Error generating git diff: {}", stderr.trim())
         }
         Err(e) => format!("Error generating git diff: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rejects_leading_dash_base_ref() {
+        let result = generate_git_diff(None, &["file.rs".to_string()], "--output=/tmp/pwned");
+        assert_eq!(result, "Error generating git diff: invalid base_ref");
+    }
+
+    #[test]
+    fn test_rejects_empty_files() {
+        let result = generate_git_diff(None, &[], "HEAD");
+        assert!(result.contains("No files specified"));
     }
 }
