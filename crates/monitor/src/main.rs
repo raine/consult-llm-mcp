@@ -129,6 +129,7 @@ fn main() -> io::Result<()> {
             } else if exiting_detail {
                 let _ = cmd_tx.send(PollCommand::ExitDetail);
             } else if clearing_history {
+                let _ = fs::File::create(dir.join(consult_llm_core::monitoring::HISTORY_FILE));
                 let _ = cmd_tx.send(PollCommand::ResetHistory);
             }
         }

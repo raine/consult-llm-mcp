@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::fs::File;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
 use arboard::Clipboard;
 use consult_llm_core::jsonl::read_jsonl_from_offset;
-use consult_llm_core::monitoring::{EventEnvelope, HISTORY_FILE, MonitorEvent};
+use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use crate::action::Action;
@@ -100,10 +99,9 @@ impl AppState {
             Action::ClearHistory => {
                 self.history.clear();
                 self.history_selected = 0;
-                let path = dir.join(HISTORY_FILE);
-                let _ = File::create(&path); // truncate
                 self.mode = AppMode::Table;
                 self.flash = Some(("History cleared".into(), 20));
+                // File truncation is handled by the caller (main loop)
             }
             Action::CancelClear => {
                 self.mode = AppMode::Table;
