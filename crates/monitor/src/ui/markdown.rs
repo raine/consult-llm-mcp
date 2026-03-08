@@ -15,7 +15,6 @@ use syntect::highlighting::{FontStyle, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
-const WHITE: Color = Color::Rgb(255, 255, 255);
 const HEADING_COLOR: Color = Color::Rgb(180, 190, 200);
 const CODE_COLOR: Color = Color::Rgb(147, 161, 199);
 const GREEN: Color = Color::Rgb(0, 255, 0);
@@ -411,8 +410,6 @@ fn spans_to_line(spans: Vec<StyledSpan>) -> Line<'static> {
                 let mut style = Style::default();
                 if let Some(fg) = s.fg {
                     style = style.fg(fg);
-                } else {
-                    style = style.fg(WHITE);
                 }
                 if s.bold {
                     style = style.add_modifier(Modifier::BOLD);
