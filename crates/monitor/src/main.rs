@@ -68,6 +68,8 @@ struct AppState {
     mode: AppMode,
     history: VecDeque<HistoryRecord>,
     history_offset: u64,
+    /// Transient message shown in status bar, cleared after a few renders
+    flash: Option<(String, u8)>,
 }
 
 struct ServerState {
@@ -152,6 +154,7 @@ impl AppState {
             mode: AppMode::Table,
             history: VecDeque::new(),
             history_offset: 0,
+            flash: None,
         }
     }
 
@@ -562,7 +565,7 @@ fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppStat
     render_header(frame, chunks[0], state);
     render_table(frame, chunks[1], state);
     render_history_table(frame, chunks[2], state);
-    render_status_bar(frame, chunks[3]);
+    render_status_bar(frame, chunks[3], &state.flash);
 }
 
 fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
@@ -1013,7 +1016,15 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     frame.render_stateful_widget(table, area, &mut state.history_table_state);
 }
 
-fn render_status_bar(frame: &mut ratatui::Frame, area: Rect) {
+fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, flash: &Option<(String, u8)>) {
+    if let Some((msg, _)) = flash {
+        let bar = Line::from(vec![Span::styled(
+            format!(" {msg}"),
+            Style::default().fg(YELLOW),
+        )]);
+        frame.render_widget(Paragraph::new(bar).style(Style::default().bg(BG)), area);
+        return;
+    }
     let bar = Line::from(vec![
         Span::styled(" j/k", Style::default().fg(TEAL)),
         Span::styled(" navigate  ", Style::default().fg(DIM_WHITE)),
@@ -1072,6 +1083,15 @@ fn main() -> io::Result<()> {
             state.selected = state.row_count - 1;
         }
 
+        // Tick down flash message
+        if let Some((_, ttl)) = &mut state.flash {
+            if *ttl == 0 {
+                state.flash = None;
+            } else {
+                *ttl -= 1;
+            }
+        }
+
         guard.terminal.draw(|frame| render(frame, &mut state))?;
         state.tick += 1;
 
@@ -1120,19 +1140,27 @@ fn main() -> io::Result<()> {
                             }
                         }
                         Focus::History => {
-                            if let Some(record) = state.history.get(state.history_selected)
-                                && let Some(cid) = &record.consultation_id
-                            {
-                                state.enter_detail(cid.clone(), &dir);
-                                // History entries are complete — start at top
-                                if let AppMode::Detail {
-                                    scroll,
-                                    auto_scroll,
-                                    ..
-                                } = &mut state.mode
-                                {
-                                    *scroll = 0;
-                                    *auto_scroll = false;
+                            if let Some(record) = state.history.get(state.history_selected) {
+                                if let Some(cid) = &record.consultation_id {
+                                    let path = dir.join(format!("{cid}.events.jsonl"));
+                                    if path.exists() {
+                                        state.enter_detail(cid.clone(), &dir);
+                                        // History entries are complete — start at top
+                                        if let AppMode::Detail {
+                                            scroll,
+                                            auto_scroll,
+                                            ..
+                                        } = &mut state.mode
+                                        {
+                                            *scroll = 0;
+                                            *auto_scroll = false;
+                                        }
+                                    } else {
+                                        state.flash = Some(("log file not found".into(), 20));
+                                    }
+                                } else {
+                                    state.flash =
+                                        Some(("no log available for this entry".into(), 20));
                                 }
                             }
                         }
