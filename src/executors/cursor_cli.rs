@@ -136,7 +136,7 @@ fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
         if let Some(tc) = tool_call.get(key)
             && let Some(result) = tc.get("result")
         {
-            return result.get("success").is_some();
+            return result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
         }
     }
     false
@@ -341,5 +341,26 @@ mod tests {
         let tc: serde_json::Value =
             serde_json::from_str(r#"{"globToolCall":{"pattern":"**/*.rs"}}"#).unwrap();
         assert_eq!(extract_cursor_tool_name(&tc), "glob **/*.rs");
+    }
+
+    #[test]
+    fn test_is_cursor_tool_success_false() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"readToolCall":{"result":{"success":false}}}"#).unwrap();
+        assert!(!is_cursor_tool_success(&tc));
+    }
+
+    #[test]
+    fn test_is_cursor_tool_success_true() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"readToolCall":{"result":{"success":true}}}"#).unwrap();
+        assert!(is_cursor_tool_success(&tc));
+    }
+
+    #[test]
+    fn test_is_cursor_tool_success_missing() {
+        let tc: serde_json::Value =
+            serde_json::from_str(r#"{"readToolCall":{"result":{}}}"#).unwrap();
+        assert!(!is_cursor_tool_success(&tc));
     }
 }
