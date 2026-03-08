@@ -129,8 +129,7 @@ impl ConsultService {
             .unwrap_or_default();
 
         let git_diff = match args.git_diff.as_ref() {
-            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref)
-            {
+            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref) {
                 Ok(diff) => Some(diff),
                 Err(e) => {
                     eprintln!("Warning: git diff failed: {e}");
@@ -156,8 +155,7 @@ impl ConsultService {
         consultation_id: &str,
     ) -> anyhow::Result<(String, Option<Usage>, Option<String>)> {
         let git_diff = match args.git_diff.as_ref() {
-            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref)
-            {
+            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref) {
                 Ok(diff) => Some(diff),
                 Err(e) => {
                     eprintln!("Warning: git diff failed: {e}");

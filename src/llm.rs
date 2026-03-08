@@ -41,12 +41,12 @@ impl ExecutorProvider {
 
         let executor: Arc<dyn LlmExecutor> = match provider {
             Some(Provider::OpenAI) => match cfg.openai_backend {
-                Backend::CodexCli => Arc::new(CodexCliExecutor::new(
-                    cfg.codex_reasoning_effort.clone(),
-                )),
-                Backend::CursorCli => Arc::new(CursorCliExecutor::new(
-                    cfg.codex_reasoning_effort.clone(),
-                )),
+                Backend::CodexCli => {
+                    Arc::new(CodexCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+                }
+                Backend::CursorCli => {
+                    Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+                }
                 Backend::Api => {
                     let key = cfg.openai_api_key.as_ref().ok_or_else(|| {
                         anyhow::anyhow!(
@@ -75,9 +75,9 @@ impl ExecutorProvider {
             }
             Some(Provider::Gemini) => match cfg.gemini_backend {
                 Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
-                Backend::CursorCli => Arc::new(CursorCliExecutor::new(
-                    cfg.codex_reasoning_effort.clone(),
-                )),
+                Backend::CursorCli => {
+                    Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+                }
                 Backend::Api => {
                     let key = cfg.gemini_api_key.as_ref().ok_or_else(|| {
                         anyhow::anyhow!(

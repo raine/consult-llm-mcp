@@ -8,7 +8,6 @@ pub struct CliResult {
     pub stdout_bytes: usize,
     pub stderr: String,
     pub code: Option<i32>,
-    pub duration_ms: u128,
 }
 
 /// Run a CLI command, calling `on_line` for each stdout line as it arrives.
@@ -71,7 +70,6 @@ where
         stdout_bytes,
         stderr,
         code: status.code(),
-        duration_ms,
     };
 
     log_cli_debug(
