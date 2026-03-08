@@ -267,7 +267,13 @@ fn update_server_info(
 
 fn poll_history(dir: &Path, history_offset: &mut u64) -> Vec<HistoryRecord> {
     let path = dir.join(HISTORY_FILE);
-    read_jsonl_from_offset(&path, history_offset)
+    let mut records: Vec<HistoryRecord> = read_jsonl_from_offset(&path, history_offset);
+    for record in &mut records {
+        record.parsed_ts = chrono::DateTime::parse_from_rfc3339(&record.ts)
+            .ok()
+            .map(|dt| dt.with_timezone(&chrono::Utc));
+    }
+    records
 }
 
 fn check_liveness(server_info: &mut HashMap<String, ServerInfo>) -> Vec<String> {

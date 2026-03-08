@@ -100,6 +100,7 @@ fn main() -> io::Result<()> {
             }
         }
 
+        state.ensure_filter_cache();
         guard.terminal.draw(|frame| ui::render(frame, &mut state))?;
         state.tick += 1;
 

@@ -81,6 +81,8 @@ pub(crate) struct AppState {
     pub(crate) filter_text: String,
     /// Whether the filter input is currently being edited
     pub(crate) filter_editing: bool,
+    /// Cached filtered history indices, invalidated by filter/history changes
+    pub(crate) cached_filter_indices: Option<Vec<usize>>,
 }
 
 pub(crate) struct ServerState {
@@ -139,26 +141,44 @@ impl AppState {
             show_help: false,
             filter_text: String::new(),
             filter_editing: false,
+            cached_filter_indices: None,
         }
     }
 
     /// Return indices of history rows matching the current filter.
-    pub(crate) fn filtered_history_indices(&self) -> Vec<usize> {
-        if self.filter_text.is_empty() {
-            return (0..self.history.len()).collect();
+    /// Uses a cache that is invalidated by `invalidate_filter_cache()`.
+    pub(crate) fn filtered_history_indices(&self) -> &[usize] {
+        // Cache is always populated before read via ensure_filter_cache()
+        self.cached_filter_indices.as_deref().unwrap_or(&[])
+    }
+
+    /// Recompute filter cache if invalidated.
+    pub(crate) fn ensure_filter_cache(&mut self) {
+        if self.cached_filter_indices.is_some() {
+            return;
         }
-        let needle = self.filter_text.to_lowercase();
-        self.history
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| {
-                r.project.to_lowercase().contains(&needle)
-                    || r.model.to_lowercase().contains(&needle)
-                    || r.backend.to_lowercase().contains(&needle)
-                    || (r.success && "success".contains(&needle))
-                    || (!r.success && "failed".contains(&needle))
-            })
-            .map(|(i, _)| i)
-            .collect()
+        let indices = if self.filter_text.is_empty() {
+            (0..self.history.len()).collect()
+        } else {
+            let needle = self.filter_text.to_lowercase();
+            self.history
+                .iter()
+                .enumerate()
+                .filter(|(_, r)| {
+                    r.project.to_lowercase().contains(&needle)
+                        || r.model.to_lowercase().contains(&needle)
+                        || r.backend.to_lowercase().contains(&needle)
+                        || (r.success && "success".contains(&needle))
+                        || (!r.success && "failed".contains(&needle))
+                })
+                .map(|(i, _)| i)
+                .collect()
+        };
+        self.cached_filter_indices = Some(indices);
+    }
+
+    /// Invalidate the cached filter indices.
+    pub(crate) fn invalidate_filter_cache(&mut self) {
+        self.cached_filter_indices = None;
     }
 }

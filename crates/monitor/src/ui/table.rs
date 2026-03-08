@@ -293,7 +293,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
 
             Row::new(vec![
                 Line::from(Span::styled(
-                    format_relative_time(&record.ts, now),
+                    format_relative_time(record.parsed_ts, now),
                     Style::default().fg(DIM),
                 )),
                 Line::from(Span::styled(

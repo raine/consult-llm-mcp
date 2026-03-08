@@ -88,6 +88,9 @@ pub struct HistoryRecord {
     pub tokens_in: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tokens_out: Option<u64>,
+    /// Pre-parsed timestamp, populated at ingest time by the monitor.
+    #[serde(skip)]
+    pub parsed_ts: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub fn append_history(record: &HistoryRecord) {

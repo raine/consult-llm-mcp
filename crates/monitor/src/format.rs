@@ -21,14 +21,11 @@ pub(crate) fn format_duration_friendly(ms: u64) -> String {
     }
 }
 
-pub(crate) fn format_relative_time(ts: &str, now: DateTime<Utc>) -> String {
-    let Ok(parsed) = DateTime::parse_from_rfc3339(ts) else {
-        return "—".to_string();
+pub(crate) fn format_relative_time(parsed_ts: Option<DateTime<Utc>>, now: DateTime<Utc>) -> String {
+    let Some(parsed) = parsed_ts else {
+        return "\u{2014}".to_string();
     };
-    let secs = now
-        .signed_duration_since(parsed.with_timezone(&Utc))
-        .num_seconds()
-        .max(0);
+    let secs = now.signed_duration_since(parsed).num_seconds().max(0);
 
     if secs < 10 {
         "just now".to_string()

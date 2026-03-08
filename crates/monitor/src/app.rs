@@ -99,6 +99,7 @@ impl AppState {
             Action::ClearHistory => {
                 self.history.clear();
                 self.history_selected = 0;
+                self.invalidate_filter_cache();
                 self.mode = AppMode::Table;
                 self.flash = Some(("History cleared".into(), 20));
                 // File truncation is handled by the caller (main loop)
@@ -143,10 +144,12 @@ impl AppState {
             }
             Action::FilterInput(c) => {
                 self.filter_text.push(c);
+                self.invalidate_filter_cache();
                 self.clamp_history_selection();
             }
             Action::FilterBackspace => {
                 self.filter_text.pop();
+                self.invalidate_filter_cache();
                 self.clamp_history_selection();
             }
             Action::FilterAccept => {
@@ -156,6 +159,7 @@ impl AppState {
             Action::FilterCancel => {
                 self.filter_editing = false;
                 self.filter_text.clear();
+                self.invalidate_filter_cache();
                 self.clamp_history_selection();
             }
         }
@@ -340,6 +344,7 @@ impl AppState {
 
     /// Clamp history_selected to the filtered list length.
     fn clamp_history_selection(&mut self) {
+        self.ensure_filter_cache();
         let count = self.filtered_history_indices().len();
         if count == 0 {
             self.history_selected = 0;
@@ -389,6 +394,9 @@ impl AppState {
                 }
             }
             PollUpdate::HistoryRecords(records) => {
+                if !records.is_empty() {
+                    self.invalidate_filter_cache();
+                }
                 for record in records {
                     self.history.push_front(record);
                     if !self.history.is_empty() {

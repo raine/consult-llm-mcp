@@ -104,6 +104,7 @@ impl ConsultService {
                         error: None,
                         tokens_in: usage.as_ref().map(|u| u.prompt_tokens),
                         tokens_out: usage.as_ref().map(|u| u.completion_tokens),
+                        parsed_ts: None,
                     },
                 );
             }
@@ -128,6 +129,7 @@ impl ConsultService {
                         error: Some(e.to_string()),
                         tokens_in: None,
                         tokens_out: None,
+                        parsed_ts: None,
                     },
                 );
             }
