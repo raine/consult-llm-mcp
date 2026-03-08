@@ -26,10 +26,16 @@ pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
         AppMode::Detail(_) => {
             detail::render_detail_view(frame, area, state);
         }
+        AppMode::ThreadDetail(_) => {
+            detail::render_thread_detail_view(frame, area, state);
+        }
     }
 
     if state.show_help {
-        render_help_overlay(frame, matches!(state.mode, AppMode::Detail(_)));
+        render_help_overlay(
+            frame,
+            matches!(state.mode, AppMode::Detail(_) | AppMode::ThreadDetail(_)),
+        );
     }
 }
 
@@ -40,6 +46,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, is_detail_mode: bool) {
             ("k / ↑", "Scroll up"),
             ("d", "Half page down"),
             ("u", "Half page up"),
+            ("[ / ]", "Prev / next turn (threads)"),
             ("G", "Follow / scroll to bottom"),
             ("y", "Yank response"),
             ("Esc", "Back to table"),

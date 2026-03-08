@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
@@ -12,7 +14,7 @@ use crate::action::Action;
 use crate::poller::PollUpdate;
 use crate::state::{
     ActiveConsult, AppMode, AppState, CompletedConsult, DetailMetadata, DetailState, Focus,
-    RowInfo, ServerState,
+    RowInfo, ServerState, ThreadDetailState,
 };
 
 impl AppState {
@@ -35,7 +37,7 @@ impl AppState {
                     }
                 }
                 Focus::History => {
-                    let count = self.filtered_history_indices().len();
+                    let count = self.build_history_display_rows().len();
                     if count > 0 {
                         self.history_selected = (self.history_selected + 1).min(count - 1);
                     }
@@ -60,39 +62,89 @@ impl AppState {
                     }
                 }
             }
+            Action::EnterThreadDetail(thread_id) => {
+                self.enter_thread_detail(thread_id, dir);
+            }
+            Action::PrevTurn => {
+                if let AppMode::ThreadDetail(ref mut detail) = self.mode
+                    && detail.selected_turn > 0
+                {
+                    detail.selected_turn -= 1;
+                    if let Some(&offset) = detail.turn_line_offsets.get(detail.selected_turn) {
+                        detail.scroll = offset;
+                        detail.auto_scroll = false;
+                    }
+                }
+            }
+            Action::NextTurn => {
+                if let AppMode::ThreadDetail(ref mut detail) = self.mode
+                    && detail.selected_turn + 1 < detail.turn_count
+                {
+                    detail.selected_turn += 1;
+                    if let Some(&offset) = detail.turn_line_offsets.get(detail.selected_turn) {
+                        detail.scroll = offset;
+                        detail.auto_scroll = false;
+                    }
+                }
+            }
             Action::ExitDetail => {
                 self.mode = AppMode::Table;
             }
-            Action::ScrollDown => {
-                if let AppMode::Detail(ref mut detail) = self.mode {
+            Action::ScrollDown => match &mut self.mode {
+                AppMode::Detail(detail) => {
                     detail.scroll = detail.scroll.saturating_add(1);
                 }
-            }
-            Action::ScrollUp => {
-                if let AppMode::Detail(ref mut detail) = self.mode {
+                AppMode::ThreadDetail(detail) => {
+                    detail.scroll = detail.scroll.saturating_add(1);
+                }
+                _ => {}
+            },
+            Action::ScrollUp => match &mut self.mode {
+                AppMode::Detail(detail) => {
                     detail.scroll = detail.scroll.saturating_sub(1);
                     detail.auto_scroll = false;
                 }
-            }
-            Action::HalfPageDown => {
-                if let AppMode::Detail(ref mut detail) = self.mode {
+                AppMode::ThreadDetail(detail) => {
+                    detail.scroll = detail.scroll.saturating_sub(1);
+                    detail.auto_scroll = false;
+                }
+                _ => {}
+            },
+            Action::HalfPageDown => match &mut self.mode {
+                AppMode::Detail(detail) => {
                     let half = self.detail_inner_height / 2;
                     detail.scroll = detail.scroll.saturating_add(half.max(1));
                 }
-            }
-            Action::HalfPageUp => {
-                if let AppMode::Detail(ref mut detail) = self.mode {
+                AppMode::ThreadDetail(detail) => {
+                    let half = self.detail_inner_height / 2;
+                    detail.scroll = detail.scroll.saturating_add(half.max(1));
+                }
+                _ => {}
+            },
+            Action::HalfPageUp => match &mut self.mode {
+                AppMode::Detail(detail) => {
                     let half = self.detail_inner_height / 2;
                     detail.scroll = detail.scroll.saturating_sub(half.max(1));
                     detail.auto_scroll = false;
                 }
-            }
-            Action::ScrollToBottom => {
-                if let AppMode::Detail(ref mut detail) = self.mode {
+                AppMode::ThreadDetail(detail) => {
+                    let half = self.detail_inner_height / 2;
+                    detail.scroll = detail.scroll.saturating_sub(half.max(1));
+                    detail.auto_scroll = false;
+                }
+                _ => {}
+            },
+            Action::ScrollToBottom => match &mut self.mode {
+                AppMode::Detail(detail) => {
                     detail.scroll = usize::MAX;
                     detail.auto_scroll = true;
                 }
-            }
+                AppMode::ThreadDetail(detail) => {
+                    detail.scroll = usize::MAX;
+                    detail.auto_scroll = true;
+                }
+                _ => {}
+            },
             Action::PromptClearHistory => {
                 self.mode = AppMode::ConfirmClearHistory;
             }
@@ -115,8 +167,13 @@ impl AppState {
                 self.show_help = !self.show_help;
             }
             Action::YankResponse => {
-                if let AppMode::Detail(ref detail) = self.mode {
-                    let last_text = detail.events.iter().rev().find_map(|e| match e {
+                let events: Option<&[ParsedStreamEvent]> = match &self.mode {
+                    AppMode::Detail(detail) => Some(&detail.events),
+                    AppMode::ThreadDetail(detail) => Some(&detail.active_events),
+                    _ => None,
+                };
+                if let Some(events) = events {
+                    let last_text = events.iter().rev().find_map(|e| match e {
                         ParsedStreamEvent::AssistantText { text } if !text.is_empty() => {
                             Some(text.clone())
                         }
@@ -191,7 +248,12 @@ impl AppState {
                     },
                 );
             }
-            MonitorEvent::ConsultStarted { id, model, backend } => {
+            MonitorEvent::ConsultStarted {
+                id,
+                model,
+                backend,
+                thread_id,
+            } => {
                 if let Some(server) = self.servers.get_mut(server_id) {
                     let started_at = DateTime::parse_from_rfc3339(&envelope.ts)
                         .map(|dt| dt.with_timezone(&Utc))
@@ -203,6 +265,7 @@ impl AppState {
                             backend: backend.clone(),
                             started_at,
                             last_progress: None,
+                            thread_id: thread_id.clone(),
                         },
                     );
                 }
@@ -280,6 +343,104 @@ impl AppState {
         });
     }
 
+    pub(crate) fn enter_thread_detail(&mut self, thread_id: String, dir: &Path) {
+        // Collect all history records for this thread, sorted chronologically (oldest first)
+        let mut thread_records: Vec<_> = self
+            .history
+            .iter()
+            .filter(|h| h.thread_id.as_deref() == Some(&thread_id))
+            .collect();
+        thread_records.sort_by(|a, b| a.ts.cmp(&b.ts));
+
+        if thread_records.is_empty() {
+            self.flash = Some(("No history records for thread".into(), 20));
+            return;
+        }
+
+        let turn_ids: Vec<String> = thread_records
+            .iter()
+            .filter_map(|r| r.consultation_id.clone())
+            .collect();
+
+        // Load events from all completed turns (all except the last)
+        let mut historical_events = Vec::new();
+        for cid in turn_ids.iter().take(turn_ids.len().saturating_sub(1)) {
+            let path = dir.join(format!("{cid}.events.jsonl"));
+            if let Ok(file) = File::open(&path) {
+                let reader = BufReader::new(file);
+                for line in reader.lines().map_while(Result::ok) {
+                    if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(line.trim()) {
+                        historical_events.push(event);
+                    }
+                }
+            }
+        }
+
+        // Load the latest turn's events with offset tracking
+        let mut active_events = Vec::new();
+        let mut active_file_offset = 0u64;
+        if let Some(last_cid) = turn_ids.last() {
+            let path = dir.join(format!("{last_cid}.events.jsonl"));
+            if let Ok(file) = File::open(&path) {
+                let mut reader = BufReader::new(file);
+                let mut buf = String::new();
+                loop {
+                    buf.clear();
+                    match reader.read_line(&mut buf) {
+                        Ok(0) => break,
+                        Ok(bytes_read) => {
+                            if !buf.ends_with('\n') {
+                                break;
+                            }
+                            active_file_offset += bytes_read as u64;
+                            if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(buf.trim())
+                            {
+                                active_events.push(event);
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+
+        let turn_count = turn_ids.len();
+        let total_duration_ms: u64 = thread_records.iter().map(|r| r.duration_ms).sum();
+        let models: Vec<String> = thread_records
+            .iter()
+            .map(|r| r.model.clone())
+            .collect::<Vec<_>>();
+        let backends: Vec<String> = thread_records
+            .iter()
+            .map(|r| r.backend.clone())
+            .collect::<Vec<_>>();
+        let success = thread_records.last().map(|r| r.success);
+        let project = Some(thread_records[0].project.clone());
+
+        // Check if the latest turn is still active
+        let is_active = turn_ids
+            .last()
+            .is_some_and(|cid| self.is_consultation_active(cid));
+
+        self.mode = AppMode::ThreadDetail(ThreadDetailState {
+            thread_id,
+            turn_ids,
+            historical_events,
+            active_events,
+            active_file_offset,
+            turn_line_offsets: Vec::new(), // computed during rendering
+            selected_turn: turn_count.saturating_sub(1),
+            scroll: if is_active { usize::MAX } else { 0 },
+            auto_scroll: is_active,
+            models,
+            backends,
+            project,
+            total_duration_ms,
+            turn_count,
+            success,
+        });
+    }
+
     fn lookup_consult_metadata(&self, consultation_id: &str) -> DetailMetadata {
         // Check active consults
         for server in self.servers.values() {
@@ -348,8 +509,7 @@ impl AppState {
 
     /// Clamp history_selected to the filtered list length.
     fn clamp_history_selection(&mut self) {
-        self.ensure_filter_cache();
-        let count = self.filtered_history_indices().len();
+        let count = self.build_history_display_rows().len();
         if count == 0 {
             self.history_selected = 0;
         } else if self.history_selected >= count {
@@ -433,14 +593,27 @@ impl AppState {
                 consultation_id,
                 events,
             } => {
-                if let AppMode::Detail(ref mut detail) = self.mode
-                    && detail.consultation_id == consultation_id
-                    && !events.is_empty()
-                {
-                    detail.events.extend(events);
-                    if detail.auto_scroll {
-                        detail.scroll = usize::MAX;
+                match &mut self.mode {
+                    AppMode::Detail(detail)
+                        if detail.consultation_id == consultation_id && !events.is_empty() =>
+                    {
+                        detail.events.extend(events);
+                        if detail.auto_scroll {
+                            detail.scroll = usize::MAX;
+                        }
                     }
+                    AppMode::ThreadDetail(detail) if !events.is_empty() => {
+                        // Only accept events for the latest turn
+                        if let Some(last_turn) = detail.turn_ids.last()
+                            && *last_turn == consultation_id
+                        {
+                            detail.active_events.extend(events);
+                            if detail.auto_scroll {
+                                detail.scroll = usize::MAX;
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

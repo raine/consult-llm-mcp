@@ -66,6 +66,7 @@ impl ConsultService {
                 id: consultation_id.clone(),
                 model: model.clone(),
                 backend: backend_name.clone(),
+                thread_id: args.thread_id.clone(),
             },
         );
 
@@ -83,7 +84,7 @@ impl ConsultService {
         let history_consultation_id = consultation_id.clone();
 
         match &result {
-            Ok((_, usage)) => {
+            Ok((_, usage, thread_id)) => {
                 consult_llm_core::monitoring::emit(
                     consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
@@ -105,6 +106,7 @@ impl ConsultService {
                         tokens_in: usage.as_ref().map(|u| u.prompt_tokens),
                         tokens_out: usage.as_ref().map(|u| u.completion_tokens),
                         parsed_ts: None,
+                        thread_id: thread_id.clone(),
                     },
                 );
             }
@@ -130,12 +132,13 @@ impl ConsultService {
                         tokens_in: None,
                         tokens_out: None,
                         parsed_ts: None,
+                        thread_id: None,
                     },
                 );
             }
         }
 
-        result.map(|(body, usage)| ConsultOutcome::Response { body, usage })
+        result.map(|(body, usage, _)| ConsultOutcome::Response { body, usage })
     }
 
     async fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
@@ -165,7 +168,7 @@ impl ConsultService {
         model: &str,
         executor: Arc<dyn LlmExecutor>,
         consultation_id: &str,
-    ) -> anyhow::Result<(String, Option<Usage>)> {
+    ) -> anyhow::Result<(String, Option<Usage>, Option<String>)> {
         let git_diff = args
             .git_diff
             .as_ref()
@@ -224,10 +227,11 @@ impl ConsultService {
 
         log_response(model, &result.response, &result.cost_info);
 
-        let body = match result.thread_id {
+        let thread_id = result.thread_id.or_else(|| args.thread_id.clone());
+        let body = match &thread_id {
             Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),
             None => result.response,
         };
-        Ok((body, result.usage))
+        Ok((body, result.usage, thread_id))
     }
 }

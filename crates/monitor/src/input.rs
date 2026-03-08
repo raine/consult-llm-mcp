@@ -3,7 +3,7 @@ use std::path::Path;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::action::Action;
-use crate::state::{AppMode, AppState, Focus, RowInfo};
+use crate::state::{AppMode, AppState, Focus, HistoryDisplayRow, RowInfo};
 
 /// Pure mapping from key events to actions. No state mutation.
 pub(crate) fn handle_key(
@@ -28,6 +28,7 @@ pub(crate) fn handle_key(
     match &state.mode {
         AppMode::Table => handle_table_key(state, row_infos, key, dir),
         AppMode::Detail(_) => handle_detail_key(key),
+        AppMode::ThreadDetail(_) => handle_thread_detail_key(key),
         AppMode::ConfirmClearHistory => handle_confirm_clear_key(key),
     }
 }
@@ -57,21 +58,25 @@ fn handle_table_key(
                 None
             }
             Focus::History => {
-                let indices = state.filtered_history_indices();
-                let actual_idx = indices.get(state.history_selected).copied();
-                if let Some(record) = actual_idx.and_then(|i| state.history.get(i)) {
-                    if let Some(cid) = &record.consultation_id {
-                        let path = dir.join(format!("{cid}.events.jsonl"));
-                        if path.exists() {
-                            Some(Action::EnterDetail(cid.clone()))
+                let display_rows = state.build_history_display_rows();
+                match display_rows.get(state.history_selected) {
+                    Some(HistoryDisplayRow::Single(idx)) => {
+                        let record = &state.history[*idx];
+                        if let Some(cid) = &record.consultation_id {
+                            let path = dir.join(format!("{cid}.events.jsonl"));
+                            if path.exists() {
+                                Some(Action::EnterDetail(cid.clone()))
+                            } else {
+                                Some(Action::Flash("log file not found".into(), 20))
+                            }
                         } else {
-                            Some(Action::Flash("log file not found".into(), 20))
+                            Some(Action::Flash("no log available for this entry".into(), 20))
                         }
-                    } else {
-                        Some(Action::Flash("no log available for this entry".into(), 20))
                     }
-                } else {
-                    None
+                    Some(HistoryDisplayRow::ThreadSummary { thread_id, .. }) => {
+                        Some(Action::EnterThreadDetail(thread_id.clone()))
+                    }
+                    None => None,
                 }
             }
         },
@@ -107,6 +112,23 @@ fn handle_detail_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('u') => Some(Action::HalfPageUp),
         KeyCode::Char('G') => Some(Action::ScrollToBottom),
         KeyCode::Char('y') => Some(Action::YankResponse),
+        _ => None,
+    }
+}
+
+fn handle_thread_detail_key(key: KeyEvent) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('?') => Some(Action::ToggleHelp),
+        KeyCode::Char('q') | KeyCode::Esc => Some(Action::ExitDetail),
+        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::Quit),
+        KeyCode::Char('j') | KeyCode::Down => Some(Action::ScrollDown),
+        KeyCode::Char('k') | KeyCode::Up => Some(Action::ScrollUp),
+        KeyCode::Char('d') => Some(Action::HalfPageDown),
+        KeyCode::Char('u') => Some(Action::HalfPageUp),
+        KeyCode::Char('G') => Some(Action::ScrollToBottom),
+        KeyCode::Char('y') => Some(Action::YankResponse),
+        KeyCode::Char('[') => Some(Action::PrevTurn),
+        KeyCode::Char(']') => Some(Action::NextTurn),
         _ => None,
     }
 }

@@ -9,8 +9,8 @@ use crate::format::{
     truncate_project,
 };
 use crate::state::{
-    AppState, BG, DIM, DIM_WHITE, Focus, GREEN, RED, SELECTED_BG, SEPARATOR, SPINNER_FRAMES, TEAL,
-    WHITE, YELLOW,
+    AppState, BG, DIM, DIM_WHITE, Focus, GREEN, HistoryDisplayRow, RED, SELECTED_BG, SEPARATOR,
+    SPINNER_FRAMES, TEAL, WHITE, YELLOW,
 };
 
 pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
@@ -137,10 +137,25 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     Some(progress) => format!("{} ({})", consult.model, progress),
                     None => format!("{} ({})", consult.model, consult.backend),
                 };
-                let consult_cell = Line::from(vec![
-                    Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
-                    Span::styled(consult_text, Style::default().fg(WHITE)),
-                ]);
+                let mut consult_spans = vec![Span::styled(
+                    format!("{spinner} "),
+                    Style::default().fg(TEAL),
+                )];
+                // Show thread badge if this is a resumed thread consultation
+                if let Some(ref tid) = consult.thread_id {
+                    let turn_num = state
+                        .history
+                        .iter()
+                        .filter(|h| h.thread_id.as_deref() == Some(tid))
+                        .count()
+                        + 1;
+                    consult_spans.push(Span::styled(
+                        format!("\u{21ba}t{turn_num} "),
+                        Style::default().fg(DIM),
+                    ));
+                }
+                consult_spans.push(Span::styled(consult_text, Style::default().fg(WHITE)));
+                let consult_cell = Line::from(consult_spans);
                 rows.push(Row::new(vec![
                     Line::from(Span::styled(
                         if show_server {
@@ -278,54 +293,108 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
-    let filtered_indices = state.filtered_history_indices();
-    let rows: Vec<Row> = filtered_indices
+    let display_rows = state.build_history_display_rows();
+    let rows: Vec<Row> = display_rows
         .iter()
-        .map(|&idx| {
-            let record = &state.history[idx];
-            let status_icon = if record.success {
-                "\u{2713}"
-            } else {
-                "\u{2717}"
-            };
-            let status_color = if record.success { GREEN } else { RED };
-            let duration_str = format_duration_friendly(record.duration_ms);
-            let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
+        .map(|display_row| match display_row {
+            HistoryDisplayRow::Single(idx) => {
+                let record = &state.history[*idx];
+                let status_icon = if record.success {
+                    "\u{2713}"
+                } else {
+                    "\u{2717}"
+                };
+                let status_color = if record.success { GREEN } else { RED };
+                let duration_str = format_duration_friendly(record.duration_ms);
+                let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
 
-            Row::new(vec![
-                Line::from(Span::styled(
-                    format_relative_time(record.parsed_ts, now),
-                    Style::default().fg(DIM),
-                )),
-                Line::from(Span::styled(
-                    record.project.clone(),
-                    Style::default().fg(DIM_WHITE),
-                )),
-                Line::from(Span::styled(
-                    record.model.clone(),
-                    Style::default().fg(DIM_WHITE),
-                )),
-                Line::from(Span::styled(
-                    record.backend.clone(),
-                    Style::default().fg(DIM),
-                )),
-                Line::from(Span::styled(
-                    format!(
-                        "{:>width$}",
-                        duration_str,
-                        width = duration_col_width as usize
-                    ),
-                    Style::default().fg(DIM_WHITE),
-                )),
-                Line::from(Span::styled(
-                    format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
-                    Style::default().fg(DIM),
-                )),
-                Line::from(Span::styled(
-                    status_icon.to_string(),
-                    Style::default().fg(status_color),
-                )),
-            ])
+                Row::new(vec![
+                    Line::from(Span::styled(
+                        format_relative_time(record.parsed_ts, now),
+                        Style::default().fg(DIM),
+                    )),
+                    Line::from(Span::styled(
+                        record.project.clone(),
+                        Style::default().fg(DIM_WHITE),
+                    )),
+                    Line::from(Span::styled(
+                        record.model.clone(),
+                        Style::default().fg(DIM_WHITE),
+                    )),
+                    Line::from(Span::styled(
+                        record.backend.clone(),
+                        Style::default().fg(DIM),
+                    )),
+                    Line::from(Span::styled(
+                        format!(
+                            "{:>width$}",
+                            duration_str,
+                            width = duration_col_width as usize
+                        ),
+                        Style::default().fg(DIM_WHITE),
+                    )),
+                    Line::from(Span::styled(
+                        format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
+                        Style::default().fg(DIM),
+                    )),
+                    Line::from(Span::styled(
+                        status_icon.to_string(),
+                        Style::default().fg(status_color),
+                    )),
+                ])
+            }
+            HistoryDisplayRow::ThreadSummary {
+                latest_parsed_ts,
+                model,
+                backend,
+                total_duration_ms,
+                total_tokens_in,
+                total_tokens_out,
+                turn_count,
+                success,
+                mixed_model,
+                project,
+                ..
+            } => {
+                let status_icon = if *success { "\u{2713}" } else { "\u{2717}" };
+                let status_color = if *success { GREEN } else { RED };
+                let duration_str = format_duration_friendly(*total_duration_ms);
+                let tokens_str = format_tokens(*total_tokens_in, *total_tokens_out);
+                let model_display = if *mixed_model {
+                    format!("{model}*")
+                } else {
+                    model.clone()
+                };
+
+                Row::new(vec![
+                    Line::from(Span::styled(
+                        format_relative_time(*latest_parsed_ts, now),
+                        Style::default().fg(DIM),
+                    )),
+                    Line::from(Span::styled(
+                        project.clone(),
+                        Style::default().fg(DIM_WHITE),
+                    )),
+                    Line::from(Span::styled(model_display, Style::default().fg(DIM_WHITE))),
+                    Line::from(Span::styled(backend.clone(), Style::default().fg(DIM))),
+                    Line::from(Span::styled(
+                        format!(
+                            "{:>width$}",
+                            duration_str,
+                            width = duration_col_width as usize
+                        ),
+                        Style::default().fg(DIM_WHITE),
+                    )),
+                    Line::from(Span::styled(
+                        format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
+                        Style::default().fg(DIM),
+                    )),
+                    Line::from(vec![
+                        Span::styled(status_icon, Style::default().fg(status_color)),
+                        Span::styled(format!(" {turn_count}t"), Style::default().fg(TEAL)),
+                    ]),
+                ])
+            }
         })
         .collect();
 
@@ -338,7 +407,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
             Constraint::Length(10),
             Constraint::Length(duration_col_width),
             Constraint::Length(tokens_col_width),
-            Constraint::Length(3),
+            Constraint::Length(6),
         ],
     )
     .header(header)
@@ -358,7 +427,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
             .border_style(Style::default().fg(SEPARATOR)),
     );
 
-    if state.focus == Focus::History && !filtered_indices.is_empty() {
+    if state.focus == Focus::History && !display_rows.is_empty() {
         state
             .history_table_state
             .select(Some(state.history_selected));

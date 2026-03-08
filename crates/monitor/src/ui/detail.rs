@@ -12,6 +12,7 @@ use chrono::Utc;
 use crate::format::{format_duration_friendly, format_token_count};
 use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
+    YELLOW,
 };
 
 // ── Intermediate representation ─────────────────────────────────────────
@@ -476,6 +477,273 @@ fn render_tool_line(
             )])
         }
     }
+}
+
+// ── Thread detail view ──────────────────────────────────────────────────
+
+pub(super) fn render_thread_detail_view(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    state: &mut AppState,
+) {
+    let AppMode::ThreadDetail(ref detail) = state.mode else {
+        return;
+    };
+
+    let tick = state.tick;
+
+    // ── Layout: header / content / status bar ───────────────────────
+    let chunks = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Min(3),
+        Constraint::Length(1),
+    ])
+    .split(area);
+
+    let inner_width = chunks[1].width.saturating_sub(2) as usize;
+
+    // ── Header ──────────────────────────────────────────────────────
+    let thread_id_short = if detail.thread_id.len() > 16 {
+        &detail.thread_id[..16]
+    } else {
+        &detail.thread_id
+    };
+    let block = Block::default()
+        .title(Line::from(vec![Span::styled(
+            format!(" thread:{thread_id_short}… "),
+            Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
+        )]))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(SEPARATOR));
+
+    let mut header_spans: Vec<Span> = Vec::new();
+    header_spans.push(Span::styled(" ", Style::default()));
+
+    // Turn count
+    header_spans.push(Span::styled(
+        format!("{} turns", detail.turn_count),
+        Style::default().fg(YELLOW),
+    ));
+
+    // Model(s)
+    let unique_models: Vec<&str> = {
+        let mut seen = std::collections::HashSet::new();
+        detail
+            .models
+            .iter()
+            .filter(|m| seen.insert(m.as_str()))
+            .map(|m| m.as_str())
+            .collect()
+    };
+    let model_display = if unique_models.len() == 1 {
+        unique_models[0].to_string()
+    } else {
+        format!("{}*", unique_models.last().unwrap_or(&""))
+    };
+    header_spans.push(Span::styled(
+        format!("  {model_display}"),
+        Style::default().fg(WHITE),
+    ));
+
+    // Backend(s)
+    let unique_backends: Vec<&str> = {
+        let mut seen = std::collections::HashSet::new();
+        detail
+            .backends
+            .iter()
+            .filter(|b| seen.insert(b.as_str()))
+            .map(|b| b.as_str())
+            .collect()
+    };
+    if let Some(backend) = unique_backends.first() {
+        header_spans.push(Span::styled(
+            format!("  {backend}"),
+            Style::default().fg(DIM),
+        ));
+    }
+
+    // Total duration
+    header_spans.push(Span::styled(
+        format!("  {}", format_duration_friendly(detail.total_duration_ms)),
+        Style::default().fg(DIM_WHITE),
+    ));
+
+    // Success/failure indicator
+    if let Some(success) = detail.success {
+        let (icon, color) = if success {
+            ("\u{2713}", GREEN)
+        } else {
+            ("\u{2717}", RED)
+        };
+        header_spans.push(Span::styled(
+            format!("  {icon}"),
+            Style::default().fg(color),
+        ));
+    }
+
+    // Project
+    if let Some(ref project) = detail.project {
+        header_spans.push(Span::styled(
+            format!("  {project}"),
+            Style::default().fg(DIM),
+        ));
+    }
+
+    frame.render_widget(
+        Paragraph::new(Line::from(header_spans)).block(block),
+        chunks[0],
+    );
+
+    // ── Content: render all turns ────────────────────────────────────
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut turn_line_offsets: Vec<usize> = Vec::new();
+
+    // Render historical turns (all except the last)
+    let historical_turn_count = detail.turn_ids.len().saturating_sub(1);
+
+    // Split historical events by turn boundaries (SessionStarted events)
+    let mut turn_events: Vec<Vec<&ParsedStreamEvent>> = Vec::new();
+    let mut current_turn: Vec<&ParsedStreamEvent> = Vec::new();
+
+    for event in &detail.historical_events {
+        if matches!(event, ParsedStreamEvent::SessionStarted { .. }) && !current_turn.is_empty() {
+            turn_events.push(current_turn);
+            current_turn = Vec::new();
+        }
+        current_turn.push(event);
+    }
+    if !current_turn.is_empty() {
+        turn_events.push(current_turn);
+    }
+
+    for (i, events) in turn_events.iter().enumerate() {
+        // Turn separator
+        turn_line_offsets.push(lines.len());
+        let turn_num = i + 1;
+        let model = detail.models.get(i).map(|m| m.as_str()).unwrap_or("?");
+        let turn_header = format!(" Turn {turn_num} \u{b7} {model} ");
+        let dashes_left = "\u{2500}\u{2500}\u{2500}";
+        let right_len = inner_width.saturating_sub(4 + turn_header.chars().count());
+        let dashes_right = "\u{2500}".repeat(right_len);
+
+        lines.push(Line::from(vec![
+            Span::styled(format!("  {dashes_left}"), Style::default().fg(TEAL)),
+            Span::styled(turn_header, Style::default().fg(TEAL)),
+            Span::styled(dashes_right, Style::default().fg(TEAL)),
+        ]));
+        lines.push(Line::default());
+
+        // Render events for this turn
+        let owned_events: Vec<ParsedStreamEvent> = events.iter().map(|e| (*e).clone()).collect();
+        let blocks = normalize_events(&owned_events);
+        let turn_lines = render_blocks(&blocks, inner_width, tick);
+        lines.extend(turn_lines);
+        lines.push(Line::default());
+    }
+
+    // Render the active (latest) turn
+    let active_turn_idx = detail.turn_ids.len().saturating_sub(1);
+    turn_line_offsets.push(lines.len());
+    let turn_num = historical_turn_count + 1;
+    let model = detail
+        .models
+        .get(active_turn_idx)
+        .map(|m| m.as_str())
+        .unwrap_or("?");
+    let turn_header = format!(" Turn {turn_num} \u{b7} {model} ");
+    let dashes_left = "\u{2500}\u{2500}\u{2500}";
+    let right_len = inner_width.saturating_sub(4 + turn_header.chars().count());
+    let dashes_right = "\u{2500}".repeat(right_len);
+
+    lines.push(Line::from(vec![
+        Span::styled(format!("  {dashes_left}"), Style::default().fg(TEAL)),
+        Span::styled(turn_header, Style::default().fg(TEAL)),
+        Span::styled(dashes_right, Style::default().fg(TEAL)),
+    ]));
+    lines.push(Line::default());
+
+    let active_blocks = normalize_events(&detail.active_events);
+    let active_lines = render_blocks(&active_blocks, inner_width, tick);
+    lines.extend(active_lines);
+
+    // Append spinner if latest turn is still live
+    let is_live = detail
+        .turn_ids
+        .last()
+        .is_some_and(|cid| state.is_consultation_active(cid));
+    if is_live {
+        let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
+        lines.push(Line::default());
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {spinner} Generating..."),
+            Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+        )]));
+    }
+
+    // Store turn_line_offsets back into state
+    if let AppMode::ThreadDetail(ref mut detail) = state.mode {
+        detail.turn_line_offsets = turn_line_offsets;
+    }
+
+    // ── Scroll / viewport ───────────────────────────────────────────
+    let inner_height = chunks[1].height.saturating_sub(2) as usize;
+    let total_lines = lines.len();
+    let max_scroll = total_lines.saturating_sub(inner_height);
+    state.detail_inner_height = inner_height;
+
+    let effective_scroll = if let AppMode::ThreadDetail(ref mut detail) = state.mode {
+        detail.scroll = detail.scroll.min(max_scroll);
+        detail.scroll
+    } else {
+        0
+    };
+
+    let visible_lines: Vec<Line> = lines
+        .into_iter()
+        .skip(effective_scroll)
+        .take(inner_height)
+        .collect();
+
+    let content = Paragraph::new(visible_lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Rounded)
+            .border_style(Style::default().fg(SEPARATOR)),
+    );
+    frame.render_widget(content, chunks[1]);
+
+    // ── Status bar ──────────────────────────────────────────────────
+    let follow_on = matches!(state.mode, AppMode::ThreadDetail(ref d) if d.auto_scroll);
+
+    let mut bar_spans = vec![
+        Span::styled(" q/Esc", Style::default().fg(TEAL)),
+        Span::styled(" back  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("j/k", Style::default().fg(TEAL)),
+        Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("d/u", Style::default().fg(TEAL)),
+        Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("[/]", Style::default().fg(TEAL)),
+        Span::styled(" prev/next turn", Style::default().fg(DIM_WHITE)),
+    ];
+    if is_live {
+        bar_spans.push(Span::styled("  G", Style::default().fg(TEAL)));
+        bar_spans.push(Span::styled(" follow  ", Style::default().fg(DIM_WHITE)));
+        if follow_on {
+            bar_spans.push(Span::styled(
+                " FOLLOW ",
+                Style::default()
+                    .fg(BG)
+                    .bg(TEAL)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+    }
+    let bar = Line::from(bar_spans);
+    frame.render_widget(
+        Paragraph::new(bar).style(Style::default().bg(BG)),
+        chunks[2],
+    );
 }
 
 // ── Usage separator line ────────────────────────────────────────────────

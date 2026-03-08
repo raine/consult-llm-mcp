@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use ratatui::style::Color;
@@ -30,7 +30,33 @@ pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', 
 pub(crate) enum AppMode {
     Table,
     Detail(DetailState),
+    ThreadDetail(ThreadDetailState),
     ConfirmClearHistory,
+}
+
+pub(crate) struct ThreadDetailState {
+    pub(crate) thread_id: String,
+    /// Consultation IDs in chronological order
+    pub(crate) turn_ids: Vec<String>,
+    /// Pre-parsed events from completed turns (immutable)
+    pub(crate) historical_events: Vec<ParsedStreamEvent>,
+    /// Events from the latest/active turn (may still be streaming)
+    pub(crate) active_events: Vec<ParsedStreamEvent>,
+    /// Byte offset for polling the active turn's .events.jsonl
+    pub(crate) active_file_offset: u64,
+    /// Line index where each turn starts (for jump-to-turn navigation)
+    pub(crate) turn_line_offsets: Vec<usize>,
+    /// Index of the currently focused turn
+    pub(crate) selected_turn: usize,
+    pub(crate) scroll: usize,
+    pub(crate) auto_scroll: bool,
+    // Metadata for header
+    pub(crate) models: Vec<String>,
+    pub(crate) backends: Vec<String>,
+    pub(crate) project: Option<String>,
+    pub(crate) total_duration_ms: u64,
+    pub(crate) turn_count: usize,
+    pub(crate) success: Option<bool>,
 }
 
 pub(crate) struct DetailState {
@@ -116,6 +142,8 @@ pub(crate) struct ActiveConsult {
     pub(crate) started_at: DateTime<Utc>,
     /// Latest progress stage from ConsultProgress events
     pub(crate) last_progress: Option<String>,
+    /// Thread ID if this is a resumed thread consultation
+    pub(crate) thread_id: Option<String>,
 }
 
 pub(crate) struct CompletedConsult {
@@ -131,6 +159,27 @@ pub(crate) struct CompletedConsult {
 pub(crate) struct RowInfo {
     pub(crate) server_id: String,
     pub(crate) consultation_id: String,
+}
+
+/// A display row in the history table — either a single consultation or a thread summary.
+pub(crate) enum HistoryDisplayRow {
+    /// Non-threaded consultation — index into `self.history`
+    Single(usize),
+    /// Thread summary row (collapsed)
+    ThreadSummary {
+        thread_id: String,
+        latest_parsed_ts: Option<DateTime<Utc>>,
+        model: String,
+        backend: String,
+        total_duration_ms: u64,
+        total_tokens_in: Option<u64>,
+        total_tokens_out: Option<u64>,
+        turn_count: usize,
+        success: bool,
+        /// True if models differ across turns
+        mixed_model: bool,
+        project: String,
+    },
 }
 
 impl AppState {
@@ -191,5 +240,95 @@ impl AppState {
     /// Invalidate the cached filter indices.
     pub(crate) fn invalidate_filter_cache(&mut self) {
         self.cached_filter_indices = None;
+    }
+
+    /// Build display rows for the history table, grouping threaded consultations.
+    /// Returns rows in newest-first order (matching history VecDeque order).
+    pub(crate) fn build_history_display_rows(&self) -> Vec<HistoryDisplayRow> {
+        let filtered = self.filtered_history_indices();
+
+        // Group filtered indices by thread_id
+        // Key: thread_id, Value: indices into self.history (in VecDeque order = newest first)
+        let mut thread_groups: HashMap<String, Vec<usize>> = HashMap::new();
+        let mut seen_threads: Vec<String> = Vec::new(); // preserve first-seen order
+        let mut single_rows: Vec<(usize, usize)> = Vec::new(); // (position, history_index)
+
+        for (position, &idx) in filtered.iter().enumerate() {
+            let record = &self.history[idx];
+            if let Some(ref tid) = record.thread_id {
+                if !thread_groups.contains_key(tid) {
+                    seen_threads.push(tid.clone());
+                }
+                thread_groups.entry(tid.clone()).or_default().push(idx);
+            } else {
+                single_rows.push((position, idx));
+            }
+        }
+
+        // Build display rows, maintaining position order
+        // We'll collect all rows with their "sort position" (position of latest entry)
+        let mut rows_with_pos: Vec<(usize, HistoryDisplayRow)> = Vec::new();
+
+        for (position, idx) in single_rows {
+            rows_with_pos.push((position, HistoryDisplayRow::Single(idx)));
+        }
+
+        for tid in &seen_threads {
+            let indices = &thread_groups[tid];
+            if indices.len() == 1 {
+                // Single-turn thread — show as regular row
+                let pos = filtered.iter().position(|&i| i == indices[0]).unwrap_or(0);
+                rows_with_pos.push((pos, HistoryDisplayRow::Single(indices[0])));
+                continue;
+            }
+
+            // Position = earliest position in filtered list (= newest entry, since newest-first)
+            let position = indices
+                .iter()
+                .filter_map(|&i| filtered.iter().position(|&fi| fi == i))
+                .min()
+                .unwrap_or(0);
+
+            // Sort indices chronologically (oldest first) by timestamp for aggregation
+            let mut sorted_indices = indices.clone();
+            sorted_indices.sort_by(|&a, &b| self.history[a].ts.cmp(&self.history[b].ts));
+
+            let latest = &self.history[sorted_indices[sorted_indices.len() - 1]];
+            let first = &self.history[sorted_indices[0]];
+            let models: HashSet<&str> = sorted_indices
+                .iter()
+                .map(|&i| self.history[i].model.as_str())
+                .collect();
+
+            let total_tokens_in = sorted_indices
+                .iter()
+                .filter_map(|&i| self.history[i].tokens_in)
+                .reduce(|a, b| a + b);
+            let total_tokens_out = sorted_indices
+                .iter()
+                .filter_map(|&i| self.history[i].tokens_out)
+                .reduce(|a, b| a + b);
+
+            rows_with_pos.push((
+                position,
+                HistoryDisplayRow::ThreadSummary {
+                    thread_id: tid.clone(),
+                    latest_parsed_ts: latest.parsed_ts,
+                    model: latest.model.clone(),
+                    backend: latest.backend.clone(),
+                    total_duration_ms: indices.iter().map(|&i| self.history[i].duration_ms).sum(),
+                    total_tokens_in,
+                    total_tokens_out,
+                    turn_count: indices.len(),
+                    success: latest.success,
+                    mixed_model: models.len() > 1,
+                    project: first.project.clone(),
+                },
+            ));
+        }
+
+        // Sort by position (preserves original order)
+        rows_with_pos.sort_by_key(|(pos, _)| *pos);
+        rows_with_pos.into_iter().map(|(_, row)| row).collect()
     }
 }

@@ -4,7 +4,13 @@ pub(crate) enum Action {
     MoveDown,
     MoveUp,
     EnterDetail(String),
+    /// Enter thread detail view for a thread_id
+    EnterThreadDetail(String),
     ExitDetail,
+    /// Jump to previous turn in thread detail
+    PrevTurn,
+    /// Jump to next turn in thread detail
+    NextTurn,
     ScrollDown,
     ScrollUp,
     HalfPageDown,

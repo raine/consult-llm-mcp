@@ -120,6 +120,7 @@ fn main() -> io::Result<()> {
             }
 
             let entering_detail = matches!(&action, Action::EnterDetail(_));
+            let entering_thread_detail = matches!(&action, Action::EnterThreadDetail(_));
             let exiting_detail = matches!(&action, Action::ExitDetail);
             let clearing_history = matches!(&action, Action::ClearHistory);
 
@@ -131,6 +132,16 @@ fn main() -> io::Result<()> {
                         consultation_id: detail.consultation_id.clone(),
                         file_offset: detail.file_offset,
                     });
+                }
+            } else if entering_thread_detail {
+                if let AppMode::ThreadDetail(ref detail) = state.mode {
+                    // Poll the latest turn's event file
+                    if let Some(last_cid) = detail.turn_ids.last() {
+                        let _ = cmd_tx.send(PollCommand::EnterDetail {
+                            consultation_id: last_cid.clone(),
+                            file_offset: detail.active_file_offset,
+                        });
+                    }
                 }
             } else if exiting_detail {
                 let _ = cmd_tx.send(PollCommand::ExitDetail);

@@ -22,6 +22,8 @@ pub enum MonitorEvent {
         id: String,
         model: String,
         backend: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thread_id: Option<String>,
     },
     ConsultProgress {
         id: String,
@@ -91,6 +93,8 @@ pub struct HistoryRecord {
     /// Pre-parsed timestamp, populated at ingest time by the monitor.
     #[serde(skip)]
     pub parsed_ts: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
 }
 
 pub fn append_history(record: &HistoryRecord) {
