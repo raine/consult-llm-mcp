@@ -44,12 +44,13 @@ impl ConsultServer {
             .service
             .consult(args, model_explicitly_provided)
             .await
-            .map_err(|e| format!("LLM query failed: {e}"))?;
+            .map_err(|e| format!("LLM query failed: {e:#}"))?;
 
         match outcome {
             ConsultOutcome::Response { body, .. } => Ok(body),
             ConsultOutcome::WebPrompt { clipboard_text } => {
-                copy_to_clipboard(&clipboard_text).map_err(|e| format!("LLM query failed: {e}"))?;
+                copy_to_clipboard(&clipboard_text)
+                    .map_err(|e| format!("LLM query failed: {e:#}"))?;
 
                 Ok("✓ Prompt copied to clipboard!\n\nPlease paste it into your browser-based LLM service and share the response here before I proceed with any implementation.".to_string())
             }

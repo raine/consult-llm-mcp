@@ -50,6 +50,7 @@ pub struct Config {
 }
 
 /// Single source of truth for model availability — drives both schema and validation
+#[derive(Clone)]
 pub struct ModelRegistry {
     pub allowed_models: Vec<String>,
     pub fallback_model: String,
@@ -179,7 +180,7 @@ pub fn filter_by_availability(models: &[String], providers: &ProviderAvailabilit
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
-static REGISTRY: OnceLock<ModelRegistry> = OnceLock::new();
+static REGISTRY: OnceLock<Arc<ModelRegistry>> = OnceLock::new();
 
 pub fn config() -> &'static Config {
     CONFIG.get().expect("config not initialized")
@@ -340,19 +341,14 @@ pub fn init_config() -> Arc<ModelRegistry> {
         allowed_models: enabled_models.clone(),
     });
 
-    let _ = REGISTRY.set(ModelRegistry {
+    let registry = Arc::new(ModelRegistry {
         allowed_models: enabled_models,
         fallback_model,
         default_model,
     });
+    let _ = REGISTRY.set(registry.clone());
 
-    // Return an Arc wrapping the same registry stored in REGISTRY
-    let reg = REGISTRY.get().unwrap();
-    Arc::new(ModelRegistry {
-        allowed_models: reg.allowed_models.clone(),
-        fallback_model: reg.fallback_model.clone(),
-        default_model: reg.default_model.clone(),
-    })
+    registry
 }
 
 #[cfg(test)]

@@ -13,7 +13,11 @@ use crate::schema::ConsultLlmArgs;
 use crate::system_prompt::get_system_prompt;
 
 pub enum ConsultOutcome {
-    Response { body: String, usage: Option<Usage> },
+    Response {
+        body: String,
+        #[allow(dead_code)]
+        usage: Option<Usage>,
+    },
     WebPrompt { clipboard_text: String },
 }
 
@@ -77,7 +81,7 @@ impl ConsultService {
         let history_consultation_id = consultation_id.clone();
 
         match &result {
-            Ok(ConsultOutcome::Response { usage, .. }) => {
+            Ok((_, usage)) => {
                 consult_llm_core::monitoring::emit(
                     consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
                         id: consultation_id,
@@ -100,9 +104,6 @@ impl ConsultService {
                         tokens_out: usage.as_ref().map(|u| u.completion_tokens),
                     },
                 );
-            }
-            Ok(ConsultOutcome::WebPrompt { .. }) => {
-                // Web mode doesn't go through this path, but handle for completeness
             }
             Err(e) => {
                 consult_llm_core::monitoring::emit(
@@ -130,7 +131,7 @@ impl ConsultService {
             }
         }
 
-        result
+        result.map(|(body, usage)| ConsultOutcome::Response { body, usage })
     }
 
     async fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
@@ -160,7 +161,12 @@ impl ConsultService {
         model: &str,
         executor: Arc<dyn LlmExecutor>,
         consultation_id: &str,
-    ) -> anyhow::Result<ConsultOutcome> {
+    ) -> anyhow::Result<(String, Option<Usage>)> {
+        let git_diff = args
+            .git_diff
+            .as_ref()
+            .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
+
         let (prompt, file_paths) = if !executor.capabilities().supports_file_refs {
             // API mode: inline file contents
             let context_files = args
@@ -169,11 +175,6 @@ impl ConsultService {
                 .map(|f| process_files(f))
                 .transpose()?
                 .unwrap_or_default();
-
-            let git_diff = args
-                .git_diff
-                .as_ref()
-                .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
 
             (
                 build_prompt(&args.prompt, &context_files, git_diff.as_deref()),
@@ -191,11 +192,6 @@ impl ConsultService {
                     })
                     .collect()
             });
-
-            let git_diff = args
-                .git_diff
-                .as_ref()
-                .map(|gd| generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref));
 
             let prompt = match git_diff {
                 Some(ref diff) if !diff.trim().is_empty() => {
@@ -228,9 +224,6 @@ impl ConsultService {
             Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),
             None => result.response,
         };
-        Ok(ConsultOutcome::Response {
-            body,
-            usage: result.usage,
-        })
+        Ok((body, result.usage))
     }
 }
