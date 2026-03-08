@@ -81,62 +81,41 @@ impl ConsultService {
             .await;
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
-        let history_consultation_id = consultation_id.clone();
+        let (success, error, tokens_in, tokens_out, thread_id) = match &result {
+            Ok((_, usage, tid)) => (
+                true,
+                None,
+                usage.as_ref().map(|u| u.prompt_tokens),
+                usage.as_ref().map(|u| u.completion_tokens),
+                tid.clone(),
+            ),
+            Err(e) => (false, Some(e.to_string()), None, None, None),
+        };
 
-        match &result {
-            Ok((_, usage, thread_id)) => {
-                consult_llm_core::monitoring::emit(
-                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
-                        id: consultation_id,
-                        duration_ms,
-                        success: true,
-                        error: None,
-                    },
-                );
-                consult_llm_core::monitoring::append_history(
-                    &consult_llm_core::monitoring::HistoryRecord {
-                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                        consultation_id: Some(history_consultation_id),
-                        project: project.clone(),
-                        model: model.clone(),
-                        backend: backend_name.clone(),
-                        duration_ms,
-                        success: true,
-                        error: None,
-                        tokens_in: usage.as_ref().map(|u| u.prompt_tokens),
-                        tokens_out: usage.as_ref().map(|u| u.completion_tokens),
-                        parsed_ts: None,
-                        thread_id: thread_id.clone(),
-                    },
-                );
-            }
-            Err(e) => {
-                consult_llm_core::monitoring::emit(
-                    consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
-                        id: consultation_id,
-                        duration_ms,
-                        success: false,
-                        error: Some(e.to_string()),
-                    },
-                );
-                consult_llm_core::monitoring::append_history(
-                    &consult_llm_core::monitoring::HistoryRecord {
-                        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                        consultation_id: Some(history_consultation_id),
-                        project: project.clone(),
-                        model: model.clone(),
-                        backend: backend_name.clone(),
-                        duration_ms,
-                        success: false,
-                        error: Some(e.to_string()),
-                        tokens_in: None,
-                        tokens_out: None,
-                        parsed_ts: None,
-                        thread_id: None,
-                    },
-                );
-            }
-        }
+        consult_llm_core::monitoring::emit(
+            consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
+                id: consultation_id.clone(),
+                duration_ms,
+                success,
+                error: error.clone(),
+            },
+        );
+        consult_llm_core::monitoring::append_history(
+            &consult_llm_core::monitoring::HistoryRecord {
+                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                consultation_id: Some(consultation_id),
+                project,
+                model,
+                backend: backend_name,
+                duration_ms,
+                success,
+                error,
+                tokens_in,
+                tokens_out,
+                parsed_ts: None,
+                thread_id,
+            },
+        );
 
         result.map(|(body, usage, _)| ConsultOutcome::Response { body, usage })
     }
