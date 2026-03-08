@@ -1,4 +1,4 @@
-# Consult LLM MCP
+# consult-llm-mcp
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.2, Gemini
 3.1 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
@@ -23,7 +23,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 ```
 
 [Quick start](#quick-start) · [Configuration](#configuration) ·
-[Changelog](CHANGELOG.md)
+[Monitor](#monitor) · [Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -41,7 +41,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
   across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
-- Simple: provides just one MCP tool to not clutter the context
+- [Monitor TUI](#monitor): Real-time dashboard for watching active consultations
+- Less is more: Single MCP tool to not clutter the context
 
 ## Quick start
 
@@ -674,6 +675,27 @@ Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.
 
 </details>
 
+## Monitor
+
+`consult-llm-monitor` is a real-time TUI dashboard for watching active
+consultations across all running MCP server instances. It shows what's being
+consulted, which models are in use, and how long each request takes.
+
+The monitor binary is included when you install via the install script (same
+script that installs `consult-llm-mcp`).
+
+```bash
+consult-llm-monitor
+```
+
+The main **table view** shows two panels: active server instances with their
+in-flight consultations, and a history log of completed consultations with
+timestamps, models, durations, and token counts.
+
+Press `Enter` on any consultation to open the **detail view** with the full
+event log - prompt, response with syntax-highlighted markdown, tool calls, and
+token usage. Press `?` for keyboard shortcuts.
+
 ## Activation methods
 
 ### 1. No custom activation (simplest)
@@ -821,24 +843,12 @@ Now when you make changes, rebuild with `cargo build` and restart Claude Code.
 
 ### Releasing
 
-Requires [zig](https://ziglang.org/),
-[cargo-zigbuild](https://github.com/rust-cross/cargo-zigbuild), and
-cross-compilation targets:
-
-```bash
-brew install zig
-cargo install cargo-zigbuild
-rustup target add aarch64-apple-darwin x86_64-apple-darwin x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
-```
-
-Publish a new version:
-
 ```bash
 scripts/publish patch  # or minor, major
 ```
 
-This cross-compiles for all platforms, stages the binaries, publishes to npm,
-then commits and tags.
+This bumps the version in `package.json` and `Cargo.toml`, commits, tags, and
+pushes. GitHub Actions handles cross-compilation and npm publishing.
 
 ## Related projects
 
