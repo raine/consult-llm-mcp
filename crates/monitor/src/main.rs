@@ -47,6 +47,12 @@ enum AppMode {
     },
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Focus {
+    Active,
+    History,
+}
+
 struct AppState {
     servers: HashMap<String, ServerState>,
     server_order: Vec<String>,
@@ -56,6 +62,9 @@ struct AppState {
     row_count: usize,
     tick: usize,
     table_state: TableState,
+    focus: Focus,
+    history_selected: usize,
+    history_table_state: TableState,
     mode: AppMode,
     history: VecDeque<HistoryRecord>,
     history_offset: u64,
@@ -137,6 +146,9 @@ impl AppState {
             row_count: 0,
             tick: 0,
             table_state: TableState::default(),
+            focus: Focus::Active,
+            history_selected: 0,
+            history_table_state: TableState::default(),
             mode: AppMode::Table,
             history: VecDeque::new(),
             history_offset: 0,
@@ -755,7 +767,11 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
             .border_style(Style::default().fg(SEPARATOR)),
     );
 
-    state.table_state.select(Some(state.selected));
+    if state.focus == Focus::Active {
+        state.table_state.select(Some(state.selected));
+    } else {
+        state.table_state.select(None);
+    }
     frame.render_stateful_widget(table, area, &mut state.table_state);
 }
 
@@ -920,7 +936,7 @@ fn format_token_count(n: u64) -> String {
     }
 }
 
-fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
+fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let header = Row::new(vec![
         "Time", "Project", "Model", "Backend", "Duration", "Tokens", "✓",
     ])
@@ -974,24 +990,38 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &AppState
         ],
     )
     .header(header)
+    .row_highlight_style(Style::default().bg(SELECTED_BG))
     .block(
         Block::default()
             .title(Line::from(vec![Span::styled(
                 " History ",
-                Style::default().fg(DIM_WHITE),
+                Style::default().fg(if state.focus == Focus::History {
+                    TEAL
+                } else {
+                    DIM_WHITE
+                }),
             )]))
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(SEPARATOR)),
     );
 
-    frame.render_widget(table, area);
+    if state.focus == Focus::History && !state.history.is_empty() {
+        state
+            .history_table_state
+            .select(Some(state.history_selected));
+    } else {
+        state.history_table_state.select(None);
+    }
+    frame.render_stateful_widget(table, area, &mut state.history_table_state);
 }
 
 fn render_status_bar(frame: &mut ratatui::Frame, area: Rect) {
     let bar = Line::from(vec![
         Span::styled(" j/k", Style::default().fg(TEAL)),
         Span::styled(" navigate  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("Tab", Style::default().fg(TEAL)),
+        Span::styled(" switch  ", Style::default().fg(DIM_WHITE)),
         Span::styled("Enter", Style::default().fg(TEAL)),
         Span::styled(" detail  ", Style::default().fg(DIM_WHITE)),
         Span::styled("q", Style::default().fg(TEAL)),
@@ -1056,16 +1086,36 @@ fn main() -> io::Result<()> {
                 AppMode::Table => match key.code {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-                    KeyCode::Char('j') | KeyCode::Down => {
-                        if state.row_count > 0 {
-                            state.selected = (state.selected + 1).min(state.row_count - 1);
+                    KeyCode::Tab | KeyCode::BackTab => {
+                        state.focus = match state.focus {
+                            Focus::Active => Focus::History,
+                            Focus::History => Focus::Active,
+                        };
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => match state.focus {
+                        Focus::Active => {
+                            if state.row_count > 0 {
+                                state.selected = (state.selected + 1).min(state.row_count - 1);
+                            }
                         }
-                    }
-                    KeyCode::Char('k') | KeyCode::Up => {
-                        state.selected = state.selected.saturating_sub(1);
-                    }
+                        Focus::History => {
+                            if !state.history.is_empty() {
+                                state.history_selected =
+                                    (state.history_selected + 1).min(state.history.len() - 1);
+                            }
+                        }
+                    },
+                    KeyCode::Char('k') | KeyCode::Up => match state.focus {
+                        Focus::Active => {
+                            state.selected = state.selected.saturating_sub(1);
+                        }
+                        Focus::History => {
+                            state.history_selected = state.history_selected.saturating_sub(1);
+                        }
+                    },
                     KeyCode::Enter => {
-                        if let Some(info) = row_infos.get(state.selected)
+                        if state.focus == Focus::Active
+                            && let Some(info) = row_infos.get(state.selected)
                             && !info.consultation_id.is_empty()
                         {
                             let cid = info.consultation_id.clone();
