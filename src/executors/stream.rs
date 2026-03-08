@@ -16,20 +16,15 @@ pub fn tool_label(name: &str, detail: Option<&str>) -> String {
     }
 }
 
-/// Accumulates stream events into a final result and emits monitoring progress.
-pub struct StreamReducer {
-    pub thread_id: Option<String>,
-    pub response: String,
-    pub usage: Option<Usage>,
-    consultation_id: Option<String>,
-    active_tools: HashMap<String, String>,
-    last_stage: Option<String>,
-    sidecar: Option<BufWriter<File>>,
+/// Writes ParsedStreamEvent entries to a sidecar `.events.jsonl` file.
+/// Used by both streaming CLI executors and the API executor.
+pub struct SidecarWriter {
+    writer: Option<BufWriter<File>>,
 }
 
-impl StreamReducer {
-    pub fn new(consultation_id: Option<&str>, prompt: Option<&str>) -> Self {
-        let sidecar = consultation_id.and_then(|cid| {
+impl SidecarWriter {
+    pub fn new(consultation_id: Option<&str>) -> Self {
+        let writer = consultation_id.and_then(|cid| {
             let dir = monitoring::sessions_dir();
             let path = dir.join(format!("{cid}.events.jsonl"));
             OpenOptions::new()
@@ -39,7 +34,39 @@ impl StreamReducer {
                 .ok()
                 .map(BufWriter::new)
         });
-        let mut reducer = Self {
+        Self { writer }
+    }
+
+    pub fn write(&mut self, event: &ParsedStreamEvent) {
+        if let Some(ref mut w) = self.writer
+            && let Ok(line) = serde_json::to_string(event)
+        {
+            let _ = writeln!(w, "{line}");
+            let _ = w.flush();
+        }
+    }
+}
+
+/// Accumulates stream events into a final result and emits monitoring progress.
+pub struct StreamReducer {
+    pub thread_id: Option<String>,
+    pub response: String,
+    pub usage: Option<Usage>,
+    consultation_id: Option<String>,
+    active_tools: HashMap<String, String>,
+    last_stage: Option<String>,
+    sidecar: SidecarWriter,
+}
+
+impl StreamReducer {
+    pub fn new(consultation_id: Option<&str>, prompt: Option<&str>) -> Self {
+        let mut sidecar = SidecarWriter::new(consultation_id);
+        if let Some(text) = prompt {
+            sidecar.write(&ParsedStreamEvent::Prompt {
+                text: text.to_string(),
+            });
+        }
+        Self {
             thread_id: None,
             response: String::new(),
             usage: None,
@@ -47,28 +74,13 @@ impl StreamReducer {
             active_tools: HashMap::new(),
             last_stage: None,
             sidecar,
-        };
-        if let Some(text) = prompt {
-            reducer.write_sidecar(&ParsedStreamEvent::Prompt {
-                text: text.to_string(),
-            });
-        }
-        reducer
-    }
-
-    fn write_sidecar(&mut self, event: &ParsedStreamEvent) {
-        if let Some(ref mut writer) = self.sidecar
-            && let Ok(line) = serde_json::to_string(event)
-        {
-            let _ = writeln!(writer, "{line}");
-            let _ = writer.flush();
         }
     }
 
     /// Process a batch of parsed events from a single line.
     pub fn process(&mut self, events: Vec<ParsedStreamEvent>) {
         for event in events {
-            self.write_sidecar(&event);
+            self.sidecar.write(&event);
             match event {
                 ParsedStreamEvent::SessionStarted { id } => {
                     self.thread_id = Some(id);
