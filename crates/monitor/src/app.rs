@@ -5,6 +5,7 @@ use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
+use arboard::Clipboard;
 use consult_llm_core::monitoring::{EventEnvelope, HISTORY_FILE, MonitorEvent};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
@@ -111,6 +112,30 @@ impl AppState {
             }
             Action::ToggleHelp => {
                 self.show_help = !self.show_help;
+            }
+            Action::YankResponse => {
+                if let AppMode::Detail(ref detail) = self.mode {
+                    let last_text = detail.events.iter().rev().find_map(|e| match e {
+                        ParsedStreamEvent::AssistantText { text } if !text.is_empty() => {
+                            Some(text.clone())
+                        }
+                        _ => None,
+                    });
+
+                    match last_text {
+                        Some(text) => match Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
+                            Ok(()) => {
+                                self.flash = Some(("Copied to clipboard".into(), 20));
+                            }
+                            Err(e) => {
+                                self.flash = Some((format!("Clipboard error: {e}"), 20));
+                            }
+                        },
+                        None => {
+                            self.flash = Some(("No assistant response to copy".into(), 20));
+                        }
+                    }
+                }
             }
         }
     }

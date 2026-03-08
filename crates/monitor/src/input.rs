@@ -88,6 +88,7 @@ fn handle_detail_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('d') => Some(Action::HalfPageDown),
         KeyCode::Char('u') => Some(Action::HalfPageUp),
         KeyCode::Char('G') => Some(Action::ScrollToBottom),
+        KeyCode::Char('y') => Some(Action::YankResponse),
         _ => None,
     }
 }

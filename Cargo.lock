@@ -310,6 +310,7 @@ dependencies = [
 name = "consult-llm-monitor"
 version = "2.5.6"
 dependencies = [
+ "arboard",
  "chrono",
  "consult-llm-core",
  "crossterm",

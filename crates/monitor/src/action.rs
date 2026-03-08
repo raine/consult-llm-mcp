@@ -15,4 +15,5 @@ pub(crate) enum Action {
     ClearHistory,
     CancelClear,
     ToggleHelp,
+    YankResponse,
 }
