@@ -125,14 +125,12 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
 
     // Status bar
     let bar = Line::from(vec![
-        Span::styled(" Esc", Style::default().fg(TEAL)),
+        Span::styled(" q/Esc", Style::default().fg(TEAL)),
         Span::styled(" back  ", Style::default().fg(DIM_WHITE)),
         Span::styled("j/k", Style::default().fg(TEAL)),
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
         Span::styled("d/u", Style::default().fg(TEAL)),
-        Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
-        Span::styled("q", Style::default().fg(TEAL)),
-        Span::styled(" quit", Style::default().fg(DIM_WHITE)),
+        Span::styled(" half-page", Style::default().fg(DIM_WHITE)),
     ]);
     frame.render_widget(
         Paragraph::new(bar).style(Style::default().bg(BG)),
