@@ -70,6 +70,20 @@ impl AppState {
                     detail.auto_scroll = false;
                 }
             }
+            Action::HalfPageDown => {
+                if let AppMode::Detail(ref mut detail) = self.mode {
+                    let half = self.detail_inner_height / 2;
+                    detail.scroll = detail.scroll.saturating_add(half.max(1));
+                    detail.auto_scroll = false;
+                }
+            }
+            Action::HalfPageUp => {
+                if let AppMode::Detail(ref mut detail) = self.mode {
+                    let half = self.detail_inner_height / 2;
+                    detail.scroll = detail.scroll.saturating_sub(half.max(1));
+                    detail.auto_scroll = false;
+                }
+            }
             Action::ScrollToBottom => {
                 if let AppMode::Detail(ref mut detail) = self.mode {
                     detail.scroll = usize::MAX;

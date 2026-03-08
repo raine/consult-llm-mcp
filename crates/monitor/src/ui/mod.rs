@@ -12,13 +12,8 @@ pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
 
     match &state.mode {
         AppMode::Table => table::render_table_view(frame, area, state),
-        AppMode::Detail(detail) => {
-            let (cid, events, scroll) = (
-                detail.consultation_id.clone(),
-                detail.events.clone(),
-                detail.scroll,
-            );
-            detail::render_detail_view(frame, area, &cid, &events, scroll);
+        AppMode::Detail(_) => {
+            detail::render_detail_view(frame, area, state);
         }
     }
 }

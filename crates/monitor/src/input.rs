@@ -67,6 +67,8 @@ fn handle_detail_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Esc => Some(Action::ExitDetail),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::ScrollDown),
         KeyCode::Char('k') | KeyCode::Up => Some(Action::ScrollUp),
+        KeyCode::Char('d') => Some(Action::HalfPageDown),
+        KeyCode::Char('u') => Some(Action::HalfPageUp),
         KeyCode::Char('G') => Some(Action::ScrollToBottom),
         _ => None,
     }

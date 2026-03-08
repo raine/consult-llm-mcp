@@ -5,15 +5,16 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use crate::state::{BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, TEAL, WHITE, YELLOW};
+use crate::state::{AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, TEAL, WHITE, YELLOW};
 
-pub(super) fn render_detail_view(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    consultation_id: &str,
-    events: &[ParsedStreamEvent],
-    scroll: usize,
-) {
+pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
+    let AppMode::Detail(ref detail) = state.mode else {
+        return;
+    };
+
+    let consultation_id = detail.consultation_id.clone();
+    let events: Vec<&ParsedStreamEvent> = detail.events.iter().collect();
+
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(3),
@@ -39,7 +40,7 @@ pub(super) fn render_detail_view(
 
     // Event timeline
     let mut lines: Vec<Line> = Vec::new();
-    for event in events {
+    for event in events.iter() {
         match event {
             ParsedStreamEvent::SessionStarted { id } => {
                 lines.push(Line::from(vec![Span::styled(
@@ -96,7 +97,15 @@ pub(super) fn render_detail_view(
     let inner_height = chunks[1].height.saturating_sub(2) as usize;
     let total_lines = lines.len();
     let max_scroll = total_lines.saturating_sub(inner_height);
-    let effective_scroll = scroll.min(max_scroll);
+    state.detail_inner_height = inner_height;
+
+    // Clamp scroll and persist so j/k/d/u operate on real values next frame
+    let effective_scroll = if let AppMode::Detail(ref mut detail) = state.mode {
+        detail.scroll = detail.scroll.min(max_scroll);
+        detail.scroll
+    } else {
+        0
+    };
 
     let visible_lines: Vec<Line> = lines
         .into_iter()
@@ -118,6 +127,8 @@ pub(super) fn render_detail_view(
         Span::styled(" back  ", Style::default().fg(DIM_WHITE)),
         Span::styled("j/k", Style::default().fg(TEAL)),
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("d/u", Style::default().fg(TEAL)),
+        Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
         Span::styled("q", Style::default().fg(TEAL)),
         Span::styled(" quit", Style::default().fg(DIM_WHITE)),
     ]);

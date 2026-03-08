@@ -60,6 +60,8 @@ pub(crate) struct AppState {
     pub(crate) history_offset: u64,
     /// Transient message shown in status bar, cleared after a few renders
     pub(crate) flash: Option<(String, u8)>,
+    /// Last known inner height of the detail view (for half-page scroll)
+    pub(crate) detail_inner_height: usize,
 }
 
 pub(crate) struct ServerState {
@@ -117,6 +119,7 @@ impl AppState {
             history: VecDeque::new(),
             history_offset: 0,
             flash: None,
+            detail_inner_height: 0,
         }
     }
 }

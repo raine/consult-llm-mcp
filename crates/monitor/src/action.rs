@@ -7,6 +7,8 @@ pub(crate) enum Action {
     ExitDetail,
     ScrollDown,
     ScrollUp,
+    HalfPageDown,
+    HalfPageUp,
     ScrollToBottom,
     Flash(String, u8),
 }
