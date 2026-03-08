@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::stream::{ParsedStreamEvent, tool_label};
+use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, run_cli_executor};
 use crate::external_dirs::get_external_directories;
@@ -23,43 +23,47 @@ impl GeminiCliExecutor {
     }
 }
 
-pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
+pub fn parse_gemini_line(line: &str) -> StreamEvents {
+    use smallvec::smallvec;
+
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return vec![];
+        return smallvec![];
     }
     let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-        return vec![];
+        return smallvec![];
     };
 
     match event.get("type").and_then(|t| t.as_str()) {
         Some("init") => {
-            let mut events = vec![ParsedStreamEvent::Thinking {
-                text: String::new(),
-            }];
             if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
-                events.insert(
-                    0,
+                smallvec![
                     ParsedStreamEvent::SessionStarted {
                         id: sid.to_string(),
                     },
-                );
+                    ParsedStreamEvent::Thinking {
+                        text: String::new(),
+                    },
+                ]
+            } else {
+                smallvec![ParsedStreamEvent::Thinking {
+                    text: String::new(),
+                }]
             }
-            events
         }
         Some("message") => {
             if event.get("role").and_then(|r| r.as_str()) == Some("assistant")
                 && event.get("delta").and_then(|d| d.as_bool()) == Some(true)
             {
                 if let Some(content) = event.get("content").and_then(|c| c.as_str()) {
-                    vec![ParsedStreamEvent::AssistantText {
+                    smallvec![ParsedStreamEvent::AssistantText {
                         text: content.to_string(),
                     }]
                 } else {
-                    vec![]
+                    smallvec![]
                 }
             } else {
-                vec![]
+                smallvec![]
             }
         }
         Some("tool_use") => {
@@ -93,7 +97,7 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
                 .and_then(|t| t.as_str())
                 .unwrap_or("")
                 .to_string();
-            vec![ParsedStreamEvent::ToolStarted { call_id, label }]
+            smallvec![ParsedStreamEvent::ToolStarted { call_id, label }]
         }
         Some("tool_result") => {
             let call_id = event
@@ -102,7 +106,7 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
                 .unwrap_or("")
                 .to_string();
             let success = event.get("status").and_then(|s| s.as_str()) == Some("success");
-            vec![ParsedStreamEvent::ToolFinished { call_id, success }]
+            smallvec![ParsedStreamEvent::ToolFinished { call_id, success }]
         }
         Some("result") => {
             if let Some(stats) = event.get("stats") {
@@ -114,15 +118,15 @@ pub fn parse_gemini_line(line: &str) -> Vec<ParsedStreamEvent> {
                     .get("output_tokens")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
-                vec![ParsedStreamEvent::Usage {
+                smallvec![ParsedStreamEvent::Usage {
                     prompt_tokens: input,
                     completion_tokens: output,
                 }]
             } else {
-                vec![]
+                smallvec![]
             }
         }
-        _ => vec![],
+        _ => smallvec![],
     }
 }
 

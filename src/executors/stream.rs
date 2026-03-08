@@ -3,9 +3,14 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 
 use consult_llm_core::monitoring::{self, ProgressStage};
+use smallvec::SmallVec;
 
 use super::types::Usage;
 pub use consult_llm_core::stream_events::ParsedStreamEvent;
+
+/// Most parsed lines produce 0-2 events; SmallVec avoids heap allocation
+/// for the common case.
+pub type StreamEvents = SmallVec<[ParsedStreamEvent; 2]>;
 
 /// Format a tool label with an optional detail (file path, pattern, etc.)
 /// e.g. ("read", Some("src/main.rs")) → "read src/main.rs"
@@ -86,7 +91,7 @@ impl StreamReducer {
     /// Flushes the sidecar on tool and lifecycle boundaries for monitor
     /// visibility, but skips flushing on high-frequency text deltas to
     /// avoid a syscall per streamed token.
-    pub fn process(&mut self, events: Vec<ParsedStreamEvent>) {
+    pub fn process(&mut self, events: StreamEvents) {
         let mut needs_flush = false;
         for event in events {
             self.sidecar.write(&event);

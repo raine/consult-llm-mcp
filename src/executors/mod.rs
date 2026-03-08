@@ -9,7 +9,7 @@ pub mod types;
 use std::path::PathBuf;
 
 use cli_runner::run_cli_streaming;
-use stream::{ParsedStreamEvent, StreamReducer};
+use stream::{StreamEvents, StreamReducer};
 use types::ExecuteResult;
 
 /// Format file paths as relative `@path` references appended to the prompt.
@@ -38,7 +38,7 @@ pub async fn run_cli_executor(
     args: &[String],
     prompt: &str,
     consultation_id: Option<&str>,
-    parse_line: fn(&str) -> Vec<ParsedStreamEvent>,
+    parse_line: fn(&str) -> StreamEvents,
 ) -> anyhow::Result<ExecuteResult> {
     let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
     let result = run_cli_streaming(command, args, |line| {

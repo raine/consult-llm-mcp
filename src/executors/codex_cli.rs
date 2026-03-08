@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 
-use super::stream::ParsedStreamEvent;
+use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, run_cli_executor};
 use crate::config::config;
@@ -24,27 +24,29 @@ impl CodexCliExecutor {
     }
 }
 
-pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
+pub fn parse_codex_line(line: &str) -> StreamEvents {
+    use smallvec::smallvec;
+
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return vec![];
+        return smallvec![];
     }
     let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-        return vec![];
+        return smallvec![];
     };
     let event_type = event.get("type").and_then(|t| t.as_str());
 
     match event_type {
         Some("thread.started") => {
             if let Some(tid) = event.get("thread_id").and_then(|t| t.as_str()) {
-                vec![ParsedStreamEvent::SessionStarted {
+                smallvec![ParsedStreamEvent::SessionStarted {
                     id: tid.to_string(),
                 }]
             } else {
-                vec![]
+                smallvec![]
             }
         }
-        Some("turn.started") => vec![ParsedStreamEvent::Thinking {
+        Some("turn.started") => smallvec![ParsedStreamEvent::Thinking {
             text: String::new(),
         }],
         Some("item.started") => {
@@ -55,7 +57,7 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
                     .get("command")
                     .and_then(|c| c.as_str())
                     .unwrap_or("command");
-                vec![ParsedStreamEvent::ToolStarted {
+                smallvec![ParsedStreamEvent::ToolStarted {
                     call_id: item
                         .get("id")
                         .and_then(|i| i.as_str())
@@ -64,7 +66,7 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
                     label: extract_shell_command(cmd),
                 }]
             } else {
-                vec![]
+                smallvec![]
             }
         }
         Some("item.completed") => {
@@ -73,7 +75,7 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
                     Some("command_execution") => {
                         let success =
                             item.get("status").and_then(|s| s.as_str()) == Some("completed");
-                        vec![ParsedStreamEvent::ToolFinished {
+                        smallvec![ParsedStreamEvent::ToolFinished {
                             call_id: item
                                 .get("id")
                                 .and_then(|i| i.as_str())
@@ -86,32 +88,32 @@ pub fn parse_codex_line(line: &str) -> Vec<ParsedStreamEvent> {
                         if let Some(text) = item.get("text").and_then(|t| t.as_str())
                             && !text.is_empty()
                         {
-                            vec![ParsedStreamEvent::AssistantText {
+                            smallvec![ParsedStreamEvent::AssistantText {
                                 text: format!("{text}\n"),
                             }]
                         } else {
-                            vec![]
+                            smallvec![]
                         }
                     }
-                    _ => vec![],
+                    _ => smallvec![],
                 }
             } else {
-                vec![]
+                smallvec![]
             }
         }
         Some("turn.completed") => {
             if let Some(u) = event.get("usage") {
                 let input = u.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
                 let output = u.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
-                vec![ParsedStreamEvent::Usage {
+                smallvec![ParsedStreamEvent::Usage {
                     prompt_tokens: input,
                     completion_tokens: output,
                 }]
             } else {
-                vec![]
+                smallvec![]
             }
         }
-        _ => vec![],
+        _ => smallvec![],
     }
 }
 

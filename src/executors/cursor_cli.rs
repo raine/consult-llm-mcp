@@ -1,8 +1,9 @@
 use async_trait::async_trait;
+use smallvec::SmallVec;
 use std::path::PathBuf;
 
 use super::run_cli_executor;
-use super::stream::{ParsedStreamEvent, tool_label};
+use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use crate::config::config;
 
@@ -22,13 +23,15 @@ impl CursorCliExecutor {
     }
 }
 
-pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
+pub fn parse_cursor_line(line: &str) -> StreamEvents {
+    use smallvec::smallvec;
+
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return vec![];
+        return smallvec![];
     }
     let Ok(event) = serde_json::from_str::<serde_json::Value>(trimmed) else {
-        return vec![];
+        return smallvec![];
     };
     let event_type = event.get("type").and_then(|t| t.as_str());
     let subtype = event.get("subtype").and_then(|t| t.as_str());
@@ -36,11 +39,11 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
     match event_type {
         Some("system") if subtype == Some("init") => {
             if let Some(sid) = event.get("session_id").and_then(|v| v.as_str()) {
-                vec![ParsedStreamEvent::SessionStarted {
+                smallvec![ParsedStreamEvent::SessionStarted {
                     id: sid.to_string(),
                 }]
             } else {
-                vec![]
+                smallvec![]
             }
         }
         Some("thinking") if subtype == Some("delta") => {
@@ -49,7 +52,7 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
                 .and_then(|t| t.as_str())
                 .unwrap_or("")
                 .to_string();
-            vec![ParsedStreamEvent::Thinking { text }]
+            smallvec![ParsedStreamEvent::Thinking { text }]
         }
         Some("tool_call") => {
             let tc = event.get("tool_call");
@@ -63,24 +66,24 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
                     let label = tc
                         .map(extract_cursor_tool_name)
                         .unwrap_or_else(|| "tool".to_string());
-                    vec![ParsedStreamEvent::ToolStarted { call_id, label }]
+                    smallvec![ParsedStreamEvent::ToolStarted { call_id, label }]
                 }
                 Some("completed") => {
                     let success = tc.map(is_cursor_tool_success).unwrap_or(false);
-                    vec![ParsedStreamEvent::ToolFinished { call_id, success }]
+                    smallvec![ParsedStreamEvent::ToolFinished { call_id, success }]
                 }
-                _ => vec![],
+                _ => smallvec![],
             }
         }
         Some("assistant") => {
             // Emit Responding progress without accumulating text —
             // full response comes from the result event
-            vec![ParsedStreamEvent::AssistantText {
+            smallvec![ParsedStreamEvent::AssistantText {
                 text: String::new(),
             }]
         }
         Some("result") => {
-            let mut events = vec![];
+            let mut events = SmallVec::new();
             if let Some(text) = event.get("result").and_then(|v| v.as_str()) {
                 events.push(ParsedStreamEvent::AssistantText {
                     text: text.to_string(),
@@ -96,7 +99,7 @@ pub fn parse_cursor_line(line: &str) -> Vec<ParsedStreamEvent> {
             }
             events
         }
-        _ => vec![],
+        _ => smallvec![],
     }
 }
 

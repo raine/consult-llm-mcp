@@ -36,6 +36,7 @@ arboard = "3"
 chrono = { workspace = true }
 pathdiff = "0.2"
 uuid = { workspace = true }
+smallvec = "1"
 
 [[bin]]
 name = "consult-llm-mcp"
