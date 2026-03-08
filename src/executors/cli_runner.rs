@@ -56,6 +56,17 @@ where
         })?;
 
     let stdout = child.stdout.take().expect("stdout was piped");
+    let stderr_pipe = child.stderr.take().expect("stderr was piped");
+
+    // Read stdout and stderr concurrently to avoid deadlock when
+    // the child fills one pipe buffer while we're blocking on the other.
+    let stderr_task = tokio::spawn(async move {
+        let mut buf = String::new();
+        let mut reader = BufReader::new(stderr_pipe);
+        tokio::io::AsyncReadExt::read_to_string(&mut reader, &mut buf).await?;
+        Ok::<_, std::io::Error>(buf)
+    });
+
     let mut reader = BufReader::new(stdout).lines();
     let mut all_stdout = String::new();
 
@@ -65,14 +76,14 @@ where
         all_stdout.push('\n');
     }
 
-    let output = child.wait_with_output().await?;
+    let status = child.wait().await?;
     let duration_ms = start.elapsed().as_millis();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let stderr = stderr_task.await??;
 
     let result = CliResult {
         stdout: all_stdout,
         stderr,
-        code: output.status.code(),
+        code: status.code(),
         duration_ms,
     };
 
