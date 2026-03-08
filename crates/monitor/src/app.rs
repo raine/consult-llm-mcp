@@ -273,6 +273,10 @@ impl AppState {
             duration_ms: meta.duration_ms,
             success: meta.success,
             project: meta.project,
+            cached_lines: None,
+            cached_event_count: 0,
+            cached_width: 0,
+            cached_has_active_tools: false,
         });
     }
 

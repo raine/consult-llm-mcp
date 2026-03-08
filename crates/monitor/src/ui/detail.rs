@@ -187,11 +187,29 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         chunks[0],
     );
 
-    // ── Pass 1: normalize events → blocks ───────────────────────────
-    let blocks = normalize_events(&detail.events);
+    // ── Cached content rendering ────────────────────────────────────
+    // normalize_events + render_blocks (with markdown/syntect) is expensive.
+    // Cache the result and only recompute when events change, width changes,
+    // or in-progress tool spinners need animation.
+    let event_count = detail.events.len();
+    let has_active_tools = detail.events.iter().any(|e| {
+        matches!(e, ParsedStreamEvent::ToolStarted { call_id, .. }
+            if !detail.events.iter().any(|e2| matches!(e2, ParsedStreamEvent::ToolFinished { call_id: cid, .. } if cid == call_id)))
+    });
 
-    // ── Pass 2: blocks → ratatui lines ──────────────────────────────
-    let mut lines = render_blocks(&blocks, inner_width, tick);
+    let cache_valid = detail.cached_lines.is_some()
+        && detail.cached_event_count == event_count
+        && detail.cached_width == inner_width
+        && !has_active_tools
+        && !detail.cached_has_active_tools;
+
+    let mut lines = if cache_valid {
+        detail.cached_lines.clone().unwrap()
+    } else {
+        let blocks = normalize_events(&detail.events);
+
+        render_blocks(&blocks, inner_width, tick)
+    };
 
     // Append a spinner when the consultation is still live
     if is_live {
@@ -201,6 +219,20 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             format!("  {spinner} Generating..."),
             Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
         )]));
+    }
+
+    // Update cache (store lines before the live spinner was appended)
+    if !cache_valid && let AppMode::Detail(ref mut detail) = state.mode {
+        let cache_lines = if is_live {
+            // Remove the 2 spinner lines we just appended
+            lines[..lines.len().saturating_sub(2)].to_vec()
+        } else {
+            lines.clone()
+        };
+        detail.cached_lines = Some(cache_lines);
+        detail.cached_event_count = event_count;
+        detail.cached_width = inner_width;
+        detail.cached_has_active_tools = has_active_tools;
     }
 
     // ── Scroll / viewport ───────────────────────────────────────────

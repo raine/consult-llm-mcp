@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use ratatui::style::Color;
 use ratatui::widgets::TableState;
 
+use ratatui::text::Line as RatatuiLine;
+
 use consult_llm_core::monitoring::HistoryRecord;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
@@ -24,6 +26,7 @@ pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', 
 
 // ── Types ────────────────────────────────────────────────────────────────
 
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum AppMode {
     Table,
     Detail(DetailState),
@@ -42,6 +45,14 @@ pub(crate) struct DetailState {
     pub(crate) duration_ms: Option<u64>,
     pub(crate) success: Option<bool>,
     pub(crate) project: Option<String>,
+    /// Cached rendered lines from normalize_events + render_blocks.
+    pub(crate) cached_lines: Option<Vec<RatatuiLine<'static>>>,
+    /// Event count when cache was built (invalidate when events arrive).
+    pub(crate) cached_event_count: usize,
+    /// Inner width when cache was built (invalidate on resize).
+    pub(crate) cached_width: usize,
+    /// Whether any in-progress tools existed at cache time (spinners need re-render).
+    pub(crate) cached_has_active_tools: bool,
 }
 
 pub(crate) struct DetailMetadata {
