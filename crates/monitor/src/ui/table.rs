@@ -133,29 +133,31 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                 let elapsed_str = format_duration_friendly(elapsed_ms);
                 let show_server = is_first_row && i == 0;
                 let spinner = SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()];
-                let consult_text = match &consult.last_progress {
-                    Some(progress) => format!("{} ({})", consult.model, progress),
-                    None => format!("{} ({})", consult.model, consult.backend),
-                };
-                let mut consult_spans = vec![Span::styled(
-                    format!("{spinner} "),
-                    Style::default().fg(TEAL),
-                )];
-                // Show thread badge if this is a resumed thread consultation
-                if let Some(ref tid) = consult.thread_id {
+                let thread_suffix = consult.thread_id.as_ref().map(|tid| {
                     let turn_num = state
                         .history
                         .iter()
                         .filter(|h| h.thread_id.as_deref() == Some(tid))
                         .count()
                         + 1;
-                    consult_spans.push(Span::styled(
-                        format!("\u{21ba}t{turn_num} "),
-                        Style::default().fg(DIM),
-                    ));
-                }
-                consult_spans.push(Span::styled(consult_text, Style::default().fg(WHITE)));
-                let consult_cell = Line::from(consult_spans);
+                    format!(" t{turn_num}")
+                });
+                let consult_text = match (&consult.last_progress, &thread_suffix) {
+                    (Some(progress), Some(t)) => {
+                        format!("{} ({} ·{})", consult.model, progress, t)
+                    }
+                    (Some(progress), None) => {
+                        format!("{} ({})", consult.model, progress)
+                    }
+                    (None, Some(t)) => {
+                        format!("{} ({} ·{})", consult.model, consult.backend, t)
+                    }
+                    (None, None) => format!("{} ({})", consult.model, consult.backend),
+                };
+                let consult_cell = Line::from(vec![
+                    Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
+                    Span::styled(consult_text, Style::default().fg(WHITE)),
+                ]);
                 rows.push(Row::new(vec![
                     Line::from(Span::styled(
                         if show_server {
