@@ -70,6 +70,8 @@ struct AppState {
     history_offset: u64,
     /// Transient message shown in status bar, cleared after a few renders
     flash: Option<(String, u8)>,
+    /// Last known inner height of the detail view (for half-page scroll)
+    detail_inner_height: usize,
 }
 
 struct ServerState {
@@ -155,6 +157,7 @@ impl AppState {
             history: VecDeque::new(),
             history_offset: 0,
             flash: None,
+            detail_inner_height: 0,
         }
     }
 
@@ -531,14 +534,8 @@ fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
 
     match &state.mode {
         AppMode::Table => render_table_view(frame, area, state),
-        AppMode::Detail {
-            consultation_id,
-            events,
-            scroll,
-            ..
-        } => {
-            let (cid, events, scroll) = (consultation_id.clone(), events.clone(), *scroll);
-            render_detail_view(frame, area, &cid, &events, scroll);
+        AppMode::Detail { .. } => {
+            render_detail_view(frame, area, state);
         }
     }
 }
@@ -793,13 +790,15 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     frame.render_stateful_widget(table, area, &mut state.table_state);
 }
 
-fn render_detail_view(
-    frame: &mut ratatui::Frame,
-    area: Rect,
-    consultation_id: &str,
-    events: &[ParsedStreamEvent],
-    scroll: usize,
-) {
+fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
+    let AppMode::Detail {
+        ref consultation_id,
+        ref events,
+        ..
+    } = state.mode
+    else {
+        return;
+    };
     let chunks = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(3),
@@ -825,7 +824,7 @@ fn render_detail_view(
 
     // Event timeline
     let mut lines: Vec<Line> = Vec::new();
-    for event in events {
+    for event in events.iter() {
         match event {
             ParsedStreamEvent::SessionStarted { id } => {
                 lines.push(Line::from(vec![Span::styled(
@@ -882,7 +881,15 @@ fn render_detail_view(
     let inner_height = chunks[1].height.saturating_sub(2) as usize;
     let total_lines = lines.len();
     let max_scroll = total_lines.saturating_sub(inner_height);
-    let effective_scroll = scroll.min(max_scroll);
+    state.detail_inner_height = inner_height;
+
+    // Clamp scroll and persist so j/k/d/u operate on real values next frame
+    let effective_scroll = if let AppMode::Detail { ref mut scroll, .. } = state.mode {
+        *scroll = (*scroll).min(max_scroll);
+        *scroll
+    } else {
+        0
+    };
 
     let visible_lines: Vec<Line> = lines
         .into_iter()
@@ -904,6 +911,8 @@ fn render_detail_view(
         Span::styled(" back  ", Style::default().fg(DIM_WHITE)),
         Span::styled("j/k", Style::default().fg(TEAL)),
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("d/u", Style::default().fg(TEAL)),
+        Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
         Span::styled("q", Style::default().fg(TEAL)),
         Span::styled(" quit", Style::default().fg(DIM_WHITE)),
     ]);
@@ -1234,6 +1243,30 @@ fn main() -> io::Result<()> {
                         } = &mut state.mode
                         {
                             *scroll = scroll.saturating_sub(1);
+                            *auto_scroll = false;
+                        }
+                    }
+                    KeyCode::Char('d') => {
+                        if let AppMode::Detail {
+                            scroll,
+                            auto_scroll,
+                            ..
+                        } = &mut state.mode
+                        {
+                            let half = state.detail_inner_height / 2;
+                            *scroll = scroll.saturating_add(half.max(1));
+                            *auto_scroll = false;
+                        }
+                    }
+                    KeyCode::Char('u') => {
+                        if let AppMode::Detail {
+                            scroll,
+                            auto_scroll,
+                            ..
+                        } = &mut state.mode
+                        {
+                            let half = state.detail_inner_height / 2;
+                            *scroll = scroll.saturating_sub(half.max(1));
                             *auto_scroll = false;
                         }
                     }
