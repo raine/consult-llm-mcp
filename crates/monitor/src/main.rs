@@ -988,7 +988,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     Style::default().fg(DIM),
                 )),
                 Line::from(Span::styled(
-                    truncate_project(&record.project),
+                    record.project.clone(),
                     Style::default().fg(DIM_WHITE),
                 )),
                 Line::from(Span::styled(
@@ -1023,7 +1023,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
         rows,
         [
             Constraint::Length(10),
-            Constraint::Length(PROJECT_COL_WIDTH),
+            Constraint::Fill(1),
             Constraint::Length(14),
             Constraint::Length(10),
             Constraint::Length(duration_col_width),
