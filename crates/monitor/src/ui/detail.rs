@@ -265,15 +265,13 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                     "  Prompt:",
                     Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
                 )]));
-                let indent = 4;
-                let wrap_width = inner_width.saturating_sub(indent);
-                for line in text.lines() {
-                    for wrapped in wrap_line(line, wrap_width) {
-                        lines.push(Line::from(vec![Span::styled(
-                            format!("    {wrapped}"),
-                            Style::default().fg(DIM_WHITE),
-                        )]));
-                    }
+                let indent = "    ";
+                let wrap_width = inner_width.saturating_sub(indent.len());
+                let md_lines = super::markdown::render_markdown(text, wrap_width);
+                for line in md_lines {
+                    let mut indented = vec![Span::raw(indent.to_string())];
+                    indented.extend(line.spans);
+                    lines.push(Line::from(indented));
                 }
                 lines.push(Line::default());
             }
@@ -390,42 +388,4 @@ fn render_usage_line(
         Span::styled(label, dim),
         Span::styled(right_dashes, dim),
     ])
-}
-
-// ── Word wrapping ───────────────────────────────────────────────────────
-
-fn wrap_line(line: &str, max_width: usize) -> Vec<String> {
-    if max_width == 0 {
-        return vec![line.to_string()];
-    }
-    if line.chars().count() <= max_width {
-        return vec![line.to_string()];
-    }
-
-    let mut lines = Vec::new();
-    let mut current = String::new();
-    let mut col = 0;
-
-    for word in line.split_whitespace() {
-        let wlen = word.chars().count();
-        if col == 0 {
-            current.push_str(word);
-            col = wlen;
-        } else if col + 1 + wlen <= max_width {
-            current.push(' ');
-            current.push_str(word);
-            col += 1 + wlen;
-        } else {
-            lines.push(current);
-            current = word.to_string();
-            col = wlen;
-        }
-    }
-    if !current.is_empty() {
-        lines.push(current);
-    }
-    if lines.is_empty() {
-        lines.push(String::new());
-    }
-    lines
 }
