@@ -59,8 +59,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for LoggingReader<R> {
                 }
 
                 if new_bytes_len > 0 {
-                    let new_bytes = buf.filled()[before..].to_vec();
-                    me.line_buf.extend_from_slice(&new_bytes);
+                    me.line_buf.extend_from_slice(&buf.filled()[before..]);
 
                     // Flush complete lines
                     while let Some(pos) = me.line_buf.iter().position(|&b| b == b'\n') {
