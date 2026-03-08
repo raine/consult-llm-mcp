@@ -54,9 +54,23 @@ pub(crate) fn format_tokens(tokens_in: Option<u64>, tokens_out: Option<u64>) -> 
 
 fn format_token_count(n: u64) -> String {
     if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
+        let m = n as f64 / 1_000_000.0;
+        if n >= 100_000_000 {
+            format!("{:.0}M", m)
+        } else if n >= 10_000_000 {
+            format!("{:.1}M", m)
+        } else {
+            format!("{:.2}M", m)
+        }
     } else if n >= 1_000 {
-        format!("{:.1}k", n as f64 / 1_000.0)
+        let k = n as f64 / 1_000.0;
+        if n >= 100_000 {
+            format!("{:.0}k", k)
+        } else if n >= 10_000 {
+            format!("{:.1}k", k)
+        } else {
+            format!("{:.2}k", k)
+        }
     } else {
         n.to_string()
     }

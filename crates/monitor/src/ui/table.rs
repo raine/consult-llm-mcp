@@ -244,7 +244,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
 
 fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let duration_col_width: u16 = 10;
-    let tokens_col_width: u16 = 10;
+    let tokens_col_width: u16 = 13;
     let header = Row::new(vec![
         Line::from("Time"),
         Line::from("Project"),

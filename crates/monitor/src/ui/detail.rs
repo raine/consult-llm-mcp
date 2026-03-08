@@ -5,7 +5,9 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use crate::state::{AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, TEAL, WHITE, YELLOW};
+use crate::state::{
+    AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, TEAL, WHITE, YELLOW,
+};
 
 pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let AppMode::Detail(ref detail) = state.mode else {
