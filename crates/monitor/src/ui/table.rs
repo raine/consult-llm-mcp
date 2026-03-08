@@ -51,9 +51,10 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 
     let line = Line::from(vec![
         Span::styled(
-            " consult-llm-monitor  ",
+            " consult-llm-monitor",
             Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
         ),
+        Span::styled(" · ", Style::default().fg(DIM)),
         Span::styled(format!("{active}"), Style::default().fg(GREEN)),
         Span::styled(" servers  ", Style::default().fg(DIM_WHITE)),
         Span::styled(
