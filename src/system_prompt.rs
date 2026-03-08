@@ -42,29 +42,25 @@ pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
     });
 
     let path = Path::new(&custom_path);
-    if path.exists() {
+    let base = if path.exists() {
         match fs::read_to_string(path) {
-            Ok(custom) => {
-                let trimmed = custom.trim().to_string();
-                return if is_cli {
-                    format!("{trimmed}{CLI_MODE_SUFFIX}")
-                } else {
-                    trimmed
-                };
-            }
+            Ok(custom) => custom.trim().to_string(),
             Err(e) => {
                 let msg = format!("Failed to read custom system prompt from {custom_path}: {e}");
                 log_to_file(&format!("WARNING: {msg}"));
                 eprintln!("Warning: {msg}");
+                BASE_SYSTEM_PROMPT.to_string()
             }
         }
-    }
+    } else {
+        BASE_SYSTEM_PROMPT.to_string()
+    };
 
     let overlay = mode_overlay(task_mode);
     let prompt = if overlay.is_empty() {
-        BASE_SYSTEM_PROMPT.to_string()
+        base
     } else {
-        format!("{BASE_SYSTEM_PROMPT}\n\n{overlay}")
+        format!("{base}\n\n{overlay}")
     };
 
     if is_cli {
