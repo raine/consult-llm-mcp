@@ -554,8 +554,8 @@ fn truncate_project(name: &str) -> String {
 }
 
 fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
-    // Dynamic active table height: min(row_count + 2, height/2), minimum 3
-    let active_height = (state.row_count as u16 + 2).min(area.height / 2).max(3);
+    // Dynamic active table height: +3 for borders (2) + header row (1), minimum 4
+    let active_height = (state.row_count as u16 + 3).min(area.height / 2).max(4);
 
     let chunks = Layout::vertical([
         Constraint::Length(1),
