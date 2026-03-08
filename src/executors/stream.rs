@@ -73,7 +73,7 @@ impl StreamReducer {
         }
         Self {
             thread_id: None,
-            response: String::new(),
+            response: String::with_capacity(4096),
             usage: None,
             consultation_id: consultation_id.map(|s| s.to_string()),
             active_tools: HashMap::new(),
