@@ -3,8 +3,10 @@ use chrono::{DateTime, Utc};
 pub(crate) const PROJECT_COL_WIDTH: u16 = 15;
 
 pub(crate) fn truncate_project(name: &str) -> String {
-    if name.len() > PROJECT_COL_WIDTH as usize {
-        format!("{}…", &name[..PROJECT_COL_WIDTH as usize - 1])
+    let max = PROJECT_COL_WIDTH as usize;
+    if name.chars().count() > max {
+        let truncated: String = name.chars().take(max - 1).collect();
+        format!("{truncated}…")
     } else {
         name.to_string()
     }
