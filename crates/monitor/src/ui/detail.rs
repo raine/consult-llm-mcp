@@ -10,7 +10,6 @@ use consult_llm_core::stream_events::ParsedStreamEvent;
 use crate::format::format_token_count;
 use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
-    YELLOW,
 };
 
 // ── Intermediate representation ─────────────────────────────────────────
@@ -225,11 +224,15 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                     "  Prompt:",
                     Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
                 )]));
+                let indent = 4;
+                let wrap_width = inner_width.saturating_sub(indent);
                 for line in text.lines() {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("    {line}"),
-                        Style::default().fg(DIM_WHITE),
-                    )]));
+                    for wrapped in wrap_line(line, wrap_width) {
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("    {wrapped}"),
+                            Style::default().fg(DIM_WHITE),
+                        )]));
+                    }
                 }
                 lines.push(Line::default());
             }
@@ -243,11 +246,15 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                 lines.push(render_tool_line(label, *success, inner_width, tick));
             }
             RenderedBlock::Text(text) => {
+                let indent = 4;
+                let wrap_width = inner_width.saturating_sub(indent);
                 for line in text.lines() {
-                    lines.push(Line::from(vec![Span::styled(
-                        format!("    {line}"),
-                        Style::default().fg(WHITE),
-                    )]));
+                    for wrapped in wrap_line(line, wrap_width) {
+                        lines.push(Line::from(vec![Span::styled(
+                            format!("    {wrapped}"),
+                            Style::default().fg(WHITE),
+                        )]));
+                    }
                 }
             }
             RenderedBlock::Usage {
@@ -279,11 +286,11 @@ fn render_tool_line(
             // Completed: "  ▶ {label} ··· ✓"
             let icon_char = if ok { "\u{2713}" } else { "\u{2717}" };
             let icon_color = if ok { GREEN } else { RED };
-            let suffix = format!(" {icon_char}");
+            let suffix = format!(" {icon_char} ");
             let suffix_len = suffix.chars().count();
 
             // Truncate label if it would push the icon off-screen
-            // Reserve: 4 (indent+"▶ ") + 1 (space) + suffix + 3 (min dots)
+            // Reserve: 4 (indent+"› ") + 1 (space) + suffix + 3 (min dots)
             let overhead = 5 + suffix_len + 3;
             let max_label = inner_width.saturating_sub(overhead);
             let display_label = if label.chars().count() > max_label && max_label > 0 {
@@ -298,16 +305,13 @@ fn render_tool_line(
                 label.to_string()
             };
 
-            let prefix = format!("  \u{25b6} {display_label} ");
+            let prefix = format!("  \u{203a} {display_label} ");
             let prefix_len = prefix.chars().count();
             let dots_count = inner_width.saturating_sub(prefix_len + suffix_len);
             let dots = "\u{b7}".repeat(dots_count);
 
             Line::from(vec![
-                Span::styled(
-                    prefix,
-                    Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
-                ),
+                Span::styled(prefix, Style::default().fg(DIM_WHITE)),
                 Span::styled(dots, Style::default().fg(DIM)),
                 Span::styled(suffix, Style::default().fg(icon_color)),
             ])
@@ -317,7 +321,7 @@ fn render_tool_line(
             let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
             Line::from(vec![Span::styled(
                 format!("  {spinner} {label}"),
-                Style::default().fg(YELLOW).add_modifier(Modifier::BOLD),
+                Style::default().fg(WHITE).add_modifier(Modifier::BOLD),
             )])
         }
     }
@@ -347,4 +351,42 @@ fn render_usage_line(
         Span::styled(label, dim),
         Span::styled(right_dashes, dim),
     ])
+}
+
+// ── Word wrapping ───────────────────────────────────────────────────────
+
+fn wrap_line(line: &str, max_width: usize) -> Vec<String> {
+    if max_width == 0 {
+        return vec![line.to_string()];
+    }
+    if line.chars().count() <= max_width {
+        return vec![line.to_string()];
+    }
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut col = 0;
+
+    for word in line.split_whitespace() {
+        let wlen = word.chars().count();
+        if col == 0 {
+            current.push_str(word);
+            col = wlen;
+        } else if col + 1 + wlen <= max_width {
+            current.push(' ');
+            current.push_str(word);
+            col += 1 + wlen;
+        } else {
+            lines.push(current);
+            current = word.to_string();
+            col = wlen;
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
 }
