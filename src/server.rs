@@ -70,20 +70,21 @@ impl ServerHandler for ConsultServer {
     }
 }
 
-pub fn init_system_prompt() {
+pub fn init_system_prompt() -> anyhow::Result<()> {
     let home = dirs::home_dir().expect("Could not determine home directory");
     let config_dir = home.join(".consult-llm-mcp");
     let prompt_path = config_dir.join("SYSTEM_PROMPT.md");
 
     if prompt_path.exists() {
-        eprintln!("System prompt already exists at: {}", prompt_path.display());
-        eprintln!("Remove it first if you want to reinitialize.");
-        std::process::exit(1);
+        anyhow::bail!(
+            "System prompt already exists at: {}\nRemove it first if you want to reinitialize.",
+            prompt_path.display()
+        );
     }
 
-    std::fs::create_dir_all(&config_dir).expect("Failed to create config directory");
-    std::fs::write(&prompt_path, DEFAULT_SYSTEM_PROMPT).expect("Failed to write system prompt");
+    std::fs::create_dir_all(&config_dir)?;
+    std::fs::write(&prompt_path, DEFAULT_SYSTEM_PROMPT)?;
     println!("Created system prompt at: {}", prompt_path.display());
     println!("You can now edit this file to customize the system prompt.");
-    std::process::exit(0);
+    Ok(())
 }

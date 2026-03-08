@@ -44,11 +44,22 @@ async fn main() {
     }
 
     if args.iter().any(|a| a == "init-prompt") {
-        server::init_system_prompt();
+        if let Err(e) = server::init_system_prompt() {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
         return;
     }
 
-    let registry = config::init_config();
+    let registry = match config::init_config() {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = e.to_string();
+            logger::log_to_file(&format!("FATAL ERROR:\n{msg}"));
+            eprintln!("\u{274c} {msg}");
+            std::process::exit(1);
+        }
+    };
 
     monitoring::init();
     let project = std::env::current_dir()

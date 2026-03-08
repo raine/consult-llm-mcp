@@ -369,23 +369,14 @@ pub fn registry() -> &'static ModelRegistry {
 
 /// Initialize config and model registry from environment variables.
 /// Must be called before MCP server starts.
-/// Exits process on fatal configuration errors.
 /// Returns the ModelRegistry for explicit dependency injection.
-pub fn init_config() -> Arc<ModelRegistry> {
-    let (config, registry) = match parse_config(env_non_empty) {
-        Ok(result) => result,
-        Err(e) => {
-            let msg = e.to_string();
-            log_to_file(&format!("FATAL ERROR:\n{msg}"));
-            eprintln!("\u{274c} {msg}");
-            std::process::exit(1);
-        }
-    };
+pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
+    let (config, registry) = parse_config(env_non_empty)?;
 
     let _ = CONFIG.set(config);
     let _ = REGISTRY.set(registry.clone());
 
-    registry
+    Ok(registry)
 }
 
 #[cfg(test)]
