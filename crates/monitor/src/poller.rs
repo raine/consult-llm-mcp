@@ -1,11 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Seek, SeekFrom};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use consult_llm_core::jsonl::read_jsonl_from_offset;
 use consult_llm_core::monitoring::{
     EventEnvelope, HISTORY_FILE, HistoryRecord, MonitorEvent, is_pid_alive,
 };
@@ -229,34 +229,12 @@ fn poll_files(
             continue;
         }
 
-        let Ok(file) = File::open(&path) else {
-            continue;
-        };
-        let offset = file_offsets.get(&server_id).copied().unwrap_or(0);
-        let mut reader = BufReader::new(file);
-        let _ = reader.seek(SeekFrom::Start(offset));
-
-        let mut new_offset = offset;
-        let mut buf = String::new();
-        loop {
-            buf.clear();
-            match reader.read_line(&mut buf) {
-                Ok(0) => break,
-                Ok(bytes_read) => {
-                    if !buf.ends_with('\n') {
-                        break;
-                    }
-                    new_offset += bytes_read as u64;
-                    if let Ok(envelope) = serde_json::from_str::<EventEnvelope>(buf.trim()) {
-                        update_server_info(server_info, &server_id, &envelope);
-                        events.push((server_id.clone(), envelope));
-                    }
-                }
-                Err(_) => break,
-            }
+        let offset = file_offsets.entry(server_id.clone()).or_insert(0);
+        let envelopes: Vec<EventEnvelope> = read_jsonl_from_offset(&path, offset);
+        for envelope in envelopes {
+            update_server_info(server_info, &server_id, &envelope);
+            events.push((server_id.clone(), envelope));
         }
-
-        file_offsets.insert(server_id, new_offset);
     }
 
     events
@@ -288,33 +266,8 @@ fn update_server_info(
 }
 
 fn poll_history(dir: &Path, history_offset: &mut u64) -> Vec<HistoryRecord> {
-    let mut records = Vec::new();
     let path = dir.join(HISTORY_FILE);
-    let Ok(file) = File::open(&path) else {
-        return records;
-    };
-    let mut reader = BufReader::new(file);
-    let _ = reader.seek(SeekFrom::Start(*history_offset));
-
-    let mut buf = String::new();
-    loop {
-        buf.clear();
-        match reader.read_line(&mut buf) {
-            Ok(0) => break,
-            Ok(bytes_read) => {
-                if !buf.ends_with('\n') {
-                    break;
-                }
-                *history_offset += bytes_read as u64;
-                if let Ok(record) = serde_json::from_str::<HistoryRecord>(buf.trim()) {
-                    records.push(record);
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    records
+    read_jsonl_from_offset(&path, history_offset)
 }
 
 fn check_liveness(server_info: &mut HashMap<String, ServerInfo>) -> Vec<String> {
@@ -356,32 +309,6 @@ fn poll_detail_events(
     consultation_id: &str,
     file_offset: &mut u64,
 ) -> Vec<ParsedStreamEvent> {
-    let mut events = Vec::new();
     let path = dir.join(format!("{consultation_id}.events.jsonl"));
-    let Ok(file) = File::open(&path) else {
-        return events;
-    };
-
-    let mut reader = BufReader::new(file);
-    let _ = reader.seek(SeekFrom::Start(*file_offset));
-
-    let mut buf = String::new();
-    loop {
-        buf.clear();
-        match reader.read_line(&mut buf) {
-            Ok(0) => break,
-            Ok(bytes_read) => {
-                if !buf.ends_with('\n') {
-                    break;
-                }
-                *file_offset += bytes_read as u64;
-                if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(buf.trim()) {
-                    events.push(event);
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    events
+    read_jsonl_from_offset(&path, file_offset)
 }

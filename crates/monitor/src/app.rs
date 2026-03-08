@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
 use arboard::Clipboard;
+use consult_llm_core::jsonl::read_jsonl_from_offset;
 use consult_llm_core::monitoring::{EventEnvelope, HISTORY_FILE, MonitorEvent};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
@@ -251,29 +251,8 @@ impl AppState {
 
     pub(crate) fn enter_detail(&mut self, consultation_id: String, dir: &Path) {
         let path = dir.join(format!("{consultation_id}.events.jsonl"));
-        let mut events = Vec::new();
         let mut offset = 0u64;
-
-        if let Ok(file) = File::open(&path) {
-            let mut reader = BufReader::new(file);
-            let mut buf = String::new();
-            loop {
-                buf.clear();
-                match reader.read_line(&mut buf) {
-                    Ok(0) => break,
-                    Ok(bytes_read) => {
-                        if !buf.ends_with('\n') {
-                            break;
-                        }
-                        offset += bytes_read as u64;
-                        if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(buf.trim()) {
-                            events.push(event);
-                        }
-                    }
-                    Err(_) => break,
-                }
-            }
-        }
+        let events: Vec<ParsedStreamEvent> = read_jsonl_from_offset(&path, &mut offset);
 
         let is_active = self.is_consultation_active(&consultation_id);
 
