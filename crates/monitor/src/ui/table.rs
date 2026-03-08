@@ -91,18 +91,21 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         let pid = server.pid.to_string();
 
         if server.active_consults.is_empty() && server.completed_consults.is_empty() {
-            let hist = if server.completed_count > 0 || server.failed_count > 0 {
-                format!(
-                    "{} done{}",
-                    server.completed_count,
-                    if server.failed_count > 0 {
-                        format!(", {} failed", server.failed_count)
-                    } else {
-                        String::new()
-                    }
+            let (hist, hist_color) = if server.completed_count > 0 || server.failed_count > 0 {
+                (
+                    format!(
+                        "{} done{}",
+                        server.completed_count,
+                        if server.failed_count > 0 {
+                            format!(", {} failed", server.failed_count)
+                        } else {
+                            String::new()
+                        }
+                    ),
+                    DIM_WHITE,
                 )
             } else {
-                "\u{2014}".to_string()
+                ("\u{2014}".to_string(), DIM)
             };
             rows.push(Row::new(vec![
                 Line::from(Span::styled(
@@ -110,7 +113,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     Style::default().fg(DIM_WHITE),
                 )),
                 Line::from(Span::styled(pid.clone(), Style::default().fg(DIM_WHITE))),
-                Line::from(Span::styled(hist, Style::default().fg(DIM_WHITE))),
+                Line::from(Span::styled(hist, Style::default().fg(hist_color))),
                 Line::from(Span::styled(
                     format!("{:>width$}", "\u{2014}", width = elapsed_col_width as usize),
                     Style::default().fg(DIM),
