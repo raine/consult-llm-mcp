@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.7.0 (2026-03-08)
+
+- Fixed cursor-agent tool success detection
+- Show cursor thinking text content in monitor detail view instead of a static
+  "Thinking..." label
+- Added PageUp/PageDown support in monitor detail view
+
 ## v2.6.0 (2026-03-08)
 
 - Added `consult-llm-monitor` TUI dashboard for real-time monitoring of active
