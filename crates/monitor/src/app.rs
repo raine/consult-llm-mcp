@@ -441,7 +441,19 @@ impl AppState {
                         consultation_id: cid.clone(),
                     });
                 }
-                for cc in &server.completed_consults {
+                // Deduplicate completed consults by backend (last per backend),
+                // matching the table renderer's display logic
+                let mut seen_backends = std::collections::HashSet::new();
+                let deduped: Vec<_> = server
+                    .completed_consults
+                    .iter()
+                    .rev()
+                    .filter(|cc| seen_backends.insert(&cc.backend))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                for cc in deduped {
                     infos.push(RowInfo {
                         server_id: server_id.to_string(),
                         consultation_id: cc.id.clone(),
