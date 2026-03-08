@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use crate::logger::log_to_file;
@@ -37,6 +38,7 @@ pub struct ProviderAvailability {
     pub deepseek_api_key: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct Config {
     pub openai_api_key: Option<String>,
     pub gemini_api_key: Option<String>,
@@ -50,7 +52,7 @@ pub struct Config {
 }
 
 /// Single source of truth for model availability — drives both schema and validation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ModelRegistry {
     pub allowed_models: Vec<String>,
     pub fallback_model: String,
@@ -82,6 +84,49 @@ impl ModelRegistry {
         }
 
         Ok(model.to_string())
+    }
+}
+
+#[derive(Debug)]
+pub enum ConfigError {
+    NoModelsAvailable,
+    InvalidGeminiBackend(String),
+    InvalidOpenaiBackend(String),
+    InvalidDefaultModel { model: String, allowed: Vec<String> },
+    InvalidCodexReasoningEffort(String),
+}
+
+impl fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConfigError::NoModelsAvailable => write!(
+                f,
+                "Invalid environment variables:\n  No models available. Set API keys or configure CLI backends."
+            ),
+            ConfigError::InvalidGeminiBackend(raw) => write!(
+                f,
+                "Invalid environment variables:\n  geminiBackend: Invalid enum value. Expected 'api' | 'gemini-cli' | 'cursor-cli', received '{raw}'"
+            ),
+            ConfigError::InvalidOpenaiBackend(raw) => write!(
+                f,
+                "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
+            ),
+            ConfigError::InvalidDefaultModel { model, allowed } => {
+                let opts = allowed
+                    .iter()
+                    .map(|m| format!("'{m}'"))
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                write!(
+                    f,
+                    "Invalid environment variables:\n  defaultModel: Invalid enum value. Expected {opts}, received '{model}'"
+                )
+            }
+            ConfigError::InvalidCodexReasoningEffort(effort) => write!(
+                f,
+                "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"
+            ),
+        }
     }
 }
 
@@ -178,6 +223,139 @@ pub fn filter_by_availability(models: &[String], providers: &ProviderAvailabilit
         .collect()
 }
 
+/// Pure config parsing: takes an env-lookup function, returns Config + ModelRegistry or an error.
+/// Does not read real env vars, call process::exit, or set globals.
+pub fn parse_config(
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<(Config, Arc<ModelRegistry>), ConfigError> {
+    // Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
+    let gemini_backend_raw = migrate_prefixed_env(
+        env("CONSULT_LLM_GEMINI_BACKEND").as_deref(),
+        env("GEMINI_BACKEND").as_deref(),
+        "GEMINI_BACKEND",
+        "CONSULT_LLM_GEMINI_BACKEND",
+    );
+    let resolved_gemini_backend = migrate_backend_env(
+        gemini_backend_raw.as_deref(),
+        env("GEMINI_MODE").as_deref(),
+        "gemini-cli",
+        "GEMINI_MODE",
+        "CONSULT_LLM_GEMINI_BACKEND",
+    );
+
+    let openai_backend_raw = migrate_prefixed_env(
+        env("CONSULT_LLM_OPENAI_BACKEND").as_deref(),
+        env("OPENAI_BACKEND").as_deref(),
+        "OPENAI_BACKEND",
+        "CONSULT_LLM_OPENAI_BACKEND",
+    );
+    let resolved_openai_backend = migrate_backend_env(
+        openai_backend_raw.as_deref(),
+        env("OPENAI_MODE").as_deref(),
+        "codex-cli",
+        "OPENAI_MODE",
+        "CONSULT_LLM_OPENAI_BACKEND",
+    );
+
+    let catalog_models = build_model_catalog(
+        ALL_MODELS,
+        env("CONSULT_LLM_EXTRA_MODELS").as_deref(),
+        env("CONSULT_LLM_ALLOWED_MODELS").as_deref(),
+    );
+
+    // Validate backend strings against per-provider allowed values
+    if let Some(ref raw) = resolved_gemini_backend
+        && !matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli")
+    {
+        return Err(ConfigError::InvalidGeminiBackend(raw.clone()));
+    }
+    if let Some(ref raw) = resolved_openai_backend
+        && !matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli")
+    {
+        return Err(ConfigError::InvalidOpenaiBackend(raw.clone()));
+    }
+
+    let gemini_backend = resolved_gemini_backend
+        .as_deref()
+        .and_then(Backend::from_str)
+        .unwrap_or(Backend::Api);
+
+    let openai_backend = resolved_openai_backend
+        .as_deref()
+        .and_then(Backend::from_str)
+        .unwrap_or(Backend::Api);
+
+    let openai_api_key = env("OPENAI_API_KEY");
+    let gemini_api_key = env("GEMINI_API_KEY");
+    let deepseek_api_key = env("DEEPSEEK_API_KEY");
+
+    let enabled_models = filter_by_availability(
+        &catalog_models,
+        &ProviderAvailability {
+            gemini_api_key: gemini_api_key.clone(),
+            gemini_backend: gemini_backend.clone(),
+            openai_api_key: openai_api_key.clone(),
+            openai_backend: openai_backend.clone(),
+            deepseek_api_key: deepseek_api_key.clone(),
+        },
+    );
+
+    if enabled_models.is_empty() {
+        return Err(ConfigError::NoModelsAvailable);
+    }
+
+    // Validate default model if provided
+    let default_model = env("CONSULT_LLM_DEFAULT_MODEL");
+    if let Some(ref dm) = default_model
+        && !enabled_models.contains(dm)
+    {
+        return Err(ConfigError::InvalidDefaultModel {
+            model: dm.clone(),
+            allowed: enabled_models.clone(),
+        });
+    }
+
+    // Validate codex reasoning effort
+    let codex_reasoning_effort = migrate_prefixed_env(
+        env("CONSULT_LLM_CODEX_REASONING_EFFORT").as_deref(),
+        env("CODEX_REASONING_EFFORT").as_deref(),
+        "CODEX_REASONING_EFFORT",
+        "CONSULT_LLM_CODEX_REASONING_EFFORT",
+    );
+    if let Some(ref effort) = codex_reasoning_effort {
+        let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
+        if !valid.contains(&effort.as_str()) {
+            return Err(ConfigError::InvalidCodexReasoningEffort(effort.clone()));
+        }
+    }
+
+    let fallback_model = if enabled_models.contains(&"gpt-5.2".to_string()) {
+        "gpt-5.2".to_string()
+    } else {
+        enabled_models[0].clone()
+    };
+
+    let config = Config {
+        openai_api_key,
+        gemini_api_key,
+        deepseek_api_key,
+        default_model: default_model.clone(),
+        gemini_backend,
+        openai_backend,
+        codex_reasoning_effort,
+        system_prompt_path: env("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
+        allowed_models: enabled_models.clone(),
+    };
+
+    let registry = Arc::new(ModelRegistry {
+        allowed_models: enabled_models,
+        fallback_model,
+        default_model,
+    });
+
+    Ok((config, registry))
+}
+
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static REGISTRY: OnceLock<Arc<ModelRegistry>> = OnceLock::new();
 
@@ -194,157 +372,17 @@ pub fn registry() -> &'static ModelRegistry {
 /// Exits process on fatal configuration errors.
 /// Returns the ModelRegistry for explicit dependency injection.
 pub fn init_config() -> Arc<ModelRegistry> {
-    // Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
-    let gemini_backend_raw = migrate_prefixed_env(
-        env_non_empty("CONSULT_LLM_GEMINI_BACKEND").as_deref(),
-        env_non_empty("GEMINI_BACKEND").as_deref(),
-        "GEMINI_BACKEND",
-        "CONSULT_LLM_GEMINI_BACKEND",
-    );
-    let resolved_gemini_backend = migrate_backend_env(
-        gemini_backend_raw.as_deref(),
-        env_non_empty("GEMINI_MODE").as_deref(),
-        "gemini-cli",
-        "GEMINI_MODE",
-        "CONSULT_LLM_GEMINI_BACKEND",
-    );
-
-    let openai_backend_raw = migrate_prefixed_env(
-        env_non_empty("CONSULT_LLM_OPENAI_BACKEND").as_deref(),
-        env_non_empty("OPENAI_BACKEND").as_deref(),
-        "OPENAI_BACKEND",
-        "CONSULT_LLM_OPENAI_BACKEND",
-    );
-    let resolved_openai_backend = migrate_backend_env(
-        openai_backend_raw.as_deref(),
-        env_non_empty("OPENAI_MODE").as_deref(),
-        "codex-cli",
-        "OPENAI_MODE",
-        "CONSULT_LLM_OPENAI_BACKEND",
-    );
-
-    let catalog_models = build_model_catalog(
-        ALL_MODELS,
-        env_non_empty("CONSULT_LLM_EXTRA_MODELS").as_deref(),
-        env_non_empty("CONSULT_LLM_ALLOWED_MODELS").as_deref(),
-    );
-
-    let gemini_backend = resolved_gemini_backend
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let openai_backend = resolved_openai_backend
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let openai_api_key = env_non_empty("OPENAI_API_KEY");
-    let gemini_api_key = env_non_empty("GEMINI_API_KEY");
-    let deepseek_api_key = env_non_empty("DEEPSEEK_API_KEY");
-
-    let enabled_models = filter_by_availability(
-        &catalog_models,
-        &ProviderAvailability {
-            gemini_api_key: gemini_api_key.clone(),
-            gemini_backend: gemini_backend.clone(),
-            openai_api_key: openai_api_key.clone(),
-            openai_backend: openai_backend.clone(),
-            deepseek_api_key: deepseek_api_key.clone(),
-        },
-    );
-
-    if enabled_models.is_empty() {
-        let msg = "Invalid environment variables:\n  No models available. Set API keys or configure CLI backends.";
-        log_to_file(&format!("FATAL ERROR:\n{msg}"));
-        eprintln!("❌ {msg}");
-        std::process::exit(1);
-    }
-
-    // Validate backend strings against per-provider allowed values
-    if let Some(ref raw) = resolved_gemini_backend {
-        let valid = matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli");
-        if !valid {
-            let msg = format!(
-                "Invalid environment variables:\n  geminiBackend: Invalid enum value. Expected 'api' | 'gemini-cli' | 'cursor-cli', received '{raw}'"
-            );
+    let (config, registry) = match parse_config(env_non_empty) {
+        Ok(result) => result,
+        Err(e) => {
+            let msg = e.to_string();
             log_to_file(&format!("FATAL ERROR:\n{msg}"));
-            eprintln!("❌ {msg}");
+            eprintln!("\u{274c} {msg}");
             std::process::exit(1);
         }
-    }
-    if let Some(ref raw) = resolved_openai_backend {
-        let valid = matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli");
-        if !valid {
-            let msg = format!(
-                "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
-            );
-            log_to_file(&format!("FATAL ERROR:\n{msg}"));
-            eprintln!("❌ {msg}");
-            std::process::exit(1);
-        }
-    }
-
-    // Validate default model if provided
-    let default_model = env_non_empty("CONSULT_LLM_DEFAULT_MODEL");
-    if let Some(ref dm) = default_model
-        && !enabled_models.contains(dm)
-    {
-        let msg = format!(
-            "Invalid environment variables:\n  defaultModel: Invalid enum value. Expected {}, received '{dm}'",
-            enabled_models
-                .iter()
-                .map(|m| format!("'{m}'"))
-                .collect::<Vec<_>>()
-                .join(" | ")
-        );
-        log_to_file(&format!("FATAL ERROR:\n{msg}"));
-        eprintln!("❌ {msg}");
-        std::process::exit(1);
-    }
-
-    // Validate codex reasoning effort
-    let codex_reasoning_effort = migrate_prefixed_env(
-        env_non_empty("CONSULT_LLM_CODEX_REASONING_EFFORT").as_deref(),
-        env_non_empty("CODEX_REASONING_EFFORT").as_deref(),
-        "CODEX_REASONING_EFFORT",
-        "CONSULT_LLM_CODEX_REASONING_EFFORT",
-    );
-    if let Some(ref effort) = codex_reasoning_effort {
-        let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
-        if !valid.contains(&effort.as_str()) {
-            let msg = format!(
-                "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"
-            );
-            log_to_file(&format!("FATAL ERROR:\n{msg}"));
-            eprintln!("❌ {msg}");
-            std::process::exit(1);
-        }
-    }
-
-    let fallback_model = if enabled_models.contains(&"gpt-5.2".to_string()) {
-        "gpt-5.2".to_string()
-    } else {
-        enabled_models[0].clone()
     };
 
-    let _ = CONFIG.set(Config {
-        openai_api_key,
-        gemini_api_key,
-        deepseek_api_key,
-        default_model: default_model.clone(),
-        gemini_backend,
-        openai_backend,
-        codex_reasoning_effort,
-        system_prompt_path: env_non_empty("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
-        allowed_models: enabled_models.clone(),
-    });
-
-    let registry = Arc::new(ModelRegistry {
-        allowed_models: enabled_models,
-        fallback_model,
-        default_model,
-    });
+    let _ = CONFIG.set(config);
     let _ = REGISTRY.set(registry.clone());
 
     registry
@@ -353,6 +391,15 @@ pub fn init_config() -> Arc<ModelRegistry> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    fn env_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let map: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |key: &str| map.get(key).cloned()
+    }
 
     #[test]
     fn test_build_model_catalog_builtin_only() {
@@ -533,5 +580,129 @@ mod tests {
             default_model: None,
         };
         assert!(reg.resolve_model(Some("invalid"), true).is_err());
+    }
+
+    // --- parse_config tests ---
+
+    #[test]
+    fn test_parse_config_with_api_keys() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "sk-test"),
+            ("GEMINI_API_KEY", "gem-test"),
+        ]);
+        let (config, registry) = parse_config(env).unwrap();
+        assert!(config.allowed_models.contains(&"gpt-5.2".to_string()));
+        assert!(
+            config
+                .allowed_models
+                .contains(&"gemini-2.5-pro".to_string())
+        );
+        assert_eq!(registry.fallback_model, "gpt-5.2");
+    }
+
+    #[test]
+    fn test_parse_config_no_models_available() {
+        let env = env_from(&[]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::NoModelsAvailable));
+    }
+
+    #[test]
+    fn test_parse_config_invalid_gemini_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_GEMINI_BACKEND", "invalid"),
+            ("GEMINI_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidGeminiBackend(ref s) if s == "invalid"));
+    }
+
+    #[test]
+    fn test_parse_config_invalid_openai_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_OPENAI_BACKEND", "nope"),
+            ("OPENAI_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidOpenaiBackend(ref s) if s == "nope"));
+    }
+
+    #[test]
+    fn test_parse_config_invalid_default_model() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_DEFAULT_MODEL", "nonexistent"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(
+            matches!(err, ConfigError::InvalidDefaultModel { ref model, .. } if model == "nonexistent")
+        );
+    }
+
+    #[test]
+    fn test_parse_config_invalid_codex_reasoning_effort() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_CODEX_REASONING_EFFORT", "extreme"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidCodexReasoningEffort(ref s) if s == "extreme"));
+    }
+
+    #[test]
+    fn test_parse_config_valid_default_model() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_DEFAULT_MODEL", "gpt-5.2"),
+        ]);
+        let (config, registry) = parse_config(env).unwrap();
+        assert_eq!(config.default_model, Some("gpt-5.2".to_string()));
+        assert_eq!(registry.default_model, Some("gpt-5.2".to_string()));
+    }
+
+    #[test]
+    fn test_parse_config_cli_backend_no_key() {
+        let env = env_from(&[("CONSULT_LLM_GEMINI_BACKEND", "gemini-cli")]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(config.gemini_backend, Backend::GeminiCli);
+        assert!(
+            config
+                .allowed_models
+                .iter()
+                .any(|m| m.starts_with("gemini"))
+        );
+    }
+
+    #[test]
+    fn test_parse_config_codex_reasoning_effort_valid() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_CODEX_REASONING_EFFORT", "high"),
+        ]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(config.codex_reasoning_effort, Some("high".to_string()));
+    }
+
+    #[test]
+    fn test_parse_config_system_prompt_path() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_SYSTEM_PROMPT_PATH", "/tmp/prompt.txt"),
+        ]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(
+            config.system_prompt_path,
+            Some("/tmp/prompt.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_config_fallback_when_no_gpt52() {
+        let env = env_from(&[
+            ("GEMINI_API_KEY", "key"),
+            ("CONSULT_LLM_ALLOWED_MODELS", "gemini-2.5-pro"),
+        ]);
+        let (_, registry) = parse_config(env).unwrap();
+        assert_eq!(registry.fallback_model, "gemini-2.5-pro");
     }
 }
