@@ -1,35 +1,36 @@
 use std::fs::{OpenOptions, create_dir_all};
-use std::io::Write;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use chrono::Local;
 
-static LOG_PATH: OnceLock<PathBuf> = OnceLock::new();
+static LOG_FILE: OnceLock<Mutex<BufWriter<std::fs::File>>> = OnceLock::new();
 
-fn log_path() -> &'static PathBuf {
-    LOG_PATH.get_or_init(|| {
-        let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-            let home = dirs::home_dir().unwrap_or_default();
-            home.join(".local")
-                .join("state")
-                .to_string_lossy()
-                .to_string()
-        });
-        let dir = PathBuf::from(state_home).join("consult-llm-mcp");
-        let _ = create_dir_all(&dir);
-        dir.join("mcp.log")
-    })
+fn init_log_file() -> Mutex<BufWriter<std::fs::File>> {
+    let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
+        let home = dirs::home_dir().unwrap_or_default();
+        home.join(".local")
+            .join("state")
+            .to_string_lossy()
+            .to_string()
+    });
+    let dir = PathBuf::from(state_home).join("consult-llm-mcp");
+    let _ = create_dir_all(&dir);
+    let path = dir.join("mcp.log");
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .expect("failed to open log file");
+    Mutex::new(BufWriter::new(file))
 }
 
 pub fn log_to_file(content: &str) {
     let timestamp = Local::now().to_rfc3339();
     let entry = format!("[{timestamp}] {content}\n");
-    if let Ok(mut f) = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path())
-    {
+    let file = LOG_FILE.get_or_init(init_log_file);
+    if let Ok(mut f) = file.lock() {
         let _ = f.write_all(entry.as_bytes());
     }
 }
