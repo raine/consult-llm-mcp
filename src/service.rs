@@ -18,7 +18,9 @@ pub enum ConsultOutcome {
         #[allow(dead_code)]
         usage: Option<Usage>,
     },
-    WebPrompt { clipboard_text: String },
+    WebPrompt {
+        clipboard_text: String,
+    },
 }
 
 pub struct ConsultService {

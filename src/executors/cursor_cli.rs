@@ -135,7 +135,10 @@ fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
         if let Some(tc) = tool_call.get(key)
             && let Some(result) = tc.get("result")
         {
-            return result.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
+            return result
+                .get("success")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
         }
     }
     false
@@ -223,9 +226,14 @@ impl LlmExecutor for CursorCliExecutor {
         }
         args.push(message);
 
-        let mut result =
-            run_cli_executor("cursor-agent", &args, prompt, consultation_id, parse_cursor_line)
-                .await?;
+        let mut result = run_cli_executor(
+            "cursor-agent",
+            &args,
+            prompt,
+            consultation_id,
+            parse_cursor_line,
+        )
+        .await?;
         // Cursor doesn't always emit a session ID; preserve the input thread_id
         if result.thread_id.is_none() {
             result.thread_id = thread_id.map(|s| s.to_string());

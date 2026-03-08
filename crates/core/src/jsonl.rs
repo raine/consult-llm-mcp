@@ -59,7 +59,10 @@ mod tests {
         assert!(offset > 0);
 
         // Complete the partial line and read again
-        let mut f = std::fs::OpenOptions::new().append(true).open(&path).unwrap();
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
         writeln!(f).unwrap();
         f.flush().unwrap();
 
