@@ -387,10 +387,7 @@ fn render_status_bar(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 
     if !state.filter_text.is_empty() && !state.filter_editing {
         spans.push(Span::styled("  filter: ", Style::default().fg(DIM)));
-        spans.push(Span::styled(
-            &state.filter_text,
-            Style::default().fg(YELLOW),
-        ));
+        spans.push(Span::styled(&state.filter_text, Style::default().fg(TEAL)));
     }
 
     let bar = Line::from(spans);
