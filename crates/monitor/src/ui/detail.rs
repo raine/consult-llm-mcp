@@ -191,7 +191,17 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     let blocks = normalize_events(&detail.events);
 
     // ── Pass 2: blocks → ratatui lines ──────────────────────────────
-    let lines = render_blocks(&blocks, inner_width, tick);
+    let mut lines = render_blocks(&blocks, inner_width, tick);
+
+    // Append a spinner when the consultation is still live
+    if is_live {
+        let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
+        lines.push(Line::default());
+        lines.push(Line::from(vec![Span::styled(
+            format!("  {spinner} Generating..."),
+            Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
+        )]));
+    }
 
     // ── Scroll / viewport ───────────────────────────────────────────
     let inner_height = chunks[1].height.saturating_sub(2) as usize;
