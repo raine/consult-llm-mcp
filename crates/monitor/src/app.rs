@@ -12,7 +12,8 @@ use consult_llm_core::stream_events::ParsedStreamEvent;
 use crate::action::Action;
 use crate::poller::PollUpdate;
 use crate::state::{
-    ActiveConsult, AppMode, AppState, CompletedConsult, DetailState, Focus, RowInfo, ServerState,
+    ActiveConsult, AppMode, AppState, CompletedConsult, DetailMetadata, DetailState, Focus,
+    RowInfo, ServerState,
 };
 
 impl AppState {
@@ -276,8 +277,8 @@ impl AppState {
 
         let is_active = self.is_consultation_active(&consultation_id);
 
-        // Look up model/backend from active consults, completed consults, or history
-        let (model, backend) = self.lookup_consult_metadata(&consultation_id);
+        // Look up metadata from active consults, completed consults, or history
+        let meta = self.lookup_consult_metadata(&consultation_id);
 
         self.mode = AppMode::Detail(DetailState {
             consultation_id,
@@ -285,16 +286,27 @@ impl AppState {
             file_offset: offset,
             scroll: if is_active { usize::MAX } else { 0 },
             auto_scroll: is_active,
-            model,
-            backend,
+            model: meta.model,
+            backend: meta.backend,
+            started_at: meta.started_at,
+            duration_ms: meta.duration_ms,
+            success: meta.success,
+            project: meta.project,
         });
     }
 
-    fn lookup_consult_metadata(&self, consultation_id: &str) -> (Option<String>, Option<String>) {
+    fn lookup_consult_metadata(&self, consultation_id: &str) -> DetailMetadata {
         // Check active consults
         for server in self.servers.values() {
             if let Some(ac) = server.active_consults.get(consultation_id) {
-                return (Some(ac.model.clone()), Some(ac.backend.clone()));
+                return DetailMetadata {
+                    model: Some(ac.model.clone()),
+                    backend: Some(ac.backend.clone()),
+                    started_at: Some(ac.started_at),
+                    duration_ms: None,
+                    success: None,
+                    project: server.project.clone(),
+                };
             }
         }
         // Check completed consults
@@ -304,7 +316,14 @@ impl AppState {
                 .iter()
                 .find(|c| c.id == consultation_id)
             {
-                return (Some(cc.model.clone()), Some(cc.backend.clone()));
+                return DetailMetadata {
+                    model: Some(cc.model.clone()),
+                    backend: Some(cc.backend.clone()),
+                    started_at: None,
+                    duration_ms: Some(cc.duration_ms),
+                    success: Some(cc.success),
+                    project: server.project.clone(),
+                };
             }
         }
         // Check history
@@ -313,9 +332,26 @@ impl AppState {
             .iter()
             .find(|h| h.consultation_id.as_deref() == Some(consultation_id))
         {
-            return (Some(hr.model.clone()), Some(hr.backend.clone()));
+            let started_at = DateTime::parse_from_rfc3339(&hr.ts)
+                .map(|dt| dt.with_timezone(&Utc))
+                .ok();
+            return DetailMetadata {
+                model: Some(hr.model.clone()),
+                backend: Some(hr.backend.clone()),
+                started_at,
+                duration_ms: Some(hr.duration_ms),
+                success: Some(hr.success),
+                project: Some(hr.project.clone()),
+            };
         }
-        (None, None)
+        DetailMetadata {
+            model: None,
+            backend: None,
+            started_at: None,
+            duration_ms: None,
+            success: None,
+            project: None,
+        }
     }
 
     /// Check if a consultation is still active (running) in any server.

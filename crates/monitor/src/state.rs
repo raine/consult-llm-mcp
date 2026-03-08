@@ -38,6 +38,19 @@ pub(crate) struct DetailState {
     pub(crate) auto_scroll: bool,
     pub(crate) model: Option<String>,
     pub(crate) backend: Option<String>,
+    pub(crate) started_at: Option<DateTime<Utc>>,
+    pub(crate) duration_ms: Option<u64>,
+    pub(crate) success: Option<bool>,
+    pub(crate) project: Option<String>,
+}
+
+pub(crate) struct DetailMetadata {
+    pub(crate) model: Option<String>,
+    pub(crate) backend: Option<String>,
+    pub(crate) started_at: Option<DateTime<Utc>>,
+    pub(crate) duration_ms: Option<u64>,
+    pub(crate) success: Option<bool>,
+    pub(crate) project: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]

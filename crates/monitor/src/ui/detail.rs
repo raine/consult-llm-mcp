@@ -7,7 +7,9 @@ use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
 
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use crate::format::format_token_count;
+use chrono::Utc;
+
+use crate::format::{format_duration_friendly, format_token_count};
 use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
 };
@@ -113,6 +115,70 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
                 format_token_count(total_out)
             ),
             Style::default().fg(DIM_WHITE),
+        ));
+    }
+
+    // Duration or live elapsed
+    let is_live = state.is_consultation_active(&consultation_id);
+    if is_live {
+        if let Some(started_at) = detail.started_at {
+            let elapsed_ms = Utc::now()
+                .signed_duration_since(started_at)
+                .num_milliseconds()
+                .max(0) as u64;
+            header_spans.push(Span::styled(
+                format!("  {}", format_duration_friendly(elapsed_ms)),
+                Style::default().fg(DIM_WHITE),
+            ));
+        }
+    } else if let Some(duration_ms) = detail.duration_ms {
+        header_spans.push(Span::styled(
+            format!("  {}", format_duration_friendly(duration_ms)),
+            Style::default().fg(DIM_WHITE),
+        ));
+    }
+
+    // Relative timestamp
+    if let Some(started_at) = detail.started_at {
+        let secs = Utc::now()
+            .signed_duration_since(started_at)
+            .num_seconds()
+            .max(0);
+        let relative = if secs < 10 {
+            "just now".to_string()
+        } else if secs < 60 {
+            format!("{}s ago", secs)
+        } else if secs < 3600 {
+            format!("{}m ago", secs / 60)
+        } else if secs < 86400 {
+            format!("{}h ago", secs / 3600)
+        } else {
+            format!("{}d ago", secs / 86400)
+        };
+        header_spans.push(Span::styled(
+            format!("  {relative}"),
+            Style::default().fg(DIM),
+        ));
+    }
+
+    // Success/failure indicator (completed only)
+    if let Some(success) = detail.success {
+        let (icon, color) = if success {
+            ("\u{2713}", GREEN)
+        } else {
+            ("\u{2717}", RED)
+        };
+        header_spans.push(Span::styled(
+            format!("  {icon}"),
+            Style::default().fg(color),
+        ));
+    }
+
+    // Project
+    if let Some(ref project) = detail.project {
+        header_spans.push(Span::styled(
+            format!("  {project}"),
+            Style::default().fg(DIM),
         ));
     }
 
