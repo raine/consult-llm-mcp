@@ -216,9 +216,10 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     // Append a spinner when the consultation is still live
     if is_live {
         let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
+        let label = live_spinner_label(&detail.events);
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(
-            format!("  {spinner} Generating..."),
+            format!("  {spinner} {label}"),
             Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
         )]));
     }
@@ -472,6 +473,14 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
     lines
 }
 
+/// Pick the live spinner label based on what the last event was.
+fn live_spinner_label(events: &[ParsedStreamEvent]) -> &'static str {
+    match events.last() {
+        Some(ParsedStreamEvent::Thinking { .. }) => "Thinking...",
+        _ => "Generating...",
+    }
+}
+
 // ── Tool line ───────────────────────────────────────────────────────────
 
 fn render_tool_line(
@@ -704,9 +713,10 @@ pub(super) fn render_thread_detail_view(
         .is_some_and(|cid| state.is_consultation_active(cid));
     if is_live {
         let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
+        let label = live_spinner_label(&detail.active_events);
         lines.push(Line::default());
         lines.push(Line::from(vec![Span::styled(
-            format!("  {spinner} Generating..."),
+            format!("  {spinner} {label}"),
             Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
         )]));
     }
