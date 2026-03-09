@@ -47,11 +47,10 @@ pub fn parse_cursor_line(line: &str) -> StreamEvents {
             }
         }
         Some("thinking") if subtype == Some("delta") => {
-            let text = event
-                .get("text")
-                .and_then(|t| t.as_str())
-                .unwrap_or("")
-                .to_string();
+            let text = event.get("text").and_then(|t| t.as_str()).unwrap_or("");
+            // Cursor thinking deltas sometimes contain literal "\n" sequences
+            // as paragraph separators; replace with actual newlines.
+            let text = text.replace("\\n", "\n");
             smallvec![ParsedStreamEvent::Thinking { text }]
         }
         Some("tool_call") => {
