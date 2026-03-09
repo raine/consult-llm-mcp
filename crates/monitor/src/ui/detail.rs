@@ -246,6 +246,10 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
 
     let effective_scroll = if let AppMode::Detail(ref mut detail) = state.mode {
         detail.scroll = detail.scroll.min(max_scroll);
+        // Auto-enable follow when scrolled to bottom of a live consultation
+        if is_live && detail.scroll >= max_scroll {
+            detail.auto_scroll = true;
+        }
         detail.scroll
     } else {
         0
@@ -734,6 +738,10 @@ pub(super) fn render_thread_detail_view(
 
     let effective_scroll = if let AppMode::ThreadDetail(ref mut detail) = state.mode {
         detail.scroll = detail.scroll.min(max_scroll);
+        // Auto-enable follow when scrolled to bottom of a live consultation
+        if is_live && detail.scroll >= max_scroll {
+            detail.auto_scroll = true;
+        }
         detail.scroll
     } else {
         0
