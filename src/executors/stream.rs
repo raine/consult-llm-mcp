@@ -89,17 +89,13 @@ impl StreamReducer {
     }
 
     /// Process a batch of parsed events from a single line.
-    /// Flushes the sidecar on tool and lifecycle boundaries for monitor
-    /// visibility, but skips flushing on high-frequency text deltas to
-    /// avoid a syscall per streamed token.
+    /// Flushes the sidecar once per batch rather than per event.
     pub fn process(&mut self, events: StreamEvents) {
-        let mut needs_flush = false;
         for event in events {
             self.sidecar.write(&event);
             match event {
                 ParsedStreamEvent::SessionStarted { id } => {
                     self.thread_id = Some(id);
-                    needs_flush = true;
                 }
                 ParsedStreamEvent::Thinking { .. } => {
                     self.emit_progress(ProgressStage::Thinking);
@@ -111,7 +107,6 @@ impl StreamReducer {
                 ParsedStreamEvent::ToolStarted { call_id, label } => {
                     self.active_tools.insert(call_id.clone(), label.clone());
                     self.emit_progress(ProgressStage::ToolUse { tool: label });
-                    needs_flush = true;
                 }
                 ParsedStreamEvent::ToolFinished { call_id, success } => {
                     if let Some(label) = self.active_tools.remove(&call_id) {
@@ -120,11 +115,8 @@ impl StreamReducer {
                             success,
                         });
                     }
-                    needs_flush = true;
                 }
-                ParsedStreamEvent::Prompt { .. } => {
-                    needs_flush = true;
-                }
+                ParsedStreamEvent::Prompt { .. } => {}
                 ParsedStreamEvent::Usage {
                     prompt_tokens,
                     completion_tokens,
@@ -133,13 +125,10 @@ impl StreamReducer {
                         prompt_tokens,
                         completion_tokens,
                     });
-                    needs_flush = true;
                 }
             }
         }
-        if needs_flush {
-            self.sidecar.flush();
-        }
+        self.sidecar.flush();
     }
 
     fn emit_progress(&mut self, stage: ProgressStage) {
