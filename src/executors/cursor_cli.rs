@@ -148,22 +148,35 @@ fn extract_cursor_tool_name(tool_call: &serde_json::Value) -> String {
             .and_then(|v| v.as_str());
         return tool_label("glob", pattern);
     }
+    // Unknown tool type — use the key name (e.g. "editToolCall" → "edit")
+    if let Some(key) = tool_call
+        .as_object()
+        .and_then(|o| o.keys().find(|k| k.ends_with("ToolCall")))
+    {
+        return key.trim_end_matches("ToolCall").to_string();
+    }
     "tool".to_string()
 }
 
+/// Find the `result` object inside a cursor tool call by looking for any
+/// key ending in "ToolCall" (e.g. readToolCall, shellToolCall, editToolCall).
+fn cursor_tool_result(tool_call: &serde_json::Value) -> Option<&serde_json::Value> {
+    tool_call.as_object().and_then(|obj| {
+        obj.iter()
+            .find(|(k, _)| k.ends_with("ToolCall"))
+            .and_then(|(_, v)| v.get("result"))
+    })
+}
+
 fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
-    for key in ["readToolCall", "globToolCall", "shellToolCall"] {
-        if let Some(tc) = tool_call.get(key)
-            && let Some(result) = tc.get("result")
-        {
-            // cursor-agent uses result.success as either a bool (true/false)
-            // or an object (containing content) for successful tool calls
-            return match result.get("success") {
-                Some(v) if v.is_boolean() => v.as_bool().unwrap_or(false),
-                Some(v) if v.is_object() => true,
-                _ => false,
-            };
-        }
+    if let Some(result) = cursor_tool_result(tool_call) {
+        // cursor-agent uses result.success as either a bool (true/false)
+        // or an object (containing content) for successful tool calls
+        return match result.get("success") {
+            Some(v) if v.is_boolean() => v.as_bool().unwrap_or(false),
+            Some(v) if v.is_object() => true,
+            _ => false,
+        };
     }
     false
 }
@@ -171,32 +184,28 @@ fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
 /// Extract error message from a failed cursor tool call.
 /// Handles `result.error.errorMessage` and `result.rejected.reason`.
 fn extract_cursor_tool_error(tool_call: &serde_json::Value) -> Option<String> {
-    for key in ["readToolCall", "globToolCall", "shellToolCall"] {
-        if let Some(tc) = tool_call.get(key)
-            && let Some(result) = tc.get("result")
-        {
-            if let Some(err) = result.get("error") {
-                return err
-                    .get("errorMessage")
-                    .and_then(|m| m.as_str())
-                    .map(|s| s.to_string());
-            }
-            if let Some(rejected) = result.get("rejected") {
-                let reason = rejected
-                    .get("reason")
-                    .and_then(|r| r.as_str())
-                    .filter(|s| !s.is_empty());
-                let command = rejected
-                    .get("command")
-                    .and_then(|c| c.as_str())
-                    .filter(|s| !s.is_empty());
-                return Some(match (reason, command) {
-                    (Some(r), Some(c)) => format!("rejected: {r} ({c})"),
-                    (Some(r), None) => format!("rejected: {r}"),
-                    (None, Some(c)) => format!("rejected ({c})"),
-                    (None, None) => "rejected".to_string(),
-                });
-            }
+    if let Some(result) = cursor_tool_result(tool_call) {
+        if let Some(err) = result.get("error") {
+            return err
+                .get("errorMessage")
+                .and_then(|m| m.as_str())
+                .map(|s| s.to_string());
+        }
+        if let Some(rejected) = result.get("rejected") {
+            let reason = rejected
+                .get("reason")
+                .and_then(|r| r.as_str())
+                .filter(|s| !s.is_empty());
+            let command = rejected
+                .get("command")
+                .and_then(|c| c.as_str())
+                .filter(|s| !s.is_empty());
+            return Some(match (reason, command) {
+                (Some(r), Some(c)) => format!("rejected: {r} ({c})"),
+                (Some(r), None) => format!("rejected: {r}"),
+                (None, Some(c)) => format!("rejected ({c})"),
+                (None, None) => "rejected".to_string(),
+            });
         }
     }
     None
