@@ -514,11 +514,13 @@ impl AppState {
         ids.sort_by_key(|(insertion_idx, id)| {
             let server = &self.servers[*id];
             let bucket = if !server.active_consults.is_empty() {
-                0 // active first
+                0 // active consultations
+            } else if !server.completed_consults.is_empty() {
+                1 // recently completed consultations
             } else if !server.stopped && !server.dead {
-                1 // idle
+                2 // idle, no consultations
             } else {
-                2 // stopped/dead
+                3 // stopped/dead
             };
             (bucket, *insertion_idx)
         });
