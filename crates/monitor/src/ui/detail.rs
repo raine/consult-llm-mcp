@@ -377,8 +377,9 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
     let mut response_header_shown = false;
+    let last_idx = blocks.len().saturating_sub(1);
 
-    for block in blocks {
+    for (i, block) in blocks.iter().enumerate() {
         let next_phase = block.phase();
 
         // Insert blank line on phase transitions (but not from Start or Prompt)
@@ -406,6 +407,12 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
             }
             RenderedBlock::Thinking(text) => {
                 if text.is_empty() {
+                    // Skip trailing empty thinking block – the live spinner
+                    // already shows "Thinking…" so rendering it here too would
+                    // duplicate the label.
+                    if i == last_idx {
+                        continue;
+                    }
                     lines.push(Line::from(vec![Span::styled(
                         "  Thinking...",
                         Style::default().fg(DIM).add_modifier(Modifier::ITALIC),
