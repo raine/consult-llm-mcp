@@ -144,7 +144,11 @@ impl EventWriter {
     fn emit(&self, event: MonitorEvent) {
         let flush_now = matches!(
             event,
-            MonitorEvent::ConsultFinished { .. } | MonitorEvent::ServerStopped
+            MonitorEvent::ServerStarted { .. }
+                | MonitorEvent::ConsultStarted { .. }
+                | MonitorEvent::ConsultProgress { .. }
+                | MonitorEvent::ConsultFinished { .. }
+                | MonitorEvent::ServerStopped
         );
         let envelope = EventEnvelope {
             ts: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
