@@ -1,6 +1,6 @@
 # consult-llm-mcp
 
-An MCP server that lets Claude Code consult stronger AI models (GPT-5.2, Gemini
+An MCP server that lets Claude Code consult stronger AI models (GPT-5.4, Gemini
 3.1 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
 to bring in the heavy artillery. Supports multi-turn conversations.
 
@@ -23,11 +23,11 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 ```
 
 [Quick start](#quick-start) · [Configuration](#configuration) ·
-[Monitor TUI](#monitor) · [Changelog](CHANGELOG.md)
+[Skills](#skills) · [Monitor TUI](#monitor) · [Changelog](CHANGELOG.md)
 
 ## Features
 
-- Query powerful AI models (GPT-5.2, Gemini 3.1 Pro, DeepSeek Reasoner) with
+- Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, DeepSeek Reasoner) with
   relevant files as context
 - Direct queries with optional file context
 - Include git changes for code review and analysis
@@ -42,6 +42,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
   across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
   LLM services
+- [Skills](#skills): Multi-LLM debate, collaboration, and consultation workflows
 - Less is more: Single MCP tool to not clutter the context
 
 <img src="meta/monitor-screenshot.webp" alt="consult-llm-monitor screenshot" width="600">
@@ -583,9 +584,6 @@ claude mcp add consult-llm \
   -- npx -y consult-llm-mcp
 ```
 
-Alternatively, use a [slash command](#example-slash-command) with hardcoded
-model names for guaranteed model selection.
-
 ## MCP tool: consult_llm
 
 The server provides a single tool called `consult_llm` for asking powerful AI
@@ -732,22 +730,14 @@ agent's context. This allows Claude to infer when to call the MCP from natural
 language (e.g., "ask gemini about..."). Works out of the box, but you have less
 control over how the MCP is invoked.
 
-### 2. Slash commands (most reliable)
-
-Explicitly invoke with `/consult ask gemini about X`. Guaranteed activation with
-full control over custom instructions, but requires the explicit syntax. For
-example, you can instruct Claude to always find related files and pass them as
-context via the `files` parameter. See the
-[example slash command](#example-slash-command) below.
-
-### 3. Skills
+### 2. Skills
 
 Automatically triggers when Claude detects matching intent. Like slash commands,
 supports custom instructions (e.g., always gathering relevant files), but not
-always reliably triggered. See the [example skill](#example-skill) below.
+always reliably triggered. See the [consult skill](#consult) below.
 
-**Recommendation:** Start with no custom activation. Use slash commands if you
-need reliability or custom instructions.
+**Recommendation:** Start with no custom activation. Use skills if you need
+custom instructions for how the MCP is invoked.
 
 ## Installing skills
 
@@ -781,22 +771,6 @@ Type "ask gemini about X" or "ask codex about X" in Claude Code. This is not
 strictly necessary since Claude can infer from the schema that "ask gemini"
 should call this MCP, but it gives more precise control over how the agent calls
 this MCP.
-
-## Slash command
-
-Here's an example
-[Claude Code slash command](https://code.claude.com/docs/en/slash-commands) that
-uses the `consult_llm` MCP tool. See [examples/consult.md](examples/consult.md)
-for the full content.
-
-Save it as `~/.claude/commands/consult.md` and you can then use it by typing
-`/consult ask gemini about X` or `/consult ask codex about X` in Claude Code.
-
-## Multi-LLM skills
-
-Skills that orchestrate multi-turn conversations between LLMs. All use
-`thread_id` to maintain conversation context across rounds, so each LLM
-remembers the full history without resending everything.
 
 ### collab
 
