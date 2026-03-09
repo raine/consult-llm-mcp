@@ -409,6 +409,27 @@ claude mcp add consult-llm \
   -- npx -y consult-llm-mcp
 ```
 
+**Shell command permissions:**
+
+Cursor CLI runs with `--mode ask`, which blocks shell commands by default. If
+your prompts involve tools that need to run commands (e.g. `git diff` for code
+review), allow them in `~/.cursor/cli-config.json`:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Shell(git diff*)",
+      "Shell(git log*)",
+      "Shell(git show*)"
+    ],
+    "deny": []
+  }
+}
+```
+
+Glob patterns are supported. The `deny` list takes precedence over `allow`.
+
 #### Multi-turn conversations
 
 CLI backends support multi-turn conversations via the `thread_id` parameter. The
