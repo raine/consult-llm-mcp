@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.7.1 (2026-03-09)
+
+- Monitor: show "Thinking..." spinner when thinking events are streaming
+- Monitor: auto-enable follow mode when scrolled to bottom in detail view
+- Monitor: sort servers with active consultations above idle ones
+- Monitor: show tool error messages in detail view
+- Fixed cursor-agent thinking deltas containing literal `\n` instead of newlines
+- Fixed cursor-agent crash on unknown tool types
+- Fixed monitor event flushing for real-time detail view updates
+
 ## v2.7.0 (2026-03-08)
 
 - Fixed cursor-agent tool success detection
