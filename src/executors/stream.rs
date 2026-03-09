@@ -75,6 +75,7 @@ impl StreamReducer {
             sidecar.write(&ParsedStreamEvent::Prompt {
                 text: text.to_string(),
             });
+            sidecar.flush();
         }
         Self {
             thread_id: None,
@@ -121,7 +122,9 @@ impl StreamReducer {
                     }
                     needs_flush = true;
                 }
-                ParsedStreamEvent::Prompt { .. } => {}
+                ParsedStreamEvent::Prompt { .. } => {
+                    needs_flush = true;
+                }
                 ParsedStreamEvent::Usage {
                     prompt_tokens,
                     completion_tokens,
