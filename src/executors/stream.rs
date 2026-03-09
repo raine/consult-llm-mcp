@@ -108,7 +108,9 @@ impl StreamReducer {
                     self.active_tools.insert(call_id.clone(), label.clone());
                     self.emit_progress(ProgressStage::ToolUse { tool: label });
                 }
-                ParsedStreamEvent::ToolFinished { call_id, success } => {
+                ParsedStreamEvent::ToolFinished {
+                    call_id, success, ..
+                } => {
                     if let Some(label) = self.active_tools.remove(&call_id) {
                         self.emit_progress(ProgressStage::ToolResult {
                             tool: label,

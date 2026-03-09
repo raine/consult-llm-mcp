@@ -71,8 +71,13 @@ pub fn parse_codex_line(line: &str) -> StreamEvents {
             if let Some(item) = event.get("item") {
                 match item.get("type").and_then(|t| t.as_str()) {
                     Some("command_execution") => {
-                        let success =
-                            item.get("status").and_then(|s| s.as_str()) == Some("completed");
+                        let status = item.get("status").and_then(|s| s.as_str());
+                        let success = status == Some("completed");
+                        let error = if success {
+                            None
+                        } else {
+                            status.map(|s| s.to_string())
+                        };
                         smallvec![ParsedStreamEvent::ToolFinished {
                             call_id: item
                                 .get("id")
@@ -80,6 +85,7 @@ pub fn parse_codex_line(line: &str) -> StreamEvents {
                                 .unwrap_or("")
                                 .to_string(),
                             success,
+                            error,
                         }]
                     }
                     Some("agent_message") => {

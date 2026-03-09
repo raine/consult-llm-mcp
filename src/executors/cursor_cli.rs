@@ -69,8 +69,22 @@ pub fn parse_cursor_line(line: &str) -> StreamEvents {
                     smallvec![ParsedStreamEvent::ToolStarted { call_id, label }]
                 }
                 Some("completed") => {
-                    let success = tc.map(is_cursor_tool_success).unwrap_or(false);
-                    smallvec![ParsedStreamEvent::ToolFinished { call_id, success }]
+                    let (success, error) = tc
+                        .map(|tc| {
+                            let ok = is_cursor_tool_success(tc);
+                            let err = if ok {
+                                None
+                            } else {
+                                extract_cursor_tool_error(tc)
+                            };
+                            (ok, err)
+                        })
+                        .unwrap_or((false, None));
+                    smallvec![ParsedStreamEvent::ToolFinished {
+                        call_id,
+                        success,
+                        error,
+                    }]
                 }
                 _ => smallvec![],
             }
@@ -153,6 +167,40 @@ fn is_cursor_tool_success(tool_call: &serde_json::Value) -> bool {
         }
     }
     false
+}
+
+/// Extract error message from a failed cursor tool call.
+/// Handles `result.error.errorMessage` and `result.rejected.reason`.
+fn extract_cursor_tool_error(tool_call: &serde_json::Value) -> Option<String> {
+    for key in ["readToolCall", "globToolCall", "shellToolCall"] {
+        if let Some(tc) = tool_call.get(key)
+            && let Some(result) = tc.get("result")
+        {
+            if let Some(err) = result.get("error") {
+                return err
+                    .get("errorMessage")
+                    .and_then(|m| m.as_str())
+                    .map(|s| s.to_string());
+            }
+            if let Some(rejected) = result.get("rejected") {
+                let reason = rejected
+                    .get("reason")
+                    .and_then(|r| r.as_str())
+                    .filter(|s| !s.is_empty());
+                let command = rejected
+                    .get("command")
+                    .and_then(|c| c.as_str())
+                    .filter(|s| !s.is_empty());
+                return Some(match (reason, command) {
+                    (Some(r), Some(c)) => format!("rejected: {r} ({c})"),
+                    (Some(r), None) => format!("rejected: {r}"),
+                    (None, Some(c)) => format!("rejected ({c})"),
+                    (None, None) => "rejected".to_string(),
+                });
+            }
+        }
+    }
+    None
 }
 
 /// Map model IDs to cursor-agent model names

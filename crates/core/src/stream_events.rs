@@ -28,6 +28,8 @@ pub enum ParsedStreamEvent {
     ToolFinished {
         call_id: String,
         success: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     Prompt {
         text: String,
@@ -62,10 +64,12 @@ mod tests {
             ParsedStreamEvent::ToolFinished {
                 call_id: "c1".to_string(),
                 success: true,
+                error: None,
             },
             ParsedStreamEvent::ToolFinished {
                 call_id: "c2".to_string(),
                 success: false,
+                error: Some("File not found".to_string()),
             },
             ParsedStreamEvent::Prompt {
                 text: "What is Rust?".to_string(),

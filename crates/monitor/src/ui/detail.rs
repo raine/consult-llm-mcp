@@ -23,6 +23,7 @@ enum RenderedBlock {
     Tool {
         label: String,
         success: Option<bool>,
+        error: Option<String>,
     },
     Text(String),
     Usage {
@@ -320,14 +321,24 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
                 blocks.push(RenderedBlock::Tool {
                     label: label.clone(),
                     success: None,
+                    error: None,
                 });
                 tool_indices.insert(call_id.as_str(), idx);
             }
-            ParsedStreamEvent::ToolFinished { call_id, success } => {
+            ParsedStreamEvent::ToolFinished {
+                call_id,
+                success,
+                error,
+            } => {
                 if let Some(&idx) = tool_indices.get(call_id.as_str())
-                    && let Some(RenderedBlock::Tool { success: s, .. }) = blocks.get_mut(idx)
+                    && let Some(RenderedBlock::Tool {
+                        success: s,
+                        error: e,
+                        ..
+                    }) = blocks.get_mut(idx)
                 {
                     *s = Some(*success);
+                    *e = error.clone();
                 }
             }
             ParsedStreamEvent::AssistantText { text } if !text.is_empty() => {
@@ -415,8 +426,18 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
                     }
                 }
             }
-            RenderedBlock::Tool { label, success } => {
+            RenderedBlock::Tool {
+                label,
+                success,
+                error,
+            } => {
                 lines.push(render_tool_line(label, *success, inner_width, tick));
+                if let Some(err) = error {
+                    lines.push(Line::from(vec![
+                        Span::raw("      "),
+                        Span::styled(err.clone(), Style::default().fg(RED)),
+                    ]));
+                }
             }
             RenderedBlock::Text(text) => {
                 if !response_header_shown {

@@ -103,8 +103,22 @@ pub fn parse_gemini_line(line: &str) -> StreamEvents {
                 .and_then(|t| t.as_str())
                 .unwrap_or("")
                 .to_string();
-            let success = event.get("status").and_then(|s| s.as_str()) == Some("success");
-            smallvec![ParsedStreamEvent::ToolFinished { call_id, success }]
+            let status = event.get("status").and_then(|s| s.as_str());
+            let success = status == Some("success");
+            let error = if success {
+                None
+            } else {
+                event
+                    .get("error")
+                    .and_then(|e| e.as_str())
+                    .or(status)
+                    .map(|s| s.to_string())
+            };
+            smallvec![ParsedStreamEvent::ToolFinished {
+                call_id,
+                success,
+                error,
+            }]
         }
         Some("result") => {
             if let Some(stats) = event.get("stats") {
@@ -229,7 +243,7 @@ mod tests {
         );
         assert_eq!(events.len(), 1);
         assert!(
-            matches!(&events[0], ParsedStreamEvent::ToolFinished { call_id, success } if call_id == "read_file_123" && *success)
+            matches!(&events[0], ParsedStreamEvent::ToolFinished { call_id, success, .. } if call_id == "read_file_123" && *success)
         );
     }
 
