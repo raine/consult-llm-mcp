@@ -1,13 +1,13 @@
 use std::fs::{OpenOptions, create_dir_all};
-use std::io::{BufWriter, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use chrono::Local;
 
-static LOG_FILE: OnceLock<Mutex<BufWriter<std::fs::File>>> = OnceLock::new();
+static LOG_FILE: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
 
-fn init_log_file() -> Mutex<BufWriter<std::fs::File>> {
+fn init_log_file() -> Mutex<std::fs::File> {
     let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
         let home = dirs::home_dir().unwrap_or_default();
         home.join(".local")
@@ -23,7 +23,7 @@ fn init_log_file() -> Mutex<BufWriter<std::fs::File>> {
         .append(true)
         .open(path)
         .expect("failed to open log file");
-    Mutex::new(BufWriter::new(file))
+    Mutex::new(file)
 }
 
 pub fn log_to_file(content: &str) {
