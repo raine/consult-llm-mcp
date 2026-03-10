@@ -48,6 +48,11 @@ impl Drop for TerminalGuard {
 // ── Main ────────────────────────────────────────────────────────────────
 
 fn main() -> io::Result<()> {
+    if std::env::args().any(|a| a == "--version" || a == "-v") {
+        println!("consult-llm-monitor {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = terminal::disable_raw_mode();
