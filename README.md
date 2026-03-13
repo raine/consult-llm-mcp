@@ -29,12 +29,10 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
 - Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, DeepSeek Reasoner) with
   relevant files as context
-- Direct queries with optional file context
-- Include git changes for code review and analysis
-- Comprehensive logging with cost estimation
+- Include git changes for code review
+- Comprehensive logging with cost estimation (if using API)
 - [Monitor TUI](#monitor): Real-time dashboard for watching active consultations
-- [Gemini CLI backend](#gemini-cli): Use the `gemini` CLI to take advantage of
-  [free quota](https://developers.google.com/gemini-code-assist/resources/quotas#quotas-for-agent-mode-gemini-cli)
+- [Gemini CLI backend](#gemini-cli): Use the `gemini` CLI for Gemini models
 - [Codex CLI backend](#codex-cli): Use the `codex` CLI for OpenAI models
 - [Cursor CLI backend](#cursor-cli): Use the `cursor-agent` CLI to route GPT and
   Gemini models through a single tool
