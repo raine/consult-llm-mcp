@@ -102,6 +102,12 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             Style::default().fg(TEAL),
         ));
     }
+    if let Some(ref effort) = detail.reasoning_effort {
+        header_spans.push(Span::styled(
+            format!("  reasoning:{effort}"),
+            Style::default().fg(DIM),
+        ));
+    }
 
     // Show token totals from Usage events
     let (total_in, total_out) = detail.events.iter().fold((0u64, 0u64), |(i, o), e| {

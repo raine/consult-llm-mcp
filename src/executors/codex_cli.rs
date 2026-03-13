@@ -145,6 +145,10 @@ impl LlmExecutor for CodexCliExecutor {
         "codex_cli"
     }
 
+    fn reasoning_effort(&self) -> Option<&str> {
+        Some(&self.codex_reasoning_effort)
+    }
+
     async fn execute(
         &self,
         prompt: &str,

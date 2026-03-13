@@ -26,6 +26,8 @@ pub enum MonitorEvent {
         thread_id: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         task_mode: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_effort: Option<String>,
     },
     ConsultProgress {
         id: String,
@@ -97,6 +99,8 @@ pub struct HistoryRecord {
     pub parsed_ts: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
 }
 
 pub fn append_history(record: &HistoryRecord) {

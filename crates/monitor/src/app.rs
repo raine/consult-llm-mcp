@@ -226,6 +226,7 @@ impl AppState {
                 backend,
                 thread_id,
                 task_mode,
+                reasoning_effort,
             } => {
                 if let Some(server) = self.servers.get_mut(server_id) {
                     let started_at = DateTime::parse_from_rfc3339(&envelope.ts)
@@ -240,6 +241,7 @@ impl AppState {
                             last_progress: None,
                             thread_id: thread_id.clone(),
                             task_mode: task_mode.clone(),
+                            reasoning_effort: reasoning_effort.clone(),
                         },
                     );
                 }
@@ -307,6 +309,7 @@ impl AppState {
             auto_scroll: is_active,
             model: meta.model,
             backend: meta.backend,
+            reasoning_effort: meta.reasoning_effort,
             started_at: meta.started_at,
             duration_ms: meta.duration_ms,
             success: meta.success,
@@ -431,6 +434,7 @@ impl AppState {
                     success: None,
                     project: server.project.clone(),
                     task_mode: ac.task_mode.clone(),
+                    reasoning_effort: ac.reasoning_effort.clone(),
                 };
             }
         }
@@ -449,6 +453,7 @@ impl AppState {
                     success: Some(cc.success),
                     project: server.project.clone(),
                     task_mode: cc.task_mode.clone(),
+                    reasoning_effort: None,
                 };
             }
         }
@@ -469,6 +474,7 @@ impl AppState {
                 success: Some(hr.success),
                 project: Some(hr.project.clone()),
                 task_mode: None,
+                reasoning_effort: hr.reasoning_effort.clone(),
             };
         }
         DetailMetadata {
@@ -479,6 +485,7 @@ impl AppState {
             success: None,
             project: None,
             task_mode: None,
+            reasoning_effort: None,
         }
     }
 

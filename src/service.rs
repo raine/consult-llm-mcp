@@ -60,6 +60,7 @@ impl ConsultService {
             other => Some(format!("{other:?}").to_lowercase()),
         };
 
+        let reasoning_effort = executor.reasoning_effort().map(|s| s.to_string());
         consult_llm_core::monitoring::emit(
             consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
                 id: consultation_id.clone(),
@@ -67,6 +68,7 @@ impl ConsultService {
                 backend: backend_name.clone(),
                 thread_id: args.thread_id.clone(),
                 task_mode: task_mode_str,
+                reasoning_effort: reasoning_effort.clone(),
             },
         );
 
@@ -114,6 +116,7 @@ impl ConsultService {
                 tokens_out,
                 parsed_ts: None,
                 thread_id,
+                reasoning_effort,
             },
         );
 

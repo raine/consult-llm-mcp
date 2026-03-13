@@ -21,6 +21,9 @@ pub struct ExecuteResult {
 pub trait LlmExecutor: Send + Sync {
     fn capabilities(&self) -> &LlmExecutorCapabilities;
     fn backend_name(&self) -> &'static str;
+    fn reasoning_effort(&self) -> Option<&str> {
+        None
+    }
     async fn execute(
         &self,
         prompt: &str,
