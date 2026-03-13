@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.8.0 (2026-03-13)
+
+- Replaced hardcoded model enum with abstract selectors (`gemini`, `openai`,
+  `deepseek`) that resolve to the best available model at query time. This
+  avoids the need to hardcode a specific model in the caller side.
+- Responses now include a `[model:xxx]` prefix showing which concrete model was
+  used
+- Default Codex reasoning effort to "high" (was previously unset)
+- Monitor: added Task column to active and history tables
+- Monitor: show task mode and reasoning effort in detail view header
+- Monitor: press `s` in detail view to toggle system prompt display
+- Monitor: system prompt is now recorded in sidecar event files for viewing in
+  the TUI
+
 ## v2.7.4 (2026-03-13)
 
 - Fixed Linux prebuilt binaries failing on older distros due to glibc version
