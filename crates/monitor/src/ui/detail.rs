@@ -96,6 +96,12 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             Style::default().fg(DIM),
         ));
     }
+    if let Some(ref task_mode) = detail.task_mode {
+        header_spans.push(Span::styled(
+            format!("  {task_mode}"),
+            Style::default().fg(TEAL),
+        ));
+    }
 
     // Show token totals from Usage events
     let (total_in, total_out) = detail.events.iter().fold((0u64, 0u64), |(i, o), e| {

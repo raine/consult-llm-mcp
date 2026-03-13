@@ -71,6 +71,7 @@ pub(crate) struct DetailState {
     pub(crate) duration_ms: Option<u64>,
     pub(crate) success: Option<bool>,
     pub(crate) project: Option<String>,
+    pub(crate) task_mode: Option<String>,
     /// Cached rendered lines from normalize_events + render_blocks.
     pub(crate) cached_lines: Option<Vec<RatatuiLine<'static>>>,
     /// Event count when cache was built (invalidate when events arrive).
@@ -88,6 +89,7 @@ pub(crate) struct DetailMetadata {
     pub(crate) duration_ms: Option<u64>,
     pub(crate) success: Option<bool>,
     pub(crate) project: Option<String>,
+    pub(crate) task_mode: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -144,6 +146,8 @@ pub(crate) struct ActiveConsult {
     pub(crate) last_progress: Option<String>,
     /// Thread ID if this is a resumed thread consultation
     pub(crate) thread_id: Option<String>,
+    /// Task mode (review, debug, plan, create) — None means general
+    pub(crate) task_mode: Option<String>,
 }
 
 pub(crate) struct CompletedConsult {
@@ -153,6 +157,7 @@ pub(crate) struct CompletedConsult {
     pub(crate) duration_ms: u64,
     pub(crate) success: bool,
     pub(crate) error: Option<String>,
+    pub(crate) task_mode: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]

@@ -225,6 +225,7 @@ impl AppState {
                 model,
                 backend,
                 thread_id,
+                task_mode,
             } => {
                 if let Some(server) = self.servers.get_mut(server_id) {
                     let started_at = DateTime::parse_from_rfc3339(&envelope.ts)
@@ -238,6 +239,7 @@ impl AppState {
                             started_at,
                             last_progress: None,
                             thread_id: thread_id.clone(),
+                            task_mode: task_mode.clone(),
                         },
                     );
                 }
@@ -265,6 +267,7 @@ impl AppState {
                             duration_ms: *duration_ms,
                             success: *success,
                             error: error.clone(),
+                            task_mode: ac.task_mode,
                         });
                         // Keep only last 5
                         if server.completed_consults.len() > 5 {
@@ -308,6 +311,7 @@ impl AppState {
             duration_ms: meta.duration_ms,
             success: meta.success,
             project: meta.project,
+            task_mode: meta.task_mode,
             cached_lines: None,
             cached_event_count: 0,
             cached_width: 0,
@@ -426,6 +430,7 @@ impl AppState {
                     duration_ms: None,
                     success: None,
                     project: server.project.clone(),
+                    task_mode: ac.task_mode.clone(),
                 };
             }
         }
@@ -443,6 +448,7 @@ impl AppState {
                     duration_ms: Some(cc.duration_ms),
                     success: Some(cc.success),
                     project: server.project.clone(),
+                    task_mode: cc.task_mode.clone(),
                 };
             }
         }
@@ -462,6 +468,7 @@ impl AppState {
                 duration_ms: Some(hr.duration_ms),
                 success: Some(hr.success),
                 project: Some(hr.project.clone()),
+                task_mode: None,
             };
         }
         DetailMetadata {
@@ -471,6 +478,7 @@ impl AppState {
             duration_ms: None,
             success: None,
             project: None,
+            task_mode: None,
         }
     }
 

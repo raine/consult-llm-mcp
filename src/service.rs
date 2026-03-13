@@ -55,12 +55,18 @@ impl ConsultService {
         let consultation_id = uuid::Uuid::new_v4().simple().to_string();
         let backend_name = executor.backend_name().to_string();
 
+        let task_mode_str = match args.task_mode {
+            crate::schema::TaskMode::General => None,
+            other => Some(format!("{other:?}").to_lowercase()),
+        };
+
         consult_llm_core::monitoring::emit(
             consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
                 id: consultation_id.clone(),
                 model: model.clone(),
                 backend: backend_name.clone(),
                 thread_id: args.thread_id.clone(),
+                task_mode: task_mode_str,
             },
         );
 

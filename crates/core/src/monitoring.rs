@@ -24,6 +24,8 @@ pub enum MonitorEvent {
         backend: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         thread_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task_mode: Option<String>,
     },
     ConsultProgress {
         id: String,
