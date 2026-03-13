@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.7.4 (2026-03-13)
+
+- Fixed Linux prebuilt binaries failing on older distros due to glibc version
+  mismatch by switching to musl static linking
+
 ## v2.7.1 (2026-03-09)
 
 - Monitor: show "Thinking..." spinner when thinking events are streaming
