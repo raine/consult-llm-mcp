@@ -503,14 +503,6 @@ See the "Using web mode..." example above for a concrete transcript.
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
 - `CONSULT_LLM_OPENAI_BACKEND` - Backend for OpenAI models (optional)
   - Options: `api` (default), `codex-cli`, `cursor-cli`
-- `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
-  CLI (optional)
-  - See [Codex CLI](#codex-cli) for details and available options
-- `CONSULT_LLM_EXTRA_MODELS` - Add models not in the built-in list (optional)
-  - Comma-separated list, e.g., `grok-3,kimi-k2.5`
-  - Merged with built-in models and included in the tool schema
-  - Useful for newly released models with a known provider prefix (`gpt-`,
-    `gemini-`, `deepseek-`)
 - `CONSULT_LLM_ALLOWED_MODELS` - Restrict which concrete models can be used
   (optional)
   - Comma-separated list, e.g., `gpt-5.4,gemini-3.1-pro-preview`
@@ -518,6 +510,14 @@ See the "Using web mode..." example above for a concrete transcript.
     allowed, the `gemini` selector resolves to it
   - Useful when a backend doesn't support all models (e.g., Cursor CLI)
   - See [Tips](#controlling-which-models-are-used) for usage examples
+- `CONSULT_LLM_EXTRA_MODELS` - Add models not in the built-in list (optional)
+  - Comma-separated list, e.g., `grok-3,kimi-k2.5`
+  - Merged with built-in models and included in the tool schema
+  - Useful for newly released models with a known provider prefix (`gpt-`,
+    `gemini-`, `deepseek-`)
+- `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
+  CLI (optional)
+  - See [Codex CLI](#codex-cli) for details and available options
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
