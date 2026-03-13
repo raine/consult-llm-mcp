@@ -49,3 +49,21 @@ pub const ALL_MODELS: &[&str] = &[
     "gpt-5.3-codex",
     "gpt-5.2-codex",
 ];
+
+/// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
+/// When a user passes e.g. "gemini", the server picks the first available model from the list.
+pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
+    (
+        "gemini",
+        &[
+            "gemini-3.1-pro-preview",
+            "gemini-3-pro-preview",
+            "gemini-2.5-pro",
+        ],
+    ),
+    (
+        "openai",
+        &["gpt-5.4", "gpt-5.3-codex", "gpt-5.2", "gpt-5.2-codex"],
+    ),
+    ("deepseek", &["deepseek-reasoner"]),
+];

@@ -50,12 +50,12 @@ Think creatively. Share rough ideas — we're exploring, not committing.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: Seed prompt above
 - `files`: Array of relevant source files discovered in Phase 1
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: Seed prompt above
 - `files`: Array of relevant source files discovered in Phase 1
 
@@ -86,12 +86,12 @@ Keep building — don't tear down. Refine toward the best solution.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: Build-on prompt with Codex's ideas
 - `thread_id`: `gemini_thread_id`
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: Build-on prompt with Gemini's ideas
 - `thread_id`: `codex_thread_id`
 

@@ -35,14 +35,14 @@ Based on the reviewer flag:
 ### If `--gemini`: Gemini only
 
 Call `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: The user's query, passed through faithfully (see Critical Rules)
 - `files`: Array of relevant file paths
 
 ### If `--codex`: Codex only
 
 Call `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: The user's query, passed through faithfully (see Critical Rules)
 - `files`: Array of relevant file paths
 
@@ -51,12 +51,12 @@ Call `mcp__consult-llm__consult_llm` with:
 Call BOTH simultaneously (single response, multiple tool calls):
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: The user's query, passed through faithfully (see Critical Rules)
 - `files`: Array of relevant file paths
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: The user's query, passed through faithfully (see Critical Rules)
 - `files`: Array of relevant file paths
 

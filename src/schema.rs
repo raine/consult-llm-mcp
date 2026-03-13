@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use crate::config::registry;
 pub use crate::models::TaskMode;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -29,9 +28,8 @@ pub struct ConsultLlmArgs {
     pub git_diff: Option<GitDiffArgs>,
 }
 
-/// Build the MCP tool input schema with dynamic model enum from ModelRegistry.
+/// Build the MCP tool input schema.
 pub fn consult_llm_schema() -> Map<String, Value> {
-    let reg = registry();
     serde_json::from_value(json!({
         "type": "object",
         "properties": {
@@ -46,9 +44,8 @@ pub fn consult_llm_schema() -> Map<String, Value> {
             },
             "model": {
                 "type": "string",
-                "enum": reg.allowed_models,
-                "default": reg.fallback_model,
-                "description": "LLM model to use. Prefer gpt-5.3-codex when user mentions Codex. This parameter is ignored when `web_mode` is `true`."
+                "examples": ["gemini", "openai", "deepseek"],
+                "description": "Optional model selector. Usually omit this to use the server's configured default. Use 'gemini', 'openai', or 'deepseek' to pick a provider family. Exact model IDs are also accepted as an advanced override. Ignored when `web_mode` is `true`."
             },
             "task_mode": {
                 "type": "string",

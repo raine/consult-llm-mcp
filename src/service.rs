@@ -36,19 +36,13 @@ impl ConsultService {
         }
     }
 
-    pub async fn consult(
-        &self,
-        args: ConsultLlmArgs,
-        model_explicitly_provided: bool,
-    ) -> anyhow::Result<ConsultOutcome> {
+    pub async fn consult(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
         // Web mode short-circuits before model resolution
         if args.web_mode {
             return self.handle_web_mode(args).await;
         }
 
-        let model = self
-            .registry
-            .resolve_model(args.model.as_deref(), model_explicitly_provided)?;
+        let model = self.registry.resolve_model(args.model.as_deref())?;
 
         let executor = self.executor_provider.get_executor(&model)?;
 

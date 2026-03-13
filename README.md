@@ -58,12 +58,12 @@ to bring in the heavy artillery. Supports multi-turn conversations.
      -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
      -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
-     -e CONSULT_LLM_ALLOWED_MODELS=gemini-3.1-pro-preview,gpt-5.4 \
      -- npx -y consult-llm-mcp
    ```
 
-   Uses [Gemini CLI](#gemini-cli) and [Codex CLI](#codex-cli) — no API keys
-   required, just `gemini login` and `codex login`.
+   This is the recommended setup. Uses [Gemini CLI](#gemini-cli) and
+   [Codex CLI](#codex-cli). No API keys required, just `gemini login` and
+   `codex login`.
 
    **With binary** (no Node.js required, but no auto-update):
 
@@ -76,7 +76,6 @@ to bring in the heavy artillery. Supports multi-turn conversations.
      -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
      -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
-     -e CONSULT_LLM_ALLOWED_MODELS=gemini-3.1-pro-preview,gpt-5.4 \
      -- consult-llm-mcp
    ```
 
@@ -497,9 +496,9 @@ See the "Using web mode..." example above for a concrete transcript.
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Options: `gpt-5.2` (default), `gpt-5.4`, `gemini-2.5-pro`,
-    `gemini-3-pro-preview`, `gemini-3.1-pro-preview`, `deepseek-reasoner`,
-    `gpt-5.3-codex`, `gpt-5.2-codex`
+  - Accepts selectors (`gemini`, `openai`, `deepseek`) or exact model IDs
+    (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.)
+  - Selectors are resolved to the best available model at startup
 - `CONSULT_LLM_GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`
 - `CONSULT_LLM_OPENAI_BACKEND` - Backend for OpenAI models (optional)
@@ -512,12 +511,13 @@ See the "Using web mode..." example above for a concrete transcript.
   - Merged with built-in models and included in the tool schema
   - Useful for newly released models with a known provider prefix (`gpt-`,
     `gemini-`, `deepseek-`)
-- `CONSULT_LLM_ALLOWED_MODELS` - List of models to advertise (optional)
-  - Comma-separated list, e.g., `gpt-5.2,gemini-3-pro-preview`
-  - When set, only these models appear in the tool schema
-  - Filters the combined catalog (built-in + extra models)
-  - If `CONSULT_LLM_DEFAULT_MODEL` is set, it must be in this list
-  - See [Tips](#controlling-which-models-claude-uses) for usage examples
+- `CONSULT_LLM_ALLOWED_MODELS` - Restrict which concrete models can be used
+  (optional)
+  - Comma-separated list, e.g., `gpt-5.4,gemini-3.1-pro-preview`
+  - Selectors resolve against this list — e.g., if only `gemini-2.5-pro` is
+    allowed, the `gemini` selector resolves to it
+  - Useful when a backend doesn't support all models (e.g., Cursor CLI)
+  - See [Tips](#controlling-which-models-are-used) for usage examples
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
@@ -560,30 +560,33 @@ claude mcp add consult-llm \
 
 ## Tips
 
-### Controlling which models Claude uses
+### Controlling which models are used
 
-When you ask Claude to "consult an LLM" without specifying a model, it picks one
-from the available options in the tool schema. The `CONSULT_LLM_DEFAULT_MODEL`
-only affects the fallback when no model is specified in the tool call.
+The `model` parameter accepts **selectors** (`gemini`, `openai`, `deepseek`)
+that the server resolves to the best available concrete model. When no model is
+specified, the server uses `CONSULT_LLM_DEFAULT_MODEL` or its built-in fallback.
 
-To control which models Claude can choose from, use
-`CONSULT_LLM_ALLOWED_MODELS`:
+**Selector resolution order** (first available wins):
+
+| Selector   | Priority                                                       |
+| ---------- | -------------------------------------------------------------- |
+| `gemini`   | gemini-3.1-pro-preview → gemini-3-pro-preview → gemini-2.5-pro |
+| `openai`   | gpt-5.4 → gpt-5.3-codex → gpt-5.2 → gpt-5.2-codex              |
+| `deepseek` | deepseek-reasoner                                              |
+
+**Restricting models with `CONSULT_LLM_ALLOWED_MODELS`:**
+
+If your backend doesn't support all models (e.g., Cursor CLI can't use
+`gpt-5.4`), use `CONSULT_LLM_ALLOWED_MODELS` to filter. Selectors will
+automatically resolve to the best model within the allowed list:
 
 ```bash
+# Only allow codex models through Cursor CLI
 claude mcp add consult-llm \
-  -e GEMINI_API_KEY=your_key \
-  -e CONSULT_LLM_ALLOWED_MODELS='gemini-3-pro-preview,gpt-5.2-codex' \
+  -e CONSULT_LLM_OPENAI_BACKEND=cursor-cli \
+  -e CONSULT_LLM_ALLOWED_MODELS='gpt-5.3-codex,gemini-3.1-pro-preview' \
   -- npx -y consult-llm-mcp
-```
-
-This restricts the tool schema to only advertise these models. For example, to
-ensure Claude always uses Gemini 3 Pro:
-
-```bash
-claude mcp add consult-llm \
-  -e GEMINI_API_KEY=your_key \
-  -e CONSULT_LLM_ALLOWED_MODELS='gemini-3-pro-preview' \
-  -- npx -y consult-llm-mcp
+# "openai" selector → gpt-5.3-codex (gpt-5.4 filtered out)
 ```
 
 ## MCP tool: consult_llm
@@ -598,10 +601,12 @@ models complex questions.
 - **files** (optional): Array of file paths to include as context
   - All files are added as context with file paths and code blocks
 
-- **model** (optional): LLM model to use
-  - Options: `gpt-5.2` (default), `gpt-5.4`, `gemini-2.5-pro`,
-    `gemini-3-pro-preview`, `gemini-3.1-pro-preview`, `deepseek-reasoner`,
-    `gpt-5.3-codex`, `gpt-5.2-codex`
+- **model** (optional): Model selector or exact model ID
+  - Selectors: `gemini`, `openai`, `deepseek` — the server resolves to the best
+    available model for each family
+  - Exact model IDs (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.) are also
+    accepted as an advanced override
+  - When omitted, the server uses the configured default
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
   should choose based on the task:

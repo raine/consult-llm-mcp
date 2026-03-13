@@ -11,15 +11,15 @@ Check the arguments for flags:
 
 **Partner flags** (mutually exclusive, exactly one required):
 
-- `--gemini` → brainstorm with Gemini (`model`: "gemini-3.1-pro-preview")
-- `--codex` → brainstorm with Codex (`model`: "gpt-5.3-codex")
+- `--gemini` → brainstorm with Gemini (`model`: "gemini")
+- `--codex` → brainstorm with Codex (`model`: "openai")
 
 Strip all flags from arguments to get the task description.
 
 **Set variables based on partner flag:**
 
 - `PARTNER`: "Gemini" or "Codex"
-- `MODEL`: "gemini-3.1-pro-preview" or "gpt-5.3-codex"
+- `MODEL`: "gemini" or "openai"
 
 If neither `--gemini` nor `--codex` is provided, ask the user which partner to
 use.

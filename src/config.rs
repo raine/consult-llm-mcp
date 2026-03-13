@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use crate::logger::log_to_file;
-use crate::models::{ALL_MODELS, Provider};
+use crate::models::{ALL_MODELS, Provider, SELECTOR_PRIORITIES};
 
 /// Read env var, treating empty strings as unset.
 fn env_non_empty(key: &str) -> Option<String> {
@@ -61,30 +61,51 @@ pub struct ModelRegistry {
 
 impl ModelRegistry {
     /// Resolve which model to use:
-    /// - If model explicitly provided -> validate against allowed list
-    /// - If not provided -> use config.default_model or fallback_model
+    /// - If model provided -> resolve as exact ID or selector
+    /// - If not provided -> use default_model or fallback_model
     pub fn resolve_model(
         &self,
         requested: Option<&str>,
-        explicitly_provided: bool,
     ) -> Result<String, crate::errors::AppError> {
-        let model = if explicitly_provided {
-            requested.unwrap_or(&self.fallback_model)
-        } else {
-            self.default_model
-                .as_deref()
-                .unwrap_or(&self.fallback_model)
+        let target = match requested {
+            Some(m) => m,
+            None => {
+                return Ok(self
+                    .default_model
+                    .as_deref()
+                    .unwrap_or(&self.fallback_model)
+                    .to_string());
+            }
         };
 
-        if !self.allowed_models.iter().any(|m| m == model) {
-            return Err(crate::errors::AppError::InvalidParams(format!(
-                "Invalid model '{model}'. Allowed: {}",
+        resolve_selector(target, &self.allowed_models).ok_or_else(|| {
+            let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
+            crate::errors::AppError::InvalidParams(format!(
+                "Invalid model or selector '{target}'. Selectors: {}. Available models: {}",
+                selectors.join(", "),
                 self.allowed_models.join(", ")
-            )));
-        }
-
-        Ok(model.to_string())
+            ))
+        })
     }
+}
+
+/// Resolve a model string as either an exact model ID or an abstract selector.
+/// Returns the concrete model ID if found in `allowed_models`, or None.
+pub fn resolve_selector(target: &str, allowed_models: &[String]) -> Option<String> {
+    // 1. Exact match
+    if allowed_models.iter().any(|m| m == target) {
+        return Some(target.to_string());
+    }
+
+    // 2. Selector match — first available model from priority list
+    if let Some((_, priorities)) = SELECTOR_PRIORITIES.iter().find(|(s, _)| *s == target) {
+        return priorities
+            .iter()
+            .find(|&&m| allowed_models.iter().any(|a| a == m))
+            .map(|m| m.to_string());
+    }
+
+    None
 }
 
 #[derive(Debug)]
@@ -112,6 +133,7 @@ impl fmt::Display for ConfigError {
                 "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
             ),
             ConfigError::InvalidDefaultModel { model, allowed } => {
+                let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
                 let opts = allowed
                     .iter()
                     .map(|m| format!("'{m}'"))
@@ -119,7 +141,8 @@ impl fmt::Display for ConfigError {
                     .join(" | ");
                 write!(
                     f,
-                    "Invalid environment variables:\n  defaultModel: Invalid enum value. Expected {opts}, received '{model}'"
+                    "Invalid environment variables:\n  defaultModel: Invalid value '{model}'. Expected a selector ({}) or exact model ({opts})",
+                    selectors.join(", ")
                 )
             }
             ConfigError::InvalidCodexReasoningEffort(effort) => write!(
@@ -309,16 +332,20 @@ pub fn parse_config(
         return Err(ConfigError::NoModelsAvailable);
     }
 
-    // Validate default model if provided
+    // Validate and resolve default model (supports both exact IDs and selectors)
     let default_model = env("CONSULT_LLM_DEFAULT_MODEL");
-    if let Some(ref dm) = default_model
-        && !enabled_models.contains(dm)
-    {
-        return Err(ConfigError::InvalidDefaultModel {
-            model: dm.clone(),
-            allowed: enabled_models.clone(),
-        });
-    }
+    let resolved_default = match &default_model {
+        Some(dm) => {
+            let resolved = resolve_selector(dm, &enabled_models).ok_or_else(|| {
+                ConfigError::InvalidDefaultModel {
+                    model: dm.clone(),
+                    allowed: enabled_models.clone(),
+                }
+            })?;
+            Some(resolved)
+        }
+        None => None,
+    };
 
     // Validate codex reasoning effort
     let codex_reasoning_effort = migrate_prefixed_env(
@@ -344,7 +371,7 @@ pub fn parse_config(
         openai_api_key,
         gemini_api_key,
         deepseek_api_key,
-        default_model: default_model.clone(),
+        default_model: resolved_default.clone(),
         gemini_backend,
         openai_backend,
         codex_reasoning_effort,
@@ -355,21 +382,16 @@ pub fn parse_config(
     let registry = Arc::new(ModelRegistry {
         allowed_models: enabled_models,
         fallback_model,
-        default_model,
+        default_model: resolved_default,
     });
 
     Ok((config, registry))
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
-static REGISTRY: OnceLock<Arc<ModelRegistry>> = OnceLock::new();
 
 pub fn config() -> &'static Config {
     CONFIG.get().expect("config not initialized")
-}
-
-pub fn registry() -> &'static ModelRegistry {
-    REGISTRY.get().expect("model registry not initialized")
 }
 
 /// Initialize config and model registry from environment variables.
@@ -379,7 +401,6 @@ pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
     let (config, registry) = parse_config(env_non_empty)?;
 
     let _ = CONFIG.set(config);
-    let _ = REGISTRY.set(registry.clone());
 
     Ok(registry)
 }
@@ -536,16 +557,67 @@ mod tests {
     }
 
     #[test]
-    fn test_model_registry_resolve_explicit() {
+    fn test_model_registry_resolve_exact() {
         let reg = ModelRegistry {
             allowed_models: vec!["gpt-5.2".into(), "gemini-2.5-pro".into()],
             fallback_model: "gpt-5.2".into(),
             default_model: None,
         };
         assert_eq!(
-            reg.resolve_model(Some("gemini-2.5-pro"), true).unwrap(),
+            reg.resolve_model(Some("gemini-2.5-pro")).unwrap(),
             "gemini-2.5-pro"
         );
+    }
+
+    #[test]
+    fn test_model_registry_resolve_selector() {
+        let reg = ModelRegistry {
+            allowed_models: vec![
+                "gpt-5.2".into(),
+                "gemini-3.1-pro-preview".into(),
+                "gemini-2.5-pro".into(),
+            ],
+            fallback_model: "gpt-5.2".into(),
+            default_model: None,
+        };
+        // "gemini" selector should resolve to best available
+        assert_eq!(
+            reg.resolve_model(Some("gemini")).unwrap(),
+            "gemini-3.1-pro-preview"
+        );
+    }
+
+    #[test]
+    fn test_model_registry_resolve_selector_skips_unavailable() {
+        let reg = ModelRegistry {
+            allowed_models: vec!["gpt-5.2".into(), "gemini-2.5-pro".into()],
+            fallback_model: "gpt-5.2".into(),
+            default_model: None,
+        };
+        // "gemini" selector should skip gemini-3.1-pro-preview (not in allowed) and pick gemini-2.5-pro
+        assert_eq!(reg.resolve_model(Some("gemini")).unwrap(), "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn test_model_registry_resolve_openai_selector() {
+        let reg = ModelRegistry {
+            allowed_models: vec!["gpt-5.4".into(), "gpt-5.3-codex".into(), "gpt-5.2".into()],
+            fallback_model: "gpt-5.4".into(),
+            default_model: None,
+        };
+        // "openai" selector should resolve to highest priority: gpt-5.4
+        assert_eq!(reg.resolve_model(Some("openai")).unwrap(), "gpt-5.4");
+    }
+
+    #[test]
+    fn test_model_registry_resolve_openai_selector_falls_to_codex() {
+        let reg = ModelRegistry {
+            allowed_models: vec!["gpt-5.3-codex".into(), "gpt-5.2-codex".into()],
+            fallback_model: "gpt-5.3-codex".into(),
+            default_model: None,
+        };
+        // When only codex models available, "openai" should still resolve
+        assert_eq!(reg.resolve_model(Some("openai")).unwrap(), "gpt-5.3-codex");
     }
 
     #[test]
@@ -555,7 +627,7 @@ mod tests {
             fallback_model: "gpt-5.2".into(),
             default_model: Some("gemini-2.5-pro".into()),
         };
-        assert_eq!(reg.resolve_model(None, false).unwrap(), "gemini-2.5-pro");
+        assert_eq!(reg.resolve_model(None).unwrap(), "gemini-2.5-pro");
     }
 
     #[test]
@@ -565,7 +637,7 @@ mod tests {
             fallback_model: "gpt-5.2".into(),
             default_model: None,
         };
-        assert_eq!(reg.resolve_model(None, false).unwrap(), "gpt-5.2");
+        assert_eq!(reg.resolve_model(None).unwrap(), "gpt-5.2");
     }
 
     #[test]
@@ -575,7 +647,31 @@ mod tests {
             fallback_model: "gpt-5.2".into(),
             default_model: None,
         };
-        assert!(reg.resolve_model(Some("invalid"), true).is_err());
+        assert!(reg.resolve_model(Some("invalid")).is_err());
+    }
+
+    #[test]
+    fn test_resolve_selector_exact_match() {
+        let allowed = vec!["gpt-5.2".into(), "gemini-2.5-pro".into()];
+        assert_eq!(
+            resolve_selector("gpt-5.2", &allowed),
+            Some("gpt-5.2".into())
+        );
+    }
+
+    #[test]
+    fn test_resolve_selector_selector_match() {
+        let allowed = vec!["gemini-3.1-pro-preview".into(), "gemini-2.5-pro".into()];
+        assert_eq!(
+            resolve_selector("gemini", &allowed),
+            Some("gemini-3.1-pro-preview".into())
+        );
+    }
+
+    #[test]
+    fn test_resolve_selector_no_match() {
+        let allowed = vec!["gpt-5.2".into()];
+        assert_eq!(resolve_selector("gemini", &allowed), None);
     }
 
     // --- parse_config tests ---
@@ -654,6 +750,18 @@ mod tests {
         let (config, registry) = parse_config(env).unwrap();
         assert_eq!(config.default_model, Some("gpt-5.2".to_string()));
         assert_eq!(registry.default_model, Some("gpt-5.2".to_string()));
+    }
+
+    #[test]
+    fn test_parse_config_selector_default_model() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_DEFAULT_MODEL", "openai"),
+        ]);
+        let (config, registry) = parse_config(env).unwrap();
+        // Selector should be resolved to concrete model at startup
+        assert_eq!(config.default_model, Some("gpt-5.4".to_string()));
+        assert_eq!(registry.default_model, Some("gpt-5.4".to_string()));
     }
 
     #[test]

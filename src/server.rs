@@ -33,7 +33,6 @@ impl ConsultServer {
     )]
     async fn consult_llm(&self, params: Parameters<Value>) -> Result<String, String> {
         let raw = params.0;
-        let model_explicitly_provided = raw.get("model").is_some();
 
         log_tool_call("consult_llm", &raw);
 
@@ -42,7 +41,7 @@ impl ConsultServer {
 
         let outcome = self
             .service
-            .consult(args, model_explicitly_provided)
+            .consult(args)
             .await
             .map_err(|e| format!("LLM query failed: {e:#}"))?;
 

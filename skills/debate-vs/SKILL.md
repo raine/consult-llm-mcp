@@ -14,8 +14,8 @@ Check the arguments for flags:
 
 **Opponent flags** (mutually exclusive, exactly one required):
 
-- `--gemini` → debate Gemini (`model`: "gemini-3.1-pro-preview")
-- `--codex` → debate Codex (`model`: "gpt-5.3-codex")
+- `--gemini` → debate Gemini (`model`: "gemini")
+- `--codex` → debate Codex (`model`: "openai")
 
 **Mode flags:**
 
@@ -29,7 +29,7 @@ Strip all flags from arguments to get the task description.
 **Set variables based on opponent flag:**
 
 - `OPPONENT`: "Gemini" or "Codex"
-- `MODEL`: "gemini-3.1-pro-preview" or "gpt-5.3-codex"
+- `MODEL`: "gemini" or "openai"
 
 If neither `--gemini` nor `--codex` is provided, ask the user which opponent to
 use.

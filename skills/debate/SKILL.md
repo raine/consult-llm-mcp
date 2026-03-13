@@ -62,12 +62,12 @@ Be specific and opinionated. Defend your choices.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: Opening prompt above
 - `files`: Array of relevant source files discovered in Phase 1
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: Opening prompt above
 - `files`: Array of relevant source files discovered in Phase 1
 
@@ -110,12 +110,12 @@ Focus on unresolved disagreements. Don't repeat settled points.
 Call BOTH simultaneously each round:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `prompt`: Rebuttal prompt with Codex's latest response as the opponent
 - `thread_id`: `gemini_thread_id`
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `prompt`: Rebuttal prompt with Gemini's latest response as the opponent
 - `thread_id`: `codex_thread_id`
 
@@ -225,14 +225,14 @@ Be concise. Only flag issues worth fixing.
 Call BOTH simultaneously:
 
 **Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini-3.1-pro-preview"
+- `model`: "gemini"
 - `task_mode`: "review"
 - `prompt`: Final review prompt
 - `thread_id`: `gemini_thread_id` from Phase 2
 - `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
 
 **Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gpt-5.3-codex"
+- `model`: "openai"
 - `task_mode`: "review"
 - `prompt`: Final review prompt
 - `thread_id`: `codex_thread_id` from Phase 2
