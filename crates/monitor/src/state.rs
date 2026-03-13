@@ -29,7 +29,7 @@ pub(crate) fn task_mode_color(mode: Option<&str>) -> Color {
         Some("debug") => Color::Rgb(220, 150, 120),  // warm orange
         Some("plan") => Color::Rgb(170, 140, 210),   // muted purple
         Some("create") => Color::Rgb(120, 200, 160), // soft green
-        _ => DIM,
+        _ => DIM_WHITE,
     }
 }
 
