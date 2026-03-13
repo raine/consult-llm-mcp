@@ -409,7 +409,7 @@ claude mcp add consult-llm -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli -- npx -y co
 claude mcp add consult-llm \
   -e CONSULT_LLM_OPENAI_BACKEND=cursor-cli \
   -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli \
-  -e CONSULT_LLM_ALLOWED_MODELS="gemini-3-pro-preview,gpt-5.3-codex" \
+  -e CONSULT_LLM_ALLOWED_MODELS="gemini-3.1-pro-preview,gpt-5.3-codex" \
   -- npx -y consult-llm-mcp
 ```
 
