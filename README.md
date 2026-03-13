@@ -57,7 +57,6 @@ to bring in the heavy artillery. Supports multi-turn conversations.
    claude mcp add consult-llm \
      -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
-     -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
      -- npx -y consult-llm-mcp
    ```
 
@@ -75,7 +74,6 @@ to bring in the heavy artillery. Supports multi-turn conversations.
    claude mcp add consult-llm \
      -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
-     -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
      -- consult-llm-mcp
    ```
 
@@ -385,8 +383,9 @@ claude mcp add consult-llm -e CONSULT_LLM_OPENAI_BACKEND=codex-cli -- npx -y con
 
 <!-- prettier-ignore -->
 > [!TIP]
-> Set reasoning effort with `-e CONSULT_LLM_CODEX_REASONING_EFFORT=high`. Options:
-> `none`, `minimal`, `low`, `medium`, `high`, `xhigh`.
+> Reasoning effort defaults to `high`. Override with
+> `-e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh`. Options: `none`, `minimal`,
+> `low`, `medium`, `high`, `xhigh`.
 
 #### Cursor CLI
 
@@ -410,7 +409,6 @@ claude mcp add consult-llm -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli -- npx -y co
 claude mcp add consult-llm \
   -e CONSULT_LLM_OPENAI_BACKEND=cursor-cli \
   -e CONSULT_LLM_GEMINI_BACKEND=cursor-cli \
-  -e CONSULT_LLM_CODEX_REASONING_EFFORT=high \
   -e CONSULT_LLM_ALLOWED_MODELS="gemini-3-pro-preview,gpt-5.3-codex" \
   -- npx -y consult-llm-mcp
 ```
@@ -516,7 +514,7 @@ See the "Using web mode..." example above for a concrete transcript.
   - Useful for newly released models with a known provider prefix (`gpt-`,
     `gemini-`, `deepseek-`)
 - `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
-  CLI (optional)
+  CLI (optional, default: `high`)
   - See [Codex CLI](#codex-cli) for details and available options
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)

@@ -46,7 +46,7 @@ pub struct Config {
     pub default_model: Option<String>,
     pub gemini_backend: Backend,
     pub openai_backend: Backend,
-    pub codex_reasoning_effort: Option<String>,
+    pub codex_reasoning_effort: String,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
 }
@@ -353,12 +353,13 @@ pub fn parse_config(
         env("CODEX_REASONING_EFFORT").as_deref(),
         "CODEX_REASONING_EFFORT",
         "CONSULT_LLM_CODEX_REASONING_EFFORT",
-    );
-    if let Some(ref effort) = codex_reasoning_effort {
-        let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
-        if !valid.contains(&effort.as_str()) {
-            return Err(ConfigError::InvalidCodexReasoningEffort(effort.clone()));
-        }
+    )
+    .unwrap_or_else(|| "high".to_string());
+    let valid = ["none", "minimal", "low", "medium", "high", "xhigh"];
+    if !valid.contains(&codex_reasoning_effort.as_str()) {
+        return Err(ConfigError::InvalidCodexReasoningEffort(
+            codex_reasoning_effort,
+        ));
     }
 
     let fallback_model = if enabled_models.contains(&"gpt-5.2".to_string()) {
@@ -784,7 +785,7 @@ mod tests {
             ("CONSULT_LLM_CODEX_REASONING_EFFORT", "high"),
         ]);
         let (config, _) = parse_config(env).unwrap();
-        assert_eq!(config.codex_reasoning_effort, Some("high".to_string()));
+        assert_eq!(config.codex_reasoning_effort, "high");
     }
 
     #[test]

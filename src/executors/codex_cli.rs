@@ -6,11 +6,11 @@ use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
-    codex_reasoning_effort: Option<String>,
+    codex_reasoning_effort: String,
 }
 
 impl CodexCliExecutor {
-    pub fn new(codex_reasoning_effort: Option<String>) -> Self {
+    pub fn new(codex_reasoning_effort: String) -> Self {
         Self {
             capabilities: LlmExecutorCapabilities {
                 is_cli: true,
@@ -166,10 +166,11 @@ impl LlmExecutor for CodexCliExecutor {
             args.push("resume".to_string());
         }
         args.extend(["--json".to_string(), "--skip-git-repo-check".to_string()]);
-        if let Some(ref effort) = self.codex_reasoning_effort {
-            args.push("-c".to_string());
-            args.push(format!("model_reasoning_effort=\"{effort}\""));
-        }
+        args.push("-c".to_string());
+        args.push(format!(
+            "model_reasoning_effort=\"{}\"",
+            self.codex_reasoning_effort
+        ));
 
         // --add-dir is not supported by `codex exec resume`
         if thread_id.is_none() {

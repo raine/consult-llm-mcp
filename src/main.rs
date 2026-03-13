@@ -100,9 +100,10 @@ async fn main() {
     if let Some(ref dm) = cfg.default_model {
         config_map.insert("defaultModel".to_string(), dm.clone());
     }
-    if let Some(ref effort) = cfg.codex_reasoning_effort {
-        config_map.insert("codexReasoningEffort".to_string(), effort.clone());
-    }
+    config_map.insert(
+        "codexReasoningEffort".to_string(),
+        cfg.codex_reasoning_effort.clone(),
+    );
     config_map.insert("allowedModels".to_string(), cfg.allowed_models.join(", "));
     logger::log_configuration(&config_map);
 

@@ -7,11 +7,11 @@ use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
 pub struct CursorCliExecutor {
     capabilities: LlmExecutorCapabilities,
-    codex_reasoning_effort: Option<String>,
+    codex_reasoning_effort: String,
 }
 
 impl CursorCliExecutor {
-    pub fn new(codex_reasoning_effort: Option<String>) -> Self {
+    pub fn new(codex_reasoning_effort: String) -> Self {
         Self {
             capabilities: LlmExecutorCapabilities {
                 is_cli: true,
@@ -212,15 +212,13 @@ fn extract_cursor_tool_error(tool_call: &serde_json::Value) -> Option<String> {
 }
 
 /// Map model IDs to cursor-agent model names
-fn map_cursor_model(model: &str, codex_reasoning_effort: Option<&str>) -> String {
+fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     let mut cursor_model = model.replace("-preview", "");
 
     // cursor-agent encodes reasoning effort in the model name
     // e.g. gpt-5.3-codex + high → gpt-5.3-codex-high
-    if let Some(effort) = codex_reasoning_effort
-        && cursor_model.contains("-codex")
-    {
-        cursor_model = format!("{cursor_model}-{effort}");
+    if cursor_model.contains("-codex") {
+        cursor_model = format!("{cursor_model}-{codex_reasoning_effort}");
     }
 
     cursor_model
@@ -272,7 +270,7 @@ impl LlmExecutor for CursorCliExecutor {
             format!("{system_prompt}\n\n{message_with_files}")
         };
 
-        let cursor_model = map_cursor_model(model, self.codex_reasoning_effort.as_deref());
+        let cursor_model = map_cursor_model(model, &self.codex_reasoning_effort);
 
         // --trust is required for headless (--print) mode to skip the interactive
         // workspace trust prompt. --mode ask restricts to read-only operations.
