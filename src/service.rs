@@ -213,10 +213,11 @@ impl ConsultService {
         log_response(model, &result.response, &result.cost_info);
 
         let thread_id = result.thread_id.or_else(|| args.thread_id.clone());
-        let body = match &thread_id {
-            Some(tid) => format!("[thread_id:{tid}]\n\n{}", result.response),
-            None => result.response,
-        };
+        let mut prefix = format!("[model:{model}]");
+        if let Some(ref tid) = thread_id {
+            prefix.push_str(&format!(" [thread_id:{tid}]"));
+        }
+        let body = format!("{prefix}\n\n{}", result.response);
         Ok((body, result.usage, thread_id))
     }
 }
