@@ -55,36 +55,42 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
    ```bash
    claude mcp add consult-llm \
-     -e OPENAI_API_KEY=your_key \
-     -e GEMINI_API_KEY=your_key \
+     -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
+     -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
+     -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
+     -e CONSULT_LLM_ALLOWED_MODELS=gemini-3.1-pro-preview,gpt-5.4 \
      -- npx -y consult-llm-mcp
    ```
 
-   **With binary** (no Node.js required):
+   Uses [Gemini CLI](#gemini-cli) and [Codex CLI](#codex-cli) — no API keys
+   required, just `gemini login` and `codex login`.
+
+   **With binary** (no Node.js required, but no auto-update):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
+   ```
+
+   ```bash
    claude mcp add consult-llm \
-     -e OPENAI_API_KEY=your_key \
-     -e GEMINI_API_KEY=your_key \
+     -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
+     -e CONSULT_LLM_OPENAI_BACKEND=codex-cli \
+     -e CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh \
+     -e CONSULT_LLM_ALLOWED_MODELS=gemini-3.1-pro-preview,gpt-5.4 \
      -- consult-llm-mcp
    ```
 
    For global availability across projects, add `--scope user`.
 
-   <details>
-   <summary>Using multiple API keys or CLI backends</summary>
+   **Using API keys instead of CLI backends:**
 
    ```bash
    claude mcp add consult-llm \
      -e OPENAI_API_KEY=your_openai_key \
      -e GEMINI_API_KEY=your_gemini_key \
      -e DEEPSEEK_API_KEY=your_deepseek_key \
-     -e CONSULT_LLM_GEMINI_BACKEND=gemini-cli \
      -- npx -y consult-llm-mcp
    ```
-
-   </details>
 
 2. **Verify connection** with `/mcp`:
 
@@ -419,11 +425,7 @@ review), allow them in `~/.cursor/cli-config.json`:
 ```json
 {
   "permissions": {
-    "allow": [
-      "Shell(git diff*)",
-      "Shell(git log*)",
-      "Shell(git show*)"
-    ],
+    "allow": ["Shell(git diff*)", "Shell(git log*)", "Shell(git show*)"],
     "deny": []
   }
 }
