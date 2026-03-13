@@ -188,7 +188,15 @@ impl LlmExecutor for CodexCliExecutor {
         }
         args.push(full_prompt);
 
-        run_cli_executor("codex", &args, prompt, consultation_id, parse_codex_line).await
+        run_cli_executor(
+            "codex",
+            &args,
+            prompt,
+            system_prompt,
+            consultation_id,
+            parse_codex_line,
+        )
+        .await
     }
 }
 
@@ -241,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_reducer_joins_messages() {
-        let mut reducer = StreamReducer::new(None, None);
+        let mut reducer = StreamReducer::new(None, None, None);
         reducer.process(parse_codex_line(
             r#"{"type":"item.completed","item":{"type":"agent_message","text":"Hello"}}"#,
         ));

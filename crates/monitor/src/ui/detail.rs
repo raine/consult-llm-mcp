@@ -18,6 +18,7 @@ use crate::state::{
 // ── Intermediate representation ─────────────────────────────────────────
 
 enum RenderedBlock {
+    SystemPrompt(String),
     Prompt(String),
     Thinking(String),
     Tool {
@@ -45,6 +46,7 @@ enum Phase {
 impl RenderedBlock {
     fn phase(&self) -> Phase {
         match self {
+            RenderedBlock::SystemPrompt(_) => Phase::Prompt,
             RenderedBlock::Prompt(_) => Phase::Prompt,
             RenderedBlock::Thinking(_) => Phase::Thinking,
             RenderedBlock::Tool { .. } => Phase::Tool,
@@ -223,7 +225,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     } else {
         let blocks = normalize_events(&detail.events);
 
-        render_blocks(&blocks, inner_width, tick)
+        render_blocks(&blocks, inner_width, tick, detail.show_system_prompt)
     };
 
     // Append a spinner when the consultation is still live
@@ -292,7 +294,9 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         Span::styled("j/k", Style::default().fg(TEAL)),
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
         Span::styled("d/u", Style::default().fg(TEAL)),
-        Span::styled(" half-page", Style::default().fg(DIM_WHITE)),
+        Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("s", Style::default().fg(TEAL)),
+        Span::styled(" sys prompt", Style::default().fg(DIM_WHITE)),
     ];
     if is_live {
         bar_spans.push(Span::styled("  G", Style::default().fg(TEAL)));
@@ -323,6 +327,9 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
     for event in events {
         match event {
             ParsedStreamEvent::SessionStarted { .. } => {}
+            ParsedStreamEvent::SystemPrompt { text } => {
+                blocks.push(RenderedBlock::SystemPrompt(text.clone()));
+            }
             ParsedStreamEvent::Prompt { text } => {
                 blocks.push(RenderedBlock::Prompt(text.clone()));
             }
@@ -386,7 +393,12 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
 
 // ── Pass 2: RenderedBlock → Line ────────────────────────────────────────
 
-fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> Vec<Line<'static>> {
+fn render_blocks(
+    blocks: &[RenderedBlock],
+    inner_width: usize,
+    tick: usize,
+    show_system_prompt: bool,
+) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
     let mut response_header_shown = false;
@@ -403,6 +415,36 @@ fn render_blocks(blocks: &[RenderedBlock], inner_width: usize, tick: usize) -> V
         current_phase = next_phase;
 
         match block {
+            RenderedBlock::SystemPrompt(text) => {
+                if !show_system_prompt {
+                    continue;
+                }
+                lines.push(Line::from(vec![Span::styled(
+                    "  System Prompt:",
+                    Style::default().fg(DIM_WHITE).add_modifier(Modifier::BOLD),
+                )]));
+                let indent = "    ";
+                let wrap_width = inner_width.saturating_sub(indent.len());
+                let dim_style = Style::default().fg(DIM);
+                for raw_line in text.lines() {
+                    if raw_line.is_empty() {
+                        lines.push(Line::default());
+                    } else {
+                        // Simple word-wrap for system prompt (no markdown)
+                        let mut remaining = raw_line;
+                        while !remaining.is_empty() {
+                            let chunk_len = remaining.len().min(wrap_width);
+                            let chunk = &remaining[..chunk_len];
+                            lines.push(Line::from(vec![
+                                Span::raw(indent.to_string()),
+                                Span::styled(chunk.to_string(), dim_style),
+                            ]));
+                            remaining = &remaining[chunk_len..];
+                        }
+                    }
+                }
+                lines.push(Line::default());
+            }
             RenderedBlock::Prompt(text) => {
                 lines.push(Line::from(vec![Span::styled(
                     "  Prompt:",
@@ -698,7 +740,7 @@ pub(super) fn render_thread_detail_view(
         lines.push(Line::default());
 
         let blocks = normalize_events(turn_events);
-        let turn_lines = render_blocks(&blocks, inner_width, tick);
+        let turn_lines = render_blocks(&blocks, inner_width, tick, false);
         lines.extend(turn_lines);
         lines.push(Line::default());
     }
@@ -727,7 +769,7 @@ pub(super) fn render_thread_detail_view(
     lines.push(Line::default());
 
     let active_blocks = normalize_events(&detail.active_events);
-    let active_lines = render_blocks(&active_blocks, inner_width, tick);
+    let active_lines = render_blocks(&active_blocks, inner_width, tick, false);
     lines.extend(active_lines);
 
     // Append spinner if latest turn is still live

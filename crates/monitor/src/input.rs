@@ -114,6 +114,7 @@ fn handle_detail_key(key: KeyEvent) -> Option<Action> {
         KeyCode::PageUp => Some(Action::PageUp),
         KeyCode::Char('G') => Some(Action::ScrollToBottom),
         KeyCode::Char('y') => Some(Action::YankResponse),
+        KeyCode::Char('s') => Some(Action::ToggleSystemPrompt),
         _ => None,
     }
 }

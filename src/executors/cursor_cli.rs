@@ -298,6 +298,7 @@ impl LlmExecutor for CursorCliExecutor {
             "cursor-agent",
             &args,
             prompt,
+            system_prompt,
             consultation_id,
             parse_cursor_line,
         )

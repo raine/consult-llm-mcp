@@ -138,6 +138,13 @@ impl AppState {
             Action::ToggleHelp => {
                 self.show_help = !self.show_help;
             }
+            Action::ToggleSystemPrompt => {
+                if let AppMode::Detail(ref mut detail) = self.mode {
+                    detail.show_system_prompt = !detail.show_system_prompt;
+                    // Invalidate render cache since content changed
+                    detail.cached_lines = None;
+                }
+            }
             Action::YankResponse => {
                 let events: Option<&[ParsedStreamEvent]> = match &self.mode {
                     AppMode::Detail(detail) => Some(&detail.events),
@@ -319,6 +326,7 @@ impl AppState {
             cached_event_count: 0,
             cached_width: 0,
             cached_has_active_tools: false,
+            show_system_prompt: false,
         });
     }
 

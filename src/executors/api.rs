@@ -94,9 +94,13 @@ impl LlmExecutor for ApiExecutor {
         }
 
         let mut sidecar = SidecarWriter::new(consultation_id);
+        sidecar.write(&ParsedStreamEvent::SystemPrompt {
+            text: system_prompt.to_string(),
+        });
         sidecar.write(&ParsedStreamEvent::Prompt {
             text: prompt.to_string(),
         });
+        sidecar.flush();
 
         let base = if self.base_url.ends_with('/') {
             self.base_url.clone()

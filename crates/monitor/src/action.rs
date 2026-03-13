@@ -24,6 +24,7 @@ pub(crate) enum Action {
     CancelClear,
     ToggleHelp,
     YankResponse,
+    ToggleSystemPrompt,
     /// Open filter input (or re-open with current text)
     StartFilter,
     /// User typed a character in filter input

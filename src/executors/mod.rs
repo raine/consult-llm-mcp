@@ -56,10 +56,11 @@ pub async fn run_cli_executor(
     command: &str,
     args: &[String],
     prompt: &str,
+    system_prompt: &str,
     consultation_id: Option<&str>,
     parse_line: fn(&str) -> StreamEvents,
 ) -> anyhow::Result<ExecuteResult> {
-    let mut reducer = StreamReducer::new(consultation_id, Some(prompt));
+    let mut reducer = StreamReducer::new(consultation_id, Some(prompt), Some(system_prompt));
     let result = run_cli_streaming(command, args, |line| {
         reducer.process(parse_line(line));
     })

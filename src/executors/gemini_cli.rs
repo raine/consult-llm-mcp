@@ -184,18 +184,25 @@ impl LlmExecutor for GeminiCliExecutor {
         args.push("-p".to_string());
         args.push(message);
 
-        run_cli_executor("gemini", &args, prompt, consultation_id, parse_gemini_line)
-            .await
-            .map_err(|e| {
-                let msg = e.to_string();
-                if msg.contains("RESOURCE_EXHAUSTED") {
-                    anyhow::anyhow!(
-                        "Gemini quota exceeded. Consider using gemini-2.0-flash model. {msg}"
-                    )
-                } else {
-                    e
-                }
-            })
+        run_cli_executor(
+            "gemini",
+            &args,
+            prompt,
+            system_prompt,
+            consultation_id,
+            parse_gemini_line,
+        )
+        .await
+        .map_err(|e| {
+            let msg = e.to_string();
+            if msg.contains("RESOURCE_EXHAUSTED") {
+                anyhow::anyhow!(
+                    "Gemini quota exceeded. Consider using gemini-2.0-flash model. {msg}"
+                )
+            } else {
+                e
+            }
+        })
     }
 }
 
@@ -264,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_reducer_concatenates_deltas() {
-        let mut reducer = StreamReducer::new(None, None);
+        let mut reducer = StreamReducer::new(None, None, None);
         reducer.process(parse_gemini_line(
             r#"{"type":"message","role":"assistant","content":"Hello ","delta":true}"#,
         ));
@@ -276,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_reducer_tracks_tool_labels() {
-        let mut reducer = StreamReducer::new(None, None);
+        let mut reducer = StreamReducer::new(None, None, None);
         reducer.process(parse_gemini_line(
             r#"{"type":"tool_use","tool_name":"read_file","tool_id":"read_file_123"}"#,
         ));
@@ -296,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_reducer_full_sequence_with_tools() {
-        let mut reducer = StreamReducer::new(None, None);
+        let mut reducer = StreamReducer::new(None, None, None);
         let lines = vec![
             r#"{"type":"init","timestamp":"...","session_id":"sess1","model":"gemini-3"}"#,
             r#"{"type":"message","timestamp":"...","role":"user","content":"analyze README.md"}"#,

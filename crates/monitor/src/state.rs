@@ -92,6 +92,8 @@ pub(crate) struct DetailState {
     pub(crate) cached_width: usize,
     /// Whether any in-progress tools existed at cache time (spinners need re-render).
     pub(crate) cached_has_active_tools: bool,
+    /// Whether the system prompt overlay is visible.
+    pub(crate) show_system_prompt: bool,
 }
 
 pub(crate) struct DetailMetadata {

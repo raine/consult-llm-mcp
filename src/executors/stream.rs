@@ -69,12 +69,23 @@ pub struct StreamReducer {
 }
 
 impl StreamReducer {
-    pub fn new(consultation_id: Option<&str>, prompt: Option<&str>) -> Self {
+    pub fn new(
+        consultation_id: Option<&str>,
+        prompt: Option<&str>,
+        system_prompt: Option<&str>,
+    ) -> Self {
         let mut sidecar = SidecarWriter::new(consultation_id);
+        if let Some(text) = system_prompt {
+            sidecar.write(&ParsedStreamEvent::SystemPrompt {
+                text: text.to_string(),
+            });
+        }
         if let Some(text) = prompt {
             sidecar.write(&ParsedStreamEvent::Prompt {
                 text: text.to_string(),
             });
+        }
+        if system_prompt.is_some() || prompt.is_some() {
             sidecar.flush();
         }
         Self {
@@ -118,7 +129,7 @@ impl StreamReducer {
                         });
                     }
                 }
-                ParsedStreamEvent::Prompt { .. } => {}
+                ParsedStreamEvent::Prompt { .. } | ParsedStreamEvent::SystemPrompt { .. } => {}
                 ParsedStreamEvent::Usage {
                     prompt_tokens,
                     completion_tokens,
