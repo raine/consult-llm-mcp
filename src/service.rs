@@ -67,7 +67,7 @@ impl ConsultService {
                 model: model.clone(),
                 backend: backend_name.clone(),
                 thread_id: args.thread_id.clone(),
-                task_mode: task_mode_str,
+                task_mode: task_mode_str.clone(),
                 reasoning_effort: reasoning_effort.clone(),
             },
         );
@@ -117,6 +117,7 @@ impl ConsultService {
                 parsed_ts: None,
                 thread_id,
                 reasoning_effort,
+                task_mode: task_mode_str,
             },
         );
 

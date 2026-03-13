@@ -22,6 +22,17 @@ pub(crate) const YELLOW: Color = Color::Rgb(220, 200, 100);
 pub(crate) const DIM: Color = Color::Rgb(100, 100, 110);
 pub(crate) const SELECTED_BG: Color = Color::Rgb(40, 40, 50);
 
+/// Per-task-mode colors for visual distinction in tables and detail views.
+pub(crate) fn task_mode_color(mode: Option<&str>) -> Color {
+    match mode {
+        Some("review") => Color::Rgb(130, 180, 230), // soft blue
+        Some("debug") => Color::Rgb(220, 150, 120),  // warm orange
+        Some("plan") => Color::Rgb(170, 140, 210),   // muted purple
+        Some("create") => Color::Rgb(120, 200, 160), // soft green
+        _ => DIM,
+    }
+}
+
 pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 // ── Types ────────────────────────────────────────────────────────────────

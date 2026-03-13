@@ -10,7 +10,7 @@ use crate::format::{
 };
 use crate::state::{
     AppState, BG, DIM, DIM_WHITE, Focus, GREEN, HistoryDisplayRow, RED, SELECTED_BG, SEPARATOR,
-    SPINNER_FRAMES, TEAL, WHITE, YELLOW,
+    SPINNER_FRAMES, TEAL, WHITE, YELLOW, task_mode_color,
 };
 
 pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
@@ -69,13 +69,16 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
 
 fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let elapsed_col_width: u16 = 10;
-    let header = Row::new(vec![
-        Line::from("Project"),
-        Line::from("PID"),
-        Line::from("Consultation"),
-        Line::from(Span::raw("Elapsed")).alignment(Alignment::Right),
-    ])
-    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
+    let task_col_width: u16 = 8;
+    let show_task_col = area.width >= 100;
+    let mut header_cells = vec![Line::from("Project"), Line::from("PID")];
+    if show_task_col {
+        header_cells.push(Line::from("Task"));
+    }
+    header_cells.push(Line::from("Consultation"));
+    header_cells.push(Line::from(Span::raw("Elapsed")).alignment(Alignment::Right));
+    let header =
+        Row::new(header_cells).style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let mut rows: Vec<Row> = Vec::new();
@@ -108,18 +111,25 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
             } else {
                 ("\u{2014}".to_string(), DIM)
             };
-            rows.push(Row::new(vec![
+            let mut cells = vec![
                 Line::from(Span::styled(
                     truncate_project(display_name),
                     Style::default().fg(DIM_WHITE),
                 )),
                 Line::from(Span::styled(pid.clone(), Style::default().fg(DIM_WHITE))),
-                Line::from(Span::styled(hist, Style::default().fg(hist_color))),
-                Line::from(Span::styled(
-                    format!("{:>width$}", "\u{2014}", width = elapsed_col_width as usize),
-                    Style::default().fg(DIM),
-                )),
-            ]));
+            ];
+            if show_task_col {
+                cells.push(Line::from(Span::styled("", Style::default().fg(DIM))));
+            }
+            cells.push(Line::from(Span::styled(
+                hist,
+                Style::default().fg(hist_color),
+            )));
+            cells.push(Line::from(Span::styled(
+                format!("{:>width$}", "\u{2014}", width = elapsed_col_width as usize),
+                Style::default().fg(DIM),
+            )));
+            rows.push(Row::new(cells));
         } else {
             let is_first_row = true;
             for (i, (_, consult)) in AppState::sorted_active_consults(server)
@@ -154,7 +164,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     ));
                 }
                 let consult_cell = Line::from(consult_spans);
-                rows.push(Row::new(vec![
+                let mut cells = vec![
                     Line::from(Span::styled(
                         if show_server {
                             truncate_project(display_name)
@@ -171,16 +181,24 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                         },
                         Style::default().fg(DIM_WHITE),
                     )),
-                    consult_cell,
-                    Line::from(Span::styled(
-                        format!(
-                            "{:>width$}",
-                            elapsed_str,
-                            width = elapsed_col_width as usize
-                        ),
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                ]));
+                ];
+                if show_task_col {
+                    let mode = consult.task_mode.as_deref();
+                    cells.push(Line::from(Span::styled(
+                        mode.unwrap_or("general"),
+                        Style::default().fg(task_mode_color(mode)),
+                    )));
+                }
+                cells.push(consult_cell);
+                cells.push(Line::from(Span::styled(
+                    format!(
+                        "{:>width$}",
+                        elapsed_str,
+                        width = elapsed_col_width as usize
+                    ),
+                    Style::default().fg(DIM_WHITE),
+                )));
+                rows.push(Row::new(cells));
             }
 
             // Render completed consultations (last per backend only)
@@ -206,7 +224,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                     Some(err) => format!(" {} ({}) {}", cc.model, cc.backend, err),
                     None => format!(" {} ({})", cc.model, cc.backend),
                 };
-                rows.push(Row::new(vec![
+                let mut cells = vec![
                     Line::from(Span::styled(
                         if show_server {
                             truncate_project(display_name)
@@ -223,19 +241,27 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
                         },
                         Style::default().fg(DIM_WHITE),
                     )),
-                    Line::from(vec![
-                        Span::styled(indicator, Style::default().fg(indicator_color)),
-                        Span::styled(rest, Style::default().fg(DIM_WHITE)),
-                    ]),
-                    Line::from(Span::styled(
-                        format!(
-                            "{:>width$}",
-                            duration_str,
-                            width = elapsed_col_width as usize
-                        ),
-                        Style::default().fg(DIM_WHITE),
-                    )),
+                ];
+                if show_task_col {
+                    let mode = cc.task_mode.as_deref();
+                    cells.push(Line::from(Span::styled(
+                        mode.unwrap_or("general"),
+                        Style::default().fg(task_mode_color(mode)),
+                    )));
+                }
+                cells.push(Line::from(vec![
+                    Span::styled(indicator, Style::default().fg(indicator_color)),
+                    Span::styled(rest, Style::default().fg(DIM_WHITE)),
                 ]));
+                cells.push(Line::from(Span::styled(
+                    format!(
+                        "{:>width$}",
+                        duration_str,
+                        width = elapsed_col_width as usize
+                    ),
+                    Style::default().fg(DIM_WHITE),
+                )));
+                rows.push(Row::new(cells));
             }
         }
     }
@@ -250,23 +276,22 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         return;
     }
 
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(PROJECT_COL_WIDTH),
-            Constraint::Length(7),
-            Constraint::Min(20),
-            Constraint::Length(elapsed_col_width),
-        ],
-    )
-    .header(header)
-    .row_highlight_style(Style::default().bg(SELECTED_BG))
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(SEPARATOR)),
-    );
+    let mut constraints = vec![Constraint::Length(PROJECT_COL_WIDTH), Constraint::Length(7)];
+    if show_task_col {
+        constraints.push(Constraint::Length(task_col_width));
+    }
+    constraints.push(Constraint::Min(20));
+    constraints.push(Constraint::Length(elapsed_col_width));
+
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .row_highlight_style(Style::default().bg(SELECTED_BG))
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(SEPARATOR)),
+        );
 
     if state.focus == Focus::Active {
         state.table_state.select(Some(state.selected));
@@ -279,16 +304,19 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
 fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let duration_col_width: u16 = 10;
     let tokens_col_width: u16 = 13;
-    let header = Row::new(vec![
-        Line::from("Time"),
-        Line::from("Project"),
-        Line::from("Model"),
-        Line::from("Backend"),
-        Line::from(Span::raw("Duration")).alignment(Alignment::Right),
-        Line::from(Span::raw("Tokens")).alignment(Alignment::Right),
-        Line::from("✓"),
-    ])
-    .style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
+    let task_col_width: u16 = 8;
+    let show_task_col = area.width >= 100;
+    let mut header_cells = vec![Line::from("Time"), Line::from("Project")];
+    if show_task_col {
+        header_cells.push(Line::from("Task"));
+    }
+    header_cells.push(Line::from("Model"));
+    header_cells.push(Line::from("Backend"));
+    header_cells.push(Line::from(Span::raw("Duration")).alignment(Alignment::Right));
+    header_cells.push(Line::from(Span::raw("Tokens")).alignment(Alignment::Right));
+    header_cells.push(Line::from("✓"));
+    let header =
+        Row::new(header_cells).style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let display_rows = state.build_history_display_rows();
@@ -306,7 +334,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 let duration_str = format_duration_friendly(record.duration_ms);
                 let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
 
-                Row::new(vec![
+                let mut cells = vec![
                     Line::from(Span::styled(
                         format_relative_time(record.parsed_ts, now),
                         Style::default().fg(DIM),
@@ -315,31 +343,39 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                         record.project.clone(),
                         Style::default().fg(DIM_WHITE),
                     )),
-                    Line::from(Span::styled(
-                        record.model.clone(),
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                    Line::from(Span::styled(
-                        record.backend.clone(),
-                        Style::default().fg(DIM),
-                    )),
-                    Line::from(Span::styled(
-                        format!(
-                            "{:>width$}",
-                            duration_str,
-                            width = duration_col_width as usize
-                        ),
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                    Line::from(Span::styled(
-                        format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
-                        Style::default().fg(DIM),
-                    )),
-                    Line::from(Span::styled(
-                        status_icon.to_string(),
-                        Style::default().fg(status_color),
-                    )),
-                ])
+                ];
+                if show_task_col {
+                    let mode = record.task_mode.as_deref();
+                    cells.push(Line::from(Span::styled(
+                        mode.unwrap_or("general"),
+                        Style::default().fg(task_mode_color(mode)),
+                    )));
+                }
+                cells.push(Line::from(Span::styled(
+                    record.model.clone(),
+                    Style::default().fg(DIM_WHITE),
+                )));
+                cells.push(Line::from(Span::styled(
+                    record.backend.clone(),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
+                    format!(
+                        "{:>width$}",
+                        duration_str,
+                        width = duration_col_width as usize
+                    ),
+                    Style::default().fg(DIM_WHITE),
+                )));
+                cells.push(Line::from(Span::styled(
+                    format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
+                    status_icon.to_string(),
+                    Style::default().fg(status_color),
+                )));
+                Row::new(cells)
             }
             HistoryDisplayRow::ThreadSummary {
                 latest_parsed_ts,
@@ -370,7 +406,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     format!(" \u{21b3}{turn_count}")
                 };
 
-                Row::new(vec![
+                let mut cells = vec![
                     Line::from(Span::styled(
                         format_relative_time(*latest_parsed_ts, now),
                         Style::default().fg(DIM),
@@ -379,54 +415,66 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                         Span::styled(project.clone(), Style::default().fg(DIM_WHITE)),
                         Span::styled(turns_suffix, Style::default().fg(DIM)),
                     ]),
-                    Line::from(Span::styled(model_display, Style::default().fg(DIM_WHITE))),
-                    Line::from(Span::styled(backend.clone(), Style::default().fg(DIM))),
-                    Line::from(Span::styled(
-                        format!(
-                            "{:>width$}",
-                            duration_str,
-                            width = duration_col_width as usize
-                        ),
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                    Line::from(Span::styled(
-                        format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
-                        Style::default().fg(DIM),
-                    )),
-                    Line::from(Span::styled(status_icon, Style::default().fg(status_color))),
-                ])
+                ];
+                if show_task_col {
+                    cells.push(Line::from(Span::styled("", Style::default().fg(DIM))));
+                }
+                cells.push(Line::from(Span::styled(
+                    model_display,
+                    Style::default().fg(DIM_WHITE),
+                )));
+                cells.push(Line::from(Span::styled(
+                    backend.clone(),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
+                    format!(
+                        "{:>width$}",
+                        duration_str,
+                        width = duration_col_width as usize
+                    ),
+                    Style::default().fg(DIM_WHITE),
+                )));
+                cells.push(Line::from(Span::styled(
+                    format!("{:>width$}", tokens_str, width = tokens_col_width as usize),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
+                    status_icon,
+                    Style::default().fg(status_color),
+                )));
+                Row::new(cells)
             }
         })
         .collect();
 
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(10),
-            Constraint::Fill(1),
-            Constraint::Length(14),
-            Constraint::Length(10),
-            Constraint::Length(duration_col_width),
-            Constraint::Length(tokens_col_width),
-            Constraint::Length(2),
-        ],
-    )
-    .header(header)
-    .row_highlight_style(Style::default().bg(SELECTED_BG))
-    .block(
-        Block::default()
-            .title(Line::from(vec![Span::styled(
-                " History ",
-                Style::default().fg(if state.focus == Focus::History {
-                    TEAL
-                } else {
-                    DIM_WHITE
-                }),
-            )]))
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(SEPARATOR)),
-    );
+    let mut constraints = vec![Constraint::Length(10), Constraint::Fill(1)];
+    if show_task_col {
+        constraints.push(Constraint::Length(task_col_width));
+    }
+    constraints.push(Constraint::Length(14));
+    constraints.push(Constraint::Length(10));
+    constraints.push(Constraint::Length(duration_col_width));
+    constraints.push(Constraint::Length(tokens_col_width));
+    constraints.push(Constraint::Length(2));
+
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .row_highlight_style(Style::default().bg(SELECTED_BG))
+        .block(
+            Block::default()
+                .title(Line::from(vec![Span::styled(
+                    " History ",
+                    Style::default().fg(if state.focus == Focus::History {
+                        TEAL
+                    } else {
+                        DIM_WHITE
+                    }),
+                )]))
+                .borders(Borders::ALL)
+                .border_type(BorderType::Rounded)
+                .border_style(Style::default().fg(SEPARATOR)),
+        );
 
     if state.focus == Focus::History && !display_rows.is_empty() {
         state

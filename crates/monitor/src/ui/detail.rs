@@ -12,7 +12,7 @@ use chrono::Utc;
 use crate::format::{format_duration_friendly, format_token_count};
 use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
-    YELLOW,
+    YELLOW, task_mode_color,
 };
 
 // ── Intermediate representation ─────────────────────────────────────────
@@ -96,10 +96,11 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             Style::default().fg(DIM),
         ));
     }
-    if let Some(ref task_mode) = detail.task_mode {
+    {
+        let mode = detail.task_mode.as_deref();
         header_spans.push(Span::styled(
-            format!("  {task_mode}"),
-            Style::default().fg(TEAL),
+            format!("  {}", mode.unwrap_or("general")),
+            Style::default().fg(task_mode_color(mode)),
         ));
     }
     if let Some(ref effort) = detail.reasoning_effort {

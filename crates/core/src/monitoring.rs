@@ -101,6 +101,8 @@ pub struct HistoryRecord {
     pub thread_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_mode: Option<String>,
 }
 
 pub fn append_history(record: &HistoryRecord) {
