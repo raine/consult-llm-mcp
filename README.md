@@ -746,7 +746,9 @@ always reliably triggered. See the [consult skill](#consult) below.
 **Recommendation:** Start with no custom activation. Use skills if you need
 custom instructions for how the MCP is invoked.
 
-## Installing skills
+## Skills
+
+### Installing skills
 
 Install all skills globally with a single command:
 
@@ -765,8 +767,6 @@ To uninstall:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash -s uninstall
 ```
-
-## Skills
 
 ### consult
 
