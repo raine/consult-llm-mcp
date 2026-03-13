@@ -636,15 +636,12 @@ models complex questions.
 
 ## Supported models
 
-- **gemini-2.5-pro**: Google's Gemini 2.5 Pro ($1.25/$10 per million tokens)
-- **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview ($2/$12 per million
-  tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
-- **gemini-3.1-pro-preview**: Google's Gemini 3.1 Pro Preview ($2/$12 per
-  million tokens for prompts ≤200k tokens, $4/$18 for prompts >200k tokens)
-- **deepseek-reasoner**: DeepSeek's reasoning model ($0.55/$2.19 per million
-  tokens)
-- **gpt-5.4**: OpenAI's GPT-5.4 model ($2.50/$15 per million tokens)
-- **gpt-5.2**: OpenAI's GPT-5.2 model ($1.75/$14 per million tokens)
+- **gemini-2.5-pro**: Google's Gemini 2.5 Pro
+- **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview
+- **gemini-3.1-pro-preview**: Google's Gemini 3.1 Pro Preview
+- **deepseek-reasoner**: DeepSeek's reasoning model
+- **gpt-5.4**: OpenAI's GPT-5.4 model
+- **gpt-5.2**: OpenAI's GPT-5.2 model
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3
 - **gpt-5.2-codex**: OpenAI's Codex model based on GPT-5.2
 
