@@ -295,8 +295,6 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
         Span::styled("d/u", Style::default().fg(TEAL)),
         Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
-        Span::styled("Tab", Style::default().fg(TEAL)),
-        Span::styled(" sibling  ", Style::default().fg(DIM_WHITE)),
         Span::styled("s", Style::default().fg(TEAL)),
         Span::styled(" sys prompt", Style::default().fg(DIM_WHITE)),
     ];
@@ -326,10 +324,13 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     };
 
     let bar = if let Some(ref indicator) = sibling_indicator {
+        // Use chars().count() not .len() — the arrows ◂▸ are multi-byte but single-width
         let left_len: usize = bar_spans.iter().map(|s| s.content.chars().count()).sum();
-        let padding =
-            (chunks[2].width as usize).saturating_sub(left_len + indicator.chars().count());
+        let tab_hint = "Tab ◂▸  ";
+        let total_content = left_len + tab_hint.chars().count() + indicator.chars().count();
+        let padding = (chunks[2].width as usize).saturating_sub(total_content);
         bar_spans.push(Span::styled(" ".repeat(padding), Style::default()));
+        bar_spans.push(Span::styled(tab_hint, Style::default().fg(DIM)));
         bar_spans.push(Span::styled(
             indicator.clone(),
             Style::default()
