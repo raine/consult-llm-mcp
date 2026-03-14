@@ -27,74 +27,36 @@ impl ExecutorProvider {
 
     pub fn get_executor(&self, model: &str) -> anyhow::Result<Arc<dyn LlmExecutor>> {
         let cfg = config();
-        let provider = Provider::from_model(model);
-        let cache_key = match provider {
-            Some(Provider::OpenAI) => format!("{model}-{:?}", cfg.openai_backend),
-            Some(Provider::Gemini) => format!("{model}-{:?}", cfg.gemini_backend),
-            _ => model.to_string(),
-        };
+        let provider = Provider::from_model(model).ok_or_else(|| {
+            anyhow::anyhow!("Unable to determine LLM provider for model: {model}")
+        })?;
+
+        let backend = cfg.backend_for(provider);
+        let cache_key = format!("{model}-{backend:?}");
 
         let mut cache = self.cache.lock().unwrap();
         if let Some(exec) = cache.get(&cache_key) {
             return Ok(exec.clone());
         }
 
-        let executor: Arc<dyn LlmExecutor> = match provider {
-            Some(Provider::OpenAI) => match cfg.openai_backend {
-                Backend::CodexCli => {
-                    Arc::new(CodexCliExecutor::new(cfg.codex_reasoning_effort.clone()))
-                }
-                Backend::CursorCli => {
-                    Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
-                }
-                Backend::Api => {
-                    let key = cfg.openai_api_key.as_ref().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "OPENAI_API_KEY environment variable is required for OpenAI models in API mode"
-                        )
-                    })?;
-                    Arc::new(ApiExecutor::new(
-                        self.http_client.clone(),
-                        key.clone(),
-                        None,
-                    ))
-                }
-                _ => anyhow::bail!("Invalid backend for GPT model"),
-            },
-            Some(Provider::DeepSeek) => {
-                let key = cfg.deepseek_api_key.as_ref().ok_or_else(|| {
-                    anyhow::anyhow!(
-                        "DEEPSEEK_API_KEY environment variable is required for DeepSeek models"
-                    )
+        let executor: Arc<dyn LlmExecutor> = match backend {
+            Backend::Api => {
+                let key = cfg.api_key_for(provider).ok_or_else(|| {
+                    anyhow::anyhow!("API key is required for {provider:?} models in API mode")
                 })?;
                 Arc::new(ApiExecutor::new(
                     self.http_client.clone(),
-                    key.clone(),
-                    Some("https://api.deepseek.com".to_string()),
+                    key.to_string(),
+                    provider.api_base_url().map(|s| s.to_string()),
                 ))
             }
-            Some(Provider::Gemini) => match cfg.gemini_backend {
-                Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
-                Backend::CursorCli => {
-                    Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
-                }
-                Backend::Api => {
-                    let key = cfg.gemini_api_key.as_ref().ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "GEMINI_API_KEY environment variable is required for Gemini models in API mode"
-                        )
-                    })?;
-                    Arc::new(ApiExecutor::new(
-                        self.http_client.clone(),
-                        key.clone(),
-                        Some(
-                            "https://generativelanguage.googleapis.com/v1beta/openai/".to_string(),
-                        ),
-                    ))
-                }
-                _ => anyhow::bail!("Invalid backend for Gemini model"),
-            },
-            None => anyhow::bail!("Unable to determine LLM provider for model: {model}"),
+            Backend::CodexCli => {
+                Arc::new(CodexCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+            }
+            Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
+            Backend::CursorCli => {
+                Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+            }
         };
 
         cache.insert(cache_key, executor.clone());

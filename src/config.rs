@@ -38,6 +38,24 @@ pub struct ProviderAvailability {
     pub deepseek_api_key: Option<String>,
 }
 
+impl ProviderAvailability {
+    pub fn backend_for(&self, provider: Provider) -> &Backend {
+        match provider {
+            Provider::OpenAI => &self.openai_backend,
+            Provider::Gemini => &self.gemini_backend,
+            Provider::DeepSeek => &Backend::Api,
+        }
+    }
+
+    pub fn api_key_for(&self, provider: Provider) -> Option<&str> {
+        match provider {
+            Provider::OpenAI => self.openai_api_key.as_deref(),
+            Provider::Gemini => self.gemini_api_key.as_deref(),
+            Provider::DeepSeek => self.deepseek_api_key.as_deref(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Config {
     pub openai_api_key: Option<String>,
@@ -49,6 +67,26 @@ pub struct Config {
     pub codex_reasoning_effort: String,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
+}
+
+impl Config {
+    /// Get the configured backend for a provider.
+    pub fn backend_for(&self, provider: Provider) -> &Backend {
+        match provider {
+            Provider::OpenAI => &self.openai_backend,
+            Provider::Gemini => &self.gemini_backend,
+            Provider::DeepSeek => &Backend::Api, // DeepSeek is API-only
+        }
+    }
+
+    /// Get the API key for a provider (when using API backend).
+    pub fn api_key_for(&self, provider: Provider) -> Option<&str> {
+        match provider {
+            Provider::OpenAI => self.openai_api_key.as_deref(),
+            Provider::Gemini => self.gemini_api_key.as_deref(),
+            Provider::DeepSeek => self.deepseek_api_key.as_deref(),
+        }
+    }
 }
 
 /// Single source of truth for model availability — drives both schema and validation
@@ -233,13 +271,11 @@ pub fn filter_by_availability(models: &[String], providers: &ProviderAvailabilit
     models
         .iter()
         .filter(|model| match Provider::from_model(model) {
-            Some(Provider::Gemini) => {
-                providers.gemini_backend != Backend::Api || providers.gemini_api_key.is_some()
+            Some(provider) => {
+                let backend = providers.backend_for(provider);
+                // CLI backends don't need API keys
+                *backend != Backend::Api || providers.api_key_for(provider).is_some()
             }
-            Some(Provider::OpenAI) => {
-                providers.openai_backend != Backend::Api || providers.openai_api_key.is_some()
-            }
-            Some(Provider::DeepSeek) => providers.deepseek_api_key.is_some(),
             None => {
                 log_to_file(&format!(
                     "WARNING: dropping model '{model}' — unrecognized provider prefix"

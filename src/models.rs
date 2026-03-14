@@ -38,6 +38,21 @@ impl Provider {
             None
         }
     }
+
+    /// API base URL for this provider (when using API backend).
+    /// Returns `None` for providers that use the default OpenAI-compatible URL.
+    pub fn api_base_url(&self) -> Option<&'static str> {
+        match self {
+            Provider::OpenAI => None, // uses default https://api.openai.com/v1/
+            Provider::Gemini => Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
+            Provider::DeepSeek => Some("https://api.deepseek.com"),
+        }
+    }
+
+    /// Whether this provider only supports API backend (no CLI alternative).
+    pub fn api_only(&self) -> bool {
+        matches!(self, Provider::DeepSeek)
+    }
 }
 
 pub const ALL_MODELS: &[&str] = &[
