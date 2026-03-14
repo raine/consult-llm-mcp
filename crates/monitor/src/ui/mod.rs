@@ -32,30 +32,38 @@ pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
     }
 
     if state.show_help {
-        render_help_overlay(
-            frame,
-            matches!(state.mode, AppMode::Detail(_) | AppMode::ThreadDetail(_)),
-        );
+        render_help_overlay(frame, &state.mode);
     }
 }
 
-fn render_help_overlay(frame: &mut ratatui::Frame, is_detail_mode: bool) {
-    let shortcuts: Vec<(&str, &str)> = if is_detail_mode {
-        vec![
+fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
+    let shortcuts: Vec<(&str, &str)> = match mode {
+        AppMode::Detail(_) => vec![
             ("j / ↓", "Scroll down"),
             ("k / ↑", "Scroll up"),
             ("d", "Half page down"),
             ("u", "Half page up"),
             ("Tab / S-Tab", "Next / prev sibling"),
-            ("[ / ]", "Prev / next turn (threads)"),
+            ("G", "Follow / scroll to bottom"),
+            ("y", "Yank response"),
+            ("s", "Toggle system prompt"),
+            ("Esc", "Back to table"),
+            ("q", "Quit"),
+            ("?", "Toggle this help"),
+        ],
+        AppMode::ThreadDetail(_) => vec![
+            ("j / ↓", "Scroll down"),
+            ("k / ↑", "Scroll up"),
+            ("d", "Half page down"),
+            ("u", "Half page up"),
+            ("[ / ]", "Prev / next turn"),
             ("G", "Follow / scroll to bottom"),
             ("y", "Yank response"),
             ("Esc", "Back to table"),
             ("q", "Quit"),
             ("?", "Toggle this help"),
-        ]
-    } else {
-        vec![
+        ],
+        _ => vec![
             ("j / ↓", "Move down"),
             ("k / ↑", "Move up"),
             ("Tab", "Switch focus"),
@@ -64,7 +72,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, is_detail_mode: bool) {
             ("X", "Clear history"),
             ("q", "Quit"),
             ("?", "Toggle this help"),
-        ]
+        ],
     };
 
     let title = " Shortcuts ";

@@ -524,8 +524,11 @@ impl AppState {
             .iter()
             .find(|h| h.consultation_id.as_deref() == Some(consultation_id))
         {
+            // hr.ts is the *finish* time; derive start time by subtracting duration
             let started_at = DateTime::parse_from_rfc3339(&hr.ts)
-                .map(|dt| dt.with_timezone(&Utc))
+                .map(|dt| {
+                    dt.with_timezone(&Utc) - chrono::Duration::milliseconds(hr.duration_ms as i64)
+                })
                 .ok();
             return DetailMetadata {
                 model: Some(hr.model.clone()),
@@ -587,6 +590,7 @@ impl AppState {
         }
 
         // History records with matching project
+        // Note: record.ts / parsed_ts is the *finish* time; derive start time
         for record in &self.history {
             if record.project != project {
                 continue;
@@ -594,10 +598,11 @@ impl AppState {
             if let Some(cid) = &record.consultation_id
                 && seen.insert(cid.clone())
             {
+                let duration = chrono::Duration::milliseconds(record.duration_ms as i64);
                 if let Some(ts) = record.parsed_ts {
-                    candidates.push((cid.clone(), ts, false));
+                    candidates.push((cid.clone(), ts - duration, false));
                 } else if let Ok(dt) = DateTime::parse_from_rfc3339(&record.ts) {
-                    candidates.push((cid.clone(), dt.with_timezone(&Utc), false));
+                    candidates.push((cid.clone(), dt.with_timezone(&Utc) - duration, false));
                 }
             }
         }
