@@ -571,7 +571,7 @@ impl AppState {
             return Vec::new();
         };
 
-        let window_secs = 5 * 60; // 5 minutes
+        let window_secs = 60; // 1 minute
 
         // Collect candidates: (consultation_id, started_at, is_active)
         let mut candidates: Vec<(String, DateTime<Utc>, bool)> = Vec::new();
