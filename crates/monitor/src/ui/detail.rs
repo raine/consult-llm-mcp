@@ -324,10 +324,10 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     };
 
     let bar = if let Some(ref indicator) = sibling_indicator {
-        let left_len: usize = bar_spans.iter().map(|s| s.content.len()).sum();
+        // Use chars().count() not .len() — the arrows ◂▸ are multi-byte but single-width
+        let left_len: usize = bar_spans.iter().map(|s| s.content.chars().count()).sum();
         let tab_hint = "Tab ◂▸  ";
-        let right_len = indicator.len();
-        let total_content = left_len + tab_hint.len() + right_len;
+        let total_content = left_len + tab_hint.chars().count() + indicator.chars().count();
         let padding = (chunks[2].width as usize).saturating_sub(total_content);
         bar_spans.push(Span::styled(" ".repeat(padding), Style::default()));
         bar_spans.push(Span::styled(tab_hint, Style::default().fg(DIM)));

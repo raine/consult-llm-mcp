@@ -61,6 +61,7 @@ impl AppState {
                         detail.auto_scroll = false;
                     }
                 }
+                self.populate_detail_siblings();
             }
             Action::EnterThreadDetail(thread_id) => {
                 self.enter_thread_detail(thread_id, dir);
@@ -365,8 +366,10 @@ impl AppState {
             siblings: Vec::new(),
             sibling_index: 0,
         });
+    }
 
-        // Compute siblings for the newly entered detail view
+    /// Compute and set sibling consultation info on the current detail view.
+    fn populate_detail_siblings(&mut self) {
         if let AppMode::Detail(ref detail) = self.mode {
             let project = detail.project.clone();
             let started_at = detail.started_at;
