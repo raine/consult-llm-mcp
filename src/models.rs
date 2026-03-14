@@ -48,11 +48,6 @@ impl Provider {
             Provider::DeepSeek => Some("https://api.deepseek.com"),
         }
     }
-
-    /// Whether this provider only supports API backend (no CLI alternative).
-    pub fn api_only(&self) -> bool {
-        matches!(self, Provider::DeepSeek)
-    }
 }
 
 pub const ALL_MODELS: &[&str] = &[

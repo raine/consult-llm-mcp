@@ -9,6 +9,7 @@ pub struct GitDiffArgs {
     /// Path to git repository (defaults to current working directory)
     pub repo_path: Option<String>,
     /// Specific files to include in diff
+    #[schemars(length(min = 1))]
     pub files: Vec<String>,
     /// Git reference to compare against (e.g., "HEAD", "main", commit hash)
     #[serde(default = "default_base_ref")]
@@ -18,6 +19,10 @@ pub struct GitDiffArgs {
 
 fn default_base_ref() -> String {
     "HEAD".to_string()
+}
+
+fn default_task_mode_str() -> &'static str {
+    "general"
 }
 
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
@@ -30,6 +35,7 @@ pub struct ConsultLlmArgs {
     pub model: Option<String>,
     /// Controls the system prompt persona. Choose based on the task: "review": critical code reviewer for finding bugs, security issues, and quality problems. "debug": focused troubleshooter for root cause analysis from errors, logs, and stack traces — ignores style issues. "plan": constructive architect for exploring trade-offs and designing solutions — always includes a final recommendation. "create": generative writer for producing documentation, content, or designs. "general" (default): neutral prompt that defers to your instructions in the prompt field.
     #[serde(default)]
+    #[schemars(default = "default_task_mode_str")]
     pub task_mode: TaskMode,
     /// If true, copy the formatted prompt to the clipboard instead of querying an LLM. When true, the `model` parameter is ignored. Use this to paste the prompt into browser-based LLM services. IMPORTANT: Only use this when the user specifically requests it. When true, wait for the user to provide the external LLM's response before proceeding with any implementation.
     #[serde(default)]
@@ -72,16 +78,16 @@ fn inline_refs(value: &mut Value, defs: &Value) {
     match value {
         Value::Object(map) => {
             // If this object has a $ref, resolve it
-            if let Some(Value::String(ref_path)) = map.get("$ref").cloned() {
-                if let Some(resolved) = resolve_ref(&ref_path, defs) {
-                    // Remove the $ref key
-                    map.remove("$ref");
-                    // Merge resolved definition into this object
-                    // (preserves sibling keys like `description`)
-                    if let Value::Object(resolved_map) = resolved {
-                        for (k, v) in resolved_map {
-                            map.entry(k).or_insert(v);
-                        }
+            if let Some(Value::String(ref_path)) = map.get("$ref").cloned()
+                && let Some(resolved) = resolve_ref(&ref_path, defs)
+            {
+                // Remove the $ref key
+                map.remove("$ref");
+                // Merge resolved definition into this object
+                // (preserves sibling keys like `description`)
+                if let Value::Object(resolved_map) = resolved {
+                    for (k, v) in resolved_map {
+                        map.entry(k).or_insert(v);
                     }
                 }
             }
@@ -136,7 +142,10 @@ mod tests {
             "git_diff",
         ];
         for field in expected {
-            assert!(props.contains_key(field), "missing schema property: {field}");
+            assert!(
+                props.contains_key(field),
+                "missing schema property: {field}"
+            );
         }
     }
 
@@ -168,6 +177,23 @@ mod tests {
         assert!(
             task_mode.contains_key("description"),
             "task_mode should have description"
+        );
+        // Should advertise the default value
+        assert_eq!(
+            task_mode.get("default").and_then(|v| v.as_str()),
+            Some("general"),
+            "task_mode should have default 'general'"
+        );
+    }
+
+    #[test]
+    fn schema_git_diff_files_min_items() {
+        let schema = consult_llm_schema();
+        let json = serde_json::to_string(&schema).unwrap();
+        // The git_diff.files array should require at least 1 item
+        assert!(
+            json.contains("\"minItems\":1") || json.contains("\"minItems\": 1"),
+            "git_diff.files should have minItems: 1"
         );
     }
 
