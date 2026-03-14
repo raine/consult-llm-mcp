@@ -38,6 +38,7 @@ pathdiff = "0.2"
 uuid = { workspace = true }
 smallvec = "1"
 tempfile = "3"
+schemars = "1.2.1"
 
 [[bin]]
 name = "consult-llm-mcp"

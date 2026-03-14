@@ -323,6 +323,7 @@ dependencies = [
  "pathdiff",
  "reqwest",
  "rmcp",
+ "schemars",
  "serde",
  "serde_json",
  "smallvec",
