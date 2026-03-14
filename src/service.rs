@@ -9,8 +9,19 @@ use crate::llm::ExecutorProvider;
 use crate::llm_query::query_llm;
 use crate::logger::{log_prompt, log_response};
 use crate::prompt_builder::build_prompt;
-use crate::schema::ConsultLlmArgs;
+use crate::schema::{ConsultLlmArgs, GitDiffArgs};
 use crate::system_prompt::get_system_prompt;
+
+fn resolve_git_diff(git_diff: Option<&GitDiffArgs>) -> Option<String> {
+    let gd = git_diff?;
+    match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref) {
+        Ok(diff) => Some(diff),
+        Err(e) => {
+            eprintln!("Warning: git diff failed: {e}");
+            None
+        }
+    }
+}
 
 pub enum ConsultOutcome {
     Response {
@@ -132,16 +143,7 @@ impl ConsultService {
             .transpose()?
             .unwrap_or_default();
 
-        let git_diff = match args.git_diff.as_ref() {
-            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref) {
-                Ok(diff) => Some(diff),
-                Err(e) => {
-                    eprintln!("Warning: git diff failed: {e}");
-                    None
-                }
-            },
-            None => None,
-        };
+        let git_diff = resolve_git_diff(args.git_diff.as_ref());
 
         let prompt = build_prompt(&args.prompt, &context_files, git_diff.as_deref());
         let system_prompt = get_system_prompt(false, args.task_mode);
@@ -158,16 +160,7 @@ impl ConsultService {
         executor: Arc<dyn LlmExecutor>,
         consultation_id: &str,
     ) -> anyhow::Result<(String, Option<Usage>, Option<String>)> {
-        let git_diff = match args.git_diff.as_ref() {
-            Some(gd) => match generate_git_diff(gd.repo_path.as_deref(), &gd.files, &gd.base_ref) {
-                Ok(diff) => Some(diff),
-                Err(e) => {
-                    eprintln!("Warning: git diff failed: {e}");
-                    None
-                }
-            },
-            None => None,
-        };
+        let git_diff = resolve_git_diff(args.git_diff.as_ref());
 
         let (prompt, file_paths) = if !executor.capabilities().supports_file_refs {
             // API mode: inline file contents
