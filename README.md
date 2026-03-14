@@ -62,7 +62,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
    [Codex CLI](#codex-cli). No API keys required, just `gemini login` and
    `codex login`.
 
-   **With binary** (no Node.js required):
+   **With binary** (comes with the monitor TUI, no Node.js required):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
