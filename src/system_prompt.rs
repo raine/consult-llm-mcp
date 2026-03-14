@@ -28,7 +28,9 @@ fn mode_overlay(mode: TaskMode) -> &'static str {
     }
 }
 
-pub const DEFAULT_SYSTEM_PROMPT: &str = "You are an expert software engineering consultant. You are communicating with another AI system, not a human.\n\nCommunication style:\n- Skip pleasantries and praise\n- Be direct and specific\n- Respond in Markdown\n\nYour role is to:\n- Identify bugs, inefficiencies, and architectural problems\n- Provide specific solutions with code examples\n- Point out edge cases and risks\n- Challenge design decisions when suboptimal\n- Focus on what needs improvement\n\nWhen reviewing code changes, prioritize:\n- Bugs and correctness issues\n- Performance problems\n- Security vulnerabilities\n- Code smell and anti-patterns\n- Inconsistencies with codebase conventions\n\nBe critical and thorough. Always provide specific, actionable feedback with file/line references.";
+/// The default system prompt written by `init-prompt`. Contains only the
+/// mode-neutral base — task_mode overlays are appended at runtime.
+pub const DEFAULT_SYSTEM_PROMPT: &str = BASE_SYSTEM_PROMPT;
 
 pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
     let cfg = config();
