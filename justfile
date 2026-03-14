@@ -41,6 +41,10 @@ build:
 test:
     cargo test --workspace
 
+# Set up git hooks
+setup:
+    git config core.hooksPath hooks
+
 # Install debug binaries globally via symlink
 install-dev:
     cargo build && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp && ln -sf $(pwd)/target/debug/consult-llm-monitor ~/.cargo/bin/consult-llm-monitor
