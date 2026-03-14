@@ -126,6 +126,7 @@ fn main() -> io::Result<()> {
 
             let entering_detail = matches!(&action, Action::EnterDetail(_));
             let entering_thread_detail = matches!(&action, Action::EnterThreadDetail(_));
+            let switching_sibling = matches!(&action, Action::NextSibling | Action::PrevSibling);
             let exiting_detail = matches!(&action, Action::ExitDetail);
             let clearing_history = matches!(&action, Action::ClearHistory);
 
@@ -147,6 +148,14 @@ fn main() -> io::Result<()> {
                             file_offset: detail.active_file_offset,
                         });
                     }
+                }
+            } else if switching_sibling {
+                if let AppMode::Detail(ref detail) = state.mode {
+                    let _ = cmd_tx.send(PollCommand::ExitDetail);
+                    let _ = cmd_tx.send(PollCommand::EnterDetail {
+                        consultation_id: detail.consultation_id.clone(),
+                        file_offset: detail.file_offset,
+                    });
                 }
             } else if exiting_detail {
                 let _ = cmd_tx.send(PollCommand::ExitDetail);

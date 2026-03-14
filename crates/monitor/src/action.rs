@@ -35,4 +35,8 @@ pub(crate) enum Action {
     FilterAccept,
     /// Esc: dismiss filter input and clear the filter
     FilterCancel,
+    /// Switch to next sibling consultation (same project, similar start time)
+    NextSibling,
+    /// Switch to previous sibling consultation
+    PrevSibling,
 }

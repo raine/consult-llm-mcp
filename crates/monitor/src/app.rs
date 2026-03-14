@@ -87,6 +87,35 @@ impl AppState {
                     }
                 }
             }
+            Action::NextSibling | Action::PrevSibling => {
+                let forward = matches!(action, Action::NextSibling);
+                if let AppMode::Detail(ref detail) = self.mode {
+                    let current_id = detail.consultation_id.clone();
+                    let project = detail.project.clone();
+                    let started_at = detail.started_at;
+                    let siblings = self.find_siblings(project.as_deref(), started_at);
+                    if siblings.len() > 1 {
+                        let current_idx = siblings
+                            .iter()
+                            .position(|id| *id == current_id)
+                            .unwrap_or(0);
+                        let next_idx = if forward {
+                            (current_idx + 1) % siblings.len()
+                        } else {
+                            (current_idx + siblings.len() - 1) % siblings.len()
+                        };
+                        let next_id = siblings[next_idx].clone();
+                        let sibling_index = next_idx;
+                        let sibling_list = siblings;
+                        self.enter_detail(next_id, dir);
+                        // Preserve siblings info on the new detail state
+                        if let AppMode::Detail(ref mut detail) = self.mode {
+                            detail.siblings = sibling_list;
+                            detail.sibling_index = sibling_index;
+                        }
+                    }
+                }
+            }
             Action::ExitDetail => {
                 self.mode = AppMode::Table;
             }
@@ -333,7 +362,22 @@ impl AppState {
             cached_width: 0,
             cached_has_active_tools: false,
             show_system_prompt: false,
+            siblings: Vec::new(),
+            sibling_index: 0,
         });
+
+        // Compute siblings for the newly entered detail view
+        if let AppMode::Detail(ref detail) = self.mode {
+            let project = detail.project.clone();
+            let started_at = detail.started_at;
+            let cid = detail.consultation_id.clone();
+            let siblings = self.find_siblings(project.as_deref(), started_at);
+            let idx = siblings.iter().position(|id| *id == cid).unwrap_or(0);
+            if let AppMode::Detail(ref mut detail) = self.mode {
+                detail.siblings = siblings;
+                detail.sibling_index = idx;
+            }
+        }
     }
 
     pub(crate) fn enter_thread_detail(&mut self, thread_id: String, dir: &Path) {
@@ -508,6 +552,73 @@ impl AppState {
         self.servers
             .values()
             .any(|s| s.active_consults.contains_key(consultation_id))
+    }
+
+    /// Find sibling consultations: same project, started within 5 minutes of each other.
+    /// Returns consultation IDs sorted with active ones first, then by start time.
+    fn find_siblings(
+        &self,
+        project: Option<&str>,
+        reference_time: Option<DateTime<Utc>>,
+    ) -> Vec<String> {
+        let Some(project) = project else {
+            return Vec::new();
+        };
+
+        let window_secs = 5 * 60; // 5 minutes
+
+        // Collect candidates: (consultation_id, started_at, is_active)
+        let mut candidates: Vec<(String, DateTime<Utc>, bool)> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+        // Active consultations from servers with matching project
+        for server in self.servers.values() {
+            if server.project.as_deref() != Some(project) {
+                continue;
+            }
+            for (cid, ac) in &server.active_consults {
+                if seen.insert(cid.clone()) {
+                    candidates.push((cid.clone(), ac.started_at, true));
+                }
+            }
+        }
+
+        // History records with matching project
+        for record in &self.history {
+            if record.project != project {
+                continue;
+            }
+            if let Some(cid) = &record.consultation_id
+                && seen.insert(cid.clone())
+            {
+                if let Some(ts) = record.parsed_ts {
+                    candidates.push((cid.clone(), ts, false));
+                } else if let Ok(dt) = DateTime::parse_from_rfc3339(&record.ts) {
+                    candidates.push((cid.clone(), dt.with_timezone(&Utc), false));
+                }
+            }
+        }
+
+        // Filter by time window relative to reference time
+        if let Some(ref_time) = reference_time {
+            candidates.retain(|(_, started_at, is_active)| {
+                // Always keep active consultations
+                *is_active
+                    || (ref_time
+                        .signed_duration_since(*started_at)
+                        .num_seconds()
+                        .unsigned_abs()
+                        <= window_secs)
+            });
+        }
+
+        // Sort: active first, then by start time (newest first)
+        candidates.sort_by(|a, b| {
+            b.2.cmp(&a.2) // active first
+                .then_with(|| b.1.cmp(&a.1)) // newest first
+        });
+
+        candidates.into_iter().map(|(cid, _, _)| cid).collect()
     }
 
     /// Apply a scroll mutation to whichever detail mode is active.

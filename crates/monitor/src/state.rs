@@ -94,6 +94,10 @@ pub(crate) struct DetailState {
     pub(crate) cached_has_active_tools: bool,
     /// Whether the system prompt overlay is visible.
     pub(crate) show_system_prompt: bool,
+    /// Sibling consultation IDs (same project, similar start time) including self.
+    pub(crate) siblings: Vec<String>,
+    /// Index of the current consultation within `siblings`.
+    pub(crate) sibling_index: usize,
 }
 
 pub(crate) struct DetailMetadata {

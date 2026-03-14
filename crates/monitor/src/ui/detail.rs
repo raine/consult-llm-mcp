@@ -311,7 +311,38 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             ));
         }
     }
-    let bar = Line::from(bar_spans);
+
+    // Sibling indicator (right-aligned)
+    let sibling_indicator = if let AppMode::Detail(ref d) = state.mode {
+        if d.siblings.len() > 1 {
+            Some(format!(" {}/{} ", d.sibling_index + 1, d.siblings.len()))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let bar = if let Some(ref indicator) = sibling_indicator {
+        let left_len: usize = bar_spans.iter().map(|s| s.content.len()).sum();
+        let tab_hint = "Tab ◂▸  ";
+        let right_len = indicator.len();
+        let total_content = left_len + tab_hint.len() + right_len;
+        let padding = (chunks[2].width as usize).saturating_sub(total_content);
+        bar_spans.push(Span::styled(" ".repeat(padding), Style::default()));
+        bar_spans.push(Span::styled(tab_hint, Style::default().fg(DIM)));
+        bar_spans.push(Span::styled(
+            indicator.clone(),
+            Style::default()
+                .fg(BG)
+                .bg(YELLOW)
+                .add_modifier(Modifier::BOLD),
+        ));
+        Line::from(bar_spans)
+    } else {
+        Line::from(bar_spans)
+    };
+
     frame.render_widget(
         Paragraph::new(bar).style(Style::default().bg(BG)),
         chunks[2],

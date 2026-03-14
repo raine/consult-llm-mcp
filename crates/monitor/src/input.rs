@@ -115,6 +115,8 @@ fn handle_detail_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('G') => Some(Action::ScrollToBottom),
         KeyCode::Char('y') => Some(Action::YankResponse),
         KeyCode::Char('s') => Some(Action::ToggleSystemPrompt),
+        KeyCode::Tab => Some(Action::NextSibling),
+        KeyCode::BackTab => Some(Action::PrevSibling),
         _ => None,
     }
 }
