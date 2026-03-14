@@ -224,6 +224,7 @@ impl AppState {
                         completed_consults: Vec::new(),
                         completed_count: 0,
                         failed_count: 0,
+                        last_consult_at: None,
                     },
                 );
             }
@@ -251,6 +252,7 @@ impl AppState {
                             reasoning_effort: reasoning_effort.clone(),
                         },
                     );
+                    server.last_consult_at = Some(started_at);
                 }
             }
             MonitorEvent::ConsultProgress { id, stage } => {
@@ -283,6 +285,10 @@ impl AppState {
                             server.completed_consults.remove(0);
                         }
                     }
+                    let finished_at = DateTime::parse_from_rfc3339(&envelope.ts)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now());
+                    server.last_consult_at = Some(finished_at);
                     if *success {
                         server.completed_count += 1;
                     } else {
@@ -525,30 +531,36 @@ impl AppState {
     }
 
     /// Return server IDs sorted by status: active first, then idle, then stopped/dead.
-    /// Within each bucket, preserve insertion order as tiebreaker.
+    /// Within each bucket, sort by most recent consultation activity (newest first).
     pub(crate) fn display_server_ids(&self) -> Vec<&str> {
-        let mut ids: Vec<(usize, &String)> = self
+        let mut entries: Vec<(&String, &ServerState)> = self
             .server_order
             .iter()
-            .enumerate()
-            .filter(|(_, id)| self.servers.contains_key(*id))
+            .filter_map(|id| self.servers.get(id).map(|s| (id, s)))
             .collect();
 
-        ids.sort_by_key(|(insertion_idx, id)| {
-            let server = &self.servers[*id];
-            let bucket = if !server.active_consults.is_empty() {
-                0 // active consultations
-            } else if !server.completed_consults.is_empty() {
-                1 // recently completed consultations
-            } else if !server.stopped && !server.dead {
-                2 // idle, no consultations
-            } else {
-                3 // stopped/dead
+        entries.sort_by(|(_, sa), (_, sb)| {
+            let bucket = |s: &ServerState| -> u8 {
+                if !s.active_consults.is_empty() {
+                    0
+                } else if !s.completed_consults.is_empty() {
+                    1
+                } else if !s.stopped && !s.dead {
+                    2
+                } else {
+                    3
+                }
             };
-            (bucket, *insertion_idx)
+
+            let ba = bucket(sa);
+            let bb = bucket(sb);
+            ba.cmp(&bb).then_with(|| {
+                // Within same bucket, most recent activity first (reverse chronological)
+                sb.last_consult_at.cmp(&sa.last_consult_at)
+            })
         });
 
-        ids.into_iter().map(|(_, id)| id.as_str()).collect()
+        entries.into_iter().map(|(id, _)| id.as_str()).collect()
     }
 
     /// Return active consult entries sorted by start time (oldest first).

@@ -150,6 +150,8 @@ pub(crate) struct ServerState {
     pub(crate) completed_consults: Vec<CompletedConsult>,
     pub(crate) completed_count: u32,
     pub(crate) failed_count: u32,
+    /// Timestamp of the most recent consultation activity (start or finish)
+    pub(crate) last_consult_at: Option<DateTime<Utc>>,
 }
 
 pub(crate) struct ActiveConsult {
