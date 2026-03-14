@@ -21,6 +21,7 @@ mod schema;
 mod server;
 mod service;
 mod system_prompt;
+mod update;
 
 use consult_llm_core::monitoring;
 
@@ -51,6 +52,22 @@ async fn main() {
         return;
     }
 
+    if args.get(1).is_some_and(|a| a == "update") {
+        if let Err(e) = update::run() {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if args.get(1).is_some_and(|a| a == "_check-update") {
+        if let Err(e) = update::run_background_check() {
+            eprintln!("{e:#}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     let registry = match config::init_config() {
         Ok(r) => r,
         Err(e) => {
@@ -62,6 +79,7 @@ async fn main() {
     };
 
     monitoring::init();
+    update::check_and_notify();
     let project = std::env::current_dir()
         .ok()
         .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));

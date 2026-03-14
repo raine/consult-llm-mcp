@@ -62,7 +62,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
    [Codex CLI](#codex-cli). No API keys required, just `gemini login` and
    `codex login`.
 
-   **With binary** (no Node.js required, but no auto-update):
+   **With binary** (no Node.js required):
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
@@ -518,6 +518,12 @@ See the "Using web mode..." example above for a concrete transcript.
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
   - Useful for project-specific prompts
+- `CONSULT_LLM_NO_UPDATE_CHECK` - Disable automatic update checking on server
+  startup (optional)
+  - Set to `1` to disable
+  - By default, the server checks for new versions in the background every 24
+    hours and logs a notice when an update is available
+  - Only applies to binary installs — npm installs are never checked
 - `MCP_DEBUG_STDIN` - Log raw JSON-RPC messages received on stdin (optional)
   - Set to `1` to enable
   - Logs every message as `RAW RECV` entries and poll timing gaps as
@@ -815,6 +821,21 @@ forth before synthesizing and implementing. See
 ```
 > /debate-vs --gemini design the multi-tenant isolation strategy
 ```
+
+## Updating
+
+**Binary installs:**
+
+```bash
+consult-llm-mcp update
+```
+
+Downloads the latest release from GitHub with SHA-256 checksum verification. If
+`consult-llm-monitor` is found alongside the binary, it's updated too.
+
+The server also checks for updates in the background on startup (every 24 hours)
+and logs a notice when a newer version is available. Disable with
+`CONSULT_LLM_NO_UPDATE_CHECK=1`.
 
 ## Development
 

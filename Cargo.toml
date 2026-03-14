@@ -37,6 +37,7 @@ chrono = { workspace = true }
 pathdiff = "0.2"
 uuid = { workspace = true }
 smallvec = "1"
+tempfile = "3"
 
 [[bin]]
 name = "consult-llm-mcp"
@@ -46,5 +47,4 @@ path = "src/main.rs"
 strip = true
 
 [dev-dependencies]
-tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "test-util"] }
