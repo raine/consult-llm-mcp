@@ -91,28 +91,23 @@ impl AppState {
             Action::NextSibling | Action::PrevSibling => {
                 let forward = matches!(action, Action::NextSibling);
                 if let AppMode::Detail(ref detail) = self.mode {
-                    let current_id = detail.consultation_id.clone();
-                    let project = detail.project.clone();
-                    let started_at = detail.started_at;
-                    let siblings = self.find_siblings(project.as_deref(), started_at);
+                    // Reuse the sibling list computed on initial entry — don't
+                    // recompute, as the time window is relative and would shift
+                    // with each switch, producing unstable sibling sets.
+                    let siblings = detail.siblings.clone();
+                    let current_idx = detail.sibling_index;
                     if siblings.len() > 1 {
-                        let current_idx = siblings
-                            .iter()
-                            .position(|id| *id == current_id)
-                            .unwrap_or(0);
                         let next_idx = if forward {
                             (current_idx + 1) % siblings.len()
                         } else {
                             (current_idx + siblings.len() - 1) % siblings.len()
                         };
                         let next_id = siblings[next_idx].clone();
-                        let sibling_index = next_idx;
-                        let sibling_list = siblings;
                         self.enter_detail(next_id, dir);
-                        // Preserve siblings info on the new detail state
+                        // Preserve the original sibling list on the new detail state
                         if let AppMode::Detail(ref mut detail) = self.mode {
-                            detail.siblings = sibling_list;
-                            detail.sibling_index = sibling_index;
+                            detail.siblings = siblings;
+                            detail.sibling_index = next_idx;
                         }
                     }
                 }
