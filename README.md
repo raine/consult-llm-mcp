@@ -23,7 +23,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 ```
 
 [Quick start](#quick-start) · [Configuration](#configuration) ·
-[Skills](#skills) · [Monitor TUI](#monitor) · [Changelog](CHANGELOG.md)
+[Skills](#skills) · [Monitor TUI](#monitor) · [Why MCP?](#why-mcp-and-not-cli) ·
+[Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -836,6 +837,37 @@ Downloads the latest release from GitHub with SHA-256 checksum verification. If
 The server also checks for updates in the background on startup (every 24 hours)
 and logs a notice when a newer version is available. Disable with
 `CONSULT_LLM_NO_UPDATE_CHECK=1`.
+
+## Why MCP and not CLI?
+
+The server maps one `model` parameter onto five backends (OpenAI API, Gemini
+API, Gemini CLI, Codex CLI, Cursor CLI) with different commands, streaming
+formats, output schemas, file handling, and resume semantics. Doing this through
+agent Bash calls would push all of that per-provider plumbing into the agent or
+a wrapper script/CLI.
+
+MCP also sidesteps shell escaping. Prompts contain code with backticks, `$`, and
+quotes. Passing one model's code-heavy response into another call breaks bash
+quoting and requires temp files. MCP passes structured JSON instead.
+
+Multi-turn workflows add more friction as a CLI. To continue a conversation, the
+agent needs to find a session ID in the CLI's output and pass it back as a flag
+on the next invocation. With MCP, the agent passes `thread_id` as a parameter
+and the server handles the provider-specific resume mechanics internally.
+
+The MCP tool is also easier to compose into [skills](#skills). `/consult`,
+`/collab`, and `/debate` all just say "call `consult_llm` with these
+parameters." A CLI version would need each skill to either teach the agent the
+CLI's interface or reference a separate skill that does. A skill that
+orchestrates a multi-model debate is ~90 lines with MCP. As shell commands, the
+same skill would either balloon into hundreds of lines of escaping rules and
+stdout parsing, or depend on another skill that teaches the agent how to call
+each CLI.
+
+If you only need a single provider with simple prompts, a Bash call to `gemini`
+or `codex` with some `jq` filtering will work fine. MCP starts to make more
+sense with multiple backends, multi-turn conversations across providers, or
+custom workflows that nicely compose on top.
 
 ## Development
 
