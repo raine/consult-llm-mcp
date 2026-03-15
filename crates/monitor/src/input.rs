@@ -41,7 +41,7 @@ fn handle_table_key(
 ) -> Option<Action> {
     match key.code {
         KeyCode::Char('?') => Some(Action::ToggleHelp),
-        KeyCode::Char('q') => Some(Action::Quit),
+        KeyCode::Char('q') | KeyCode::Esc => Some(Action::Quit),
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => Some(Action::Quit),
         KeyCode::Tab | KeyCode::BackTab => Some(Action::ToggleFocus),
         KeyCode::Char('j') | KeyCode::Down => Some(Action::MoveDown),
