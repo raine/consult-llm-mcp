@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.10.0 (2026-03-15)
+
+- Monitor: cycle between sibling consultations (started around the same time)
+  with Tab/Shift+Tab in detail view
+- Monitor: sort projects by most recent consultation activity
+- Monitor: add Esc key to quit from table view
+
+## v2.9.0 (2026-03-14)
+
+- Added `consult-llm-mcp update` self-update command. Updates both
+  `consult-llm-mcp` and `consult-llm-monitor` if present.
+
 ## v2.8.0 (2026-03-13)
 
 - Replaced hardcoded model enum with abstract selectors (`gemini`, `openai`,
