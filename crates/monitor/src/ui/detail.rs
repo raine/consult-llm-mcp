@@ -330,12 +330,12 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         let total_content = left_len + tab_hint.chars().count() + indicator.chars().count();
         let padding = (chunks[2].width as usize).saturating_sub(total_content);
         bar_spans.push(Span::styled(" ".repeat(padding), Style::default()));
-        bar_spans.push(Span::styled(tab_hint, Style::default().fg(DIM)));
+        bar_spans.push(Span::styled(tab_hint, Style::default().fg(TEAL)));
         bar_spans.push(Span::styled(
             indicator.clone(),
             Style::default()
                 .fg(BG)
-                .bg(YELLOW)
+                .bg(TEAL)
                 .add_modifier(Modifier::BOLD),
         ));
         Line::from(bar_spans)
