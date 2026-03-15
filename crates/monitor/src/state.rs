@@ -177,6 +177,7 @@ pub(crate) struct CompletedConsult {
     pub(crate) id: String,
     pub(crate) model: String,
     pub(crate) backend: String,
+    pub(crate) started_at: DateTime<Utc>,
     pub(crate) duration_ms: u64,
     pub(crate) success: bool,
     pub(crate) error: Option<String>,

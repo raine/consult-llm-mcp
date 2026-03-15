@@ -300,6 +300,7 @@ impl AppState {
                             id: id.clone(),
                             model: ac.model,
                             backend: ac.backend,
+                            started_at: ac.started_at,
                             duration_ms: *duration_ms,
                             success: *success,
                             error: error.clone(),
@@ -504,7 +505,7 @@ impl AppState {
                 return DetailMetadata {
                     model: Some(cc.model.clone()),
                     backend: Some(cc.backend.clone()),
-                    started_at: None,
+                    started_at: Some(cc.started_at),
                     duration_ms: Some(cc.duration_ms),
                     success: Some(cc.success),
                     project: server.project.clone(),
