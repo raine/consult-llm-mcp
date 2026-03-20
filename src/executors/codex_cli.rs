@@ -145,7 +145,7 @@ impl LlmExecutor for CodexCliExecutor {
         "codex_cli"
     }
 
-    fn reasoning_effort(&self) -> Option<&str> {
+    fn reasoning_effort(&self, _model: &str) -> Option<&str> {
         Some(&self.codex_reasoning_effort)
     }
 

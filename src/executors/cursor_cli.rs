@@ -254,8 +254,12 @@ impl LlmExecutor for CursorCliExecutor {
         "cursor_cli"
     }
 
-    fn reasoning_effort(&self) -> Option<&str> {
-        Some(&self.codex_reasoning_effort)
+    fn reasoning_effort(&self, model: &str) -> Option<&str> {
+        if model.contains("-codex") {
+            Some(&self.codex_reasoning_effort)
+        } else {
+            None
+        }
     }
 
     async fn execute(

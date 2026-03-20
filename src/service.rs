@@ -71,7 +71,7 @@ impl ConsultService {
             other => Some(format!("{other:?}").to_lowercase()),
         };
 
-        let reasoning_effort = executor.reasoning_effort().map(|s| s.to_string());
+        let reasoning_effort = executor.reasoning_effort(&model).map(|s| s.to_string());
         consult_llm_core::monitoring::emit(
             consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
                 id: consultation_id.clone(),
