@@ -8,7 +8,7 @@ default:
     @just --list
 
 # Run all checks sequentially (order matters!)
-check: clippy-fix format test
+check: clippy format test
 
 # Run check and fail if there are uncommitted changes (for CI)
 check-ci: check
@@ -25,12 +25,8 @@ check-ci: check
 format:
     @cargo fmt --all
 
-# Run clippy and fail on any warnings
+# Auto-fix clippy warnings, then fail on any remaining
 clippy:
-    @cargo clippy --workspace --all-targets --quiet -- -D clippy::all 2>&1 | { grep -v "^0 errors" || true; }
-
-# Auto-fix clippy warnings
-clippy-fix:
     @cargo clippy --workspace --all-targets --fix --allow-dirty --allow-staged --quiet -- -D clippy::all 2>&1 | { grep -v "^0 errors" || true; }
 
 # Build the project
