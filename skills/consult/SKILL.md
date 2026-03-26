@@ -48,17 +48,15 @@ Call `mcp__consult-llm__consult_llm` with:
 
 ### If no flag (default): Both Gemini and Codex in parallel
 
-Call BOTH simultaneously (single response, multiple tool calls):
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full user query and file list so it can make the MCP call independently.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: The user's query, passed through faithfully (see Critical Rules)
-- `files`: Array of relevant file paths
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the user's query passed through faithfully (see Critical Rules), `files`: [array of relevant file paths]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: The user's query, passed through faithfully (see Critical Rules)
-- `files`: Array of relevant file paths
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the user's query passed through faithfully (see Critical Rules), `files`: [array of relevant file paths]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
 ### If `--browser`: Web mode
 

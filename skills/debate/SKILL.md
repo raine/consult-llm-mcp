@@ -59,19 +59,17 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Call BOTH simultaneously:
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full opening prompt text and file list so it can make the MCP call independently.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: Opening prompt above
-- `files`: Array of relevant source files discovered in Phase 1
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: Opening prompt above
-- `files`: Array of relevant source files discovered in Phase 1
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Extract thread IDs:** Each response will include a `[thread_id:xxx]` prefix. Save both thread IDs (`gemini_thread_id`, `codex_thread_id`) for use in subsequent phases.
+**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
 
 ## Phase 3: Debate Rounds
 
@@ -107,17 +105,15 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Call BOTH simultaneously each round:
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full rebuttal prompt text and thread_id.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: Rebuttal prompt with Codex's latest response as the opponent
-- `thread_id`: `gemini_thread_id`
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: rebuttal prompt with Codex's latest response as the opponent, `thread_id`: `gemini_thread_id`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: Rebuttal prompt with Gemini's latest response as the opponent
-- `thread_id`: `codex_thread_id`
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: rebuttal prompt with Gemini's latest response as the opponent, `thread_id`: `codex_thread_id`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
 Present both responses to the user after each round.
 
@@ -222,21 +218,15 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Call BOTH simultaneously:
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full review prompt, thread_id, and git_diff details.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `task_mode`: "review"
-- `prompt`: Final review prompt
-- `thread_id`: `gemini_thread_id` from Phase 2
-- `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `gemini_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `task_mode`: "review"
-- `prompt`: Final review prompt
-- `thread_id`: `codex_thread_id` from Phase 2
-- `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `codex_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

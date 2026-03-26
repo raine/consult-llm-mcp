@@ -47,19 +47,17 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Call BOTH simultaneously:
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full seed prompt text and file list so it can make the MCP call independently.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: Seed prompt above
-- `files`: Array of relevant source files discovered in Phase 1
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: Seed prompt above
-- `files`: Array of relevant source files discovered in Phase 1
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes.
+**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
 
 Present both sets of ideas to the user.
 
@@ -83,17 +81,15 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Call BOTH simultaneously:
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full build-on prompt text and thread_id.
 
-**Gemini** - `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: Build-on prompt with Codex's ideas
-- `thread_id`: `gemini_thread_id`
+**Gemini subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: build-on prompt with Codex's ideas, `thread_id`: `gemini_thread_id`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
-**Codex** - `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: Build-on prompt with Gemini's ideas
-- `thread_id`: `codex_thread_id`
+**Codex subagent** — prompt must include:
+- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: build-on prompt with Gemini's ideas, `thread_id`: `codex_thread_id`
+- Return the COMPLETE response including any `[thread_id:xxx]` prefix
 
 Present both responses to the user after each round.
 
