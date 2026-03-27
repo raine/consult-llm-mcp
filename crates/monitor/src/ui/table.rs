@@ -5,8 +5,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Row, Table};
 
 use crate::format::{
-    PROJECT_COL_WIDTH, format_duration_friendly, format_relative_time, format_tokens,
-    truncate_project,
+    PROJECT_COL_WIDTH, format_cost, format_cost_value, format_duration_friendly,
+    format_relative_time, format_tokens, truncate_project,
 };
 use crate::state::{
     AppState, BG, DIM, DIM_WHITE, Focus, GREEN, HistoryDisplayRow, RED, SELECTED_BG, SEPARATOR,
@@ -304,6 +304,7 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
 fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     let duration_col_width: u16 = 10;
     let tokens_col_width: u16 = 13;
+    let cost_col_width: u16 = 7;
     let task_col_width: u16 = 8;
     let show_task_col = area.width >= 100;
     let mut header_cells = vec![Line::from("Time"), Line::from("Project")];
@@ -314,6 +315,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     header_cells.push(Line::from("Backend"));
     header_cells.push(Line::from(Span::raw("Duration")).alignment(Alignment::Right));
     header_cells.push(Line::from(Span::raw("Tokens")).alignment(Alignment::Right));
+    header_cells.push(Line::from(Span::raw("Cost")).alignment(Alignment::Right));
     header_cells.push(Line::from("✓"));
     let header =
         Row::new(header_cells).style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
@@ -333,6 +335,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 let status_color = if record.success { GREEN } else { RED };
                 let duration_str = format_duration_friendly(record.duration_ms);
                 let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
+                let cost_str = format_cost(record.tokens_in, record.tokens_out, &record.model);
 
                 let mut cells = vec![
                     Line::from(Span::styled(
@@ -372,6 +375,10 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     Style::default().fg(DIM),
                 )));
                 cells.push(Line::from(Span::styled(
+                    format!("{:>width$}", cost_str, width = cost_col_width as usize),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
                     status_icon.to_string(),
                     Style::default().fg(status_color),
                 )));
@@ -384,6 +391,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 total_duration_ms,
                 total_tokens_in,
                 total_tokens_out,
+                total_cost,
                 turn_count,
                 success,
                 mixed_model,
@@ -394,6 +402,10 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 let status_color = if *success { GREEN } else { RED };
                 let duration_str = format_duration_friendly(*total_duration_ms);
                 let tokens_str = format_tokens(*total_tokens_in, *total_tokens_out);
+                let cost_str = match total_cost {
+                    Some(c) => format_cost_value(*c),
+                    None => "\u{2014}".to_string(),
+                };
                 let model_display = if *mixed_model {
                     format!("{model}*")
                 } else {
@@ -440,6 +452,10 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                     Style::default().fg(DIM),
                 )));
                 cells.push(Line::from(Span::styled(
+                    format!("{:>width$}", cost_str, width = cost_col_width as usize),
+                    Style::default().fg(DIM),
+                )));
+                cells.push(Line::from(Span::styled(
                     status_icon,
                     Style::default().fg(status_color),
                 )));
@@ -456,6 +472,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     constraints.push(Constraint::Length(10));
     constraints.push(Constraint::Length(duration_col_width));
     constraints.push(Constraint::Length(tokens_col_width));
+    constraints.push(Constraint::Length(cost_col_width));
     constraints.push(Constraint::Length(2));
 
     let table = Table::new(rows, constraints)

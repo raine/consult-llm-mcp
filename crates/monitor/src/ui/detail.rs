@@ -9,7 +9,7 @@ use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use chrono::Utc;
 
-use crate::format::{format_duration_friendly, format_token_count};
+use crate::format::{format_cost, format_cost_value, format_duration_friendly, format_token_count};
 use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
     YELLOW, task_mode_color,
@@ -133,6 +133,15 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             ),
             Style::default().fg(DIM_WHITE),
         ));
+        if let Some(ref model) = detail.model {
+            let cost_str = format_cost(Some(total_in), Some(total_out), model);
+            if cost_str != "\u{2014}" {
+                header_spans.push(Span::styled(
+                    format!("  {cost_str}"),
+                    Style::default().fg(DIM_WHITE),
+                ));
+            }
+        }
     }
 
     // Duration or live elapsed
@@ -225,7 +234,13 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     } else {
         let blocks = normalize_events(&detail.events);
 
-        render_blocks(&blocks, inner_width, tick, detail.show_system_prompt)
+        render_blocks(
+            &blocks,
+            inner_width,
+            tick,
+            detail.show_system_prompt,
+            detail.model.as_deref(),
+        )
     };
 
     // Append a spinner when the consultation is still live
@@ -429,6 +444,7 @@ fn render_blocks(
     inner_width: usize,
     tick: usize,
     show_system_prompt: bool,
+    model: Option<&str>,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
@@ -562,6 +578,7 @@ fn render_blocks(
                     *prompt_tokens,
                     *completion_tokens,
                     inner_width,
+                    model,
                 ));
             }
         }
@@ -716,6 +733,49 @@ pub(super) fn render_thread_detail_view(
         ));
     }
 
+    // Token totals and cost across all turns
+    {
+        let mut total_cost = 0.0f64;
+        let mut has_cost = false;
+        let all_turns = detail
+            .historical_turns
+            .iter()
+            .enumerate()
+            .map(|(i, events)| (i, events.as_slice()))
+            .chain(std::iter::once((
+                detail.historical_turns.len(),
+                detail.active_events.as_slice(),
+            )));
+        for (i, events) in all_turns {
+            let (ti, to) = events.iter().fold((0u64, 0u64), |(ai, ao), e| {
+                if let ParsedStreamEvent::Usage {
+                    prompt_tokens,
+                    completion_tokens,
+                } = e
+                {
+                    (ai + prompt_tokens, ao + completion_tokens)
+                } else {
+                    (ai, ao)
+                }
+            });
+            if (ti > 0 || to > 0)
+                && let Some(m) = detail.models.get(i)
+            {
+                let c = consult_llm_core::llm_cost::calculate_cost(ti, to, m);
+                if c.total_cost > 0.0 {
+                    total_cost += c.total_cost;
+                    has_cost = true;
+                }
+            }
+        }
+        if has_cost {
+            header_spans.push(Span::styled(
+                format!("  {}", format_cost_value(total_cost)),
+                Style::default().fg(DIM_WHITE),
+            ));
+        }
+    }
+
     // Total duration
     header_spans.push(Span::styled(
         format!("  {}", format_duration_friendly(detail.total_duration_ms)),
@@ -770,8 +830,9 @@ pub(super) fn render_thread_detail_view(
         ]));
         lines.push(Line::default());
 
+        let turn_model = detail.models.get(i).map(|m| m.as_str());
         let blocks = normalize_events(turn_events);
-        let turn_lines = render_blocks(&blocks, inner_width, tick, false);
+        let turn_lines = render_blocks(&blocks, inner_width, tick, false, turn_model);
         lines.extend(turn_lines);
         lines.push(Line::default());
     }
@@ -799,8 +860,9 @@ pub(super) fn render_thread_detail_view(
     ]));
     lines.push(Line::default());
 
+    let active_model = detail.models.get(active_turn_idx).map(|m| m.as_str());
     let active_blocks = normalize_events(&detail.active_events);
-    let active_lines = render_blocks(&active_blocks, inner_width, tick, false);
+    let active_lines = render_blocks(&active_blocks, inner_width, tick, false, active_model);
     lines.extend(active_lines);
 
     // Append spinner if latest turn is still live
@@ -893,9 +955,20 @@ fn render_usage_line(
     prompt_tokens: u64,
     completion_tokens: u64,
     inner_width: usize,
+    model: Option<&str>,
 ) -> Line<'static> {
+    let cost_suffix = model
+        .map(|m| {
+            let s = format_cost(Some(prompt_tokens), Some(completion_tokens), m);
+            if s == "\u{2014}" {
+                String::new()
+            } else {
+                format!(" \u{b7} {s}")
+            }
+        })
+        .unwrap_or_default();
     let label = format!(
-        " tokens: {} in / {} out ",
+        " tokens: {} in / {} out{cost_suffix} ",
         format_token_count(prompt_tokens),
         format_token_count(completion_tokens),
     );

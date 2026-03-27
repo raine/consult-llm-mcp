@@ -51,6 +51,32 @@ pub(crate) fn format_tokens(tokens_in: Option<u64>, tokens_out: Option<u64>) -> 
     }
 }
 
+pub(crate) fn format_cost(tokens_in: Option<u64>, tokens_out: Option<u64>, model: &str) -> String {
+    match (tokens_in, tokens_out) {
+        (Some(i), Some(o)) => {
+            let cost = consult_llm_core::llm_cost::calculate_cost(i, o, model);
+            if cost.total_cost > 0.0 {
+                format_cost_value(cost.total_cost)
+            } else {
+                "\u{2014}".to_string()
+            }
+        }
+        _ => "\u{2014}".to_string(),
+    }
+}
+
+pub(crate) fn format_cost_value(cost: f64) -> String {
+    if cost >= 0.995 {
+        format!("${:.2}", cost)
+    } else if cost >= 0.0095 {
+        format!("{:.0}\u{00a2}", cost * 100.0)
+    } else if cost >= 0.00095 {
+        format!("{:.1}\u{00a2}", cost * 100.0)
+    } else {
+        format!("{:.2}\u{00a2}", cost * 100.0)
+    }
+}
+
 pub(crate) fn format_token_count(n: u64) -> String {
     if n >= 1_000_000 {
         let m = n as f64 / 1_000_000.0;

@@ -11,7 +11,6 @@ mod file;
 mod git;
 mod git_worktree;
 mod llm;
-mod llm_cost;
 mod llm_query;
 mod logger;
 mod logging_reader;

@@ -6,6 +6,7 @@ use ratatui::widgets::TableState;
 
 use ratatui::text::Line as RatatuiLine;
 
+use consult_llm_core::llm_cost::calculate_cost;
 use consult_llm_core::monitoring::HistoryRecord;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
@@ -203,6 +204,7 @@ pub(crate) enum HistoryDisplayRow {
         total_duration_ms: u64,
         total_tokens_in: Option<u64>,
         total_tokens_out: Option<u64>,
+        total_cost: Option<f64>,
         turn_count: usize,
         success: bool,
         /// True if models differ across turns
@@ -338,6 +340,23 @@ impl AppState {
                 .filter_map(|&i| self.history[i].tokens_out)
                 .reduce(|a, b| a + b);
 
+            // Compute per-turn cost and sum (each turn may use a different model)
+            let total_cost = {
+                let mut sum = 0.0;
+                let mut any = false;
+                for &i in &sorted_indices {
+                    let r = &self.history[i];
+                    if let (Some(ti), Some(to)) = (r.tokens_in, r.tokens_out) {
+                        let c = calculate_cost(ti, to, &r.model);
+                        if c.total_cost > 0.0 {
+                            sum += c.total_cost;
+                            any = true;
+                        }
+                    }
+                }
+                if any { Some(sum) } else { None }
+            };
+
             rows_with_pos.push((
                 position,
                 HistoryDisplayRow::ThreadSummary {
@@ -348,6 +367,7 @@ impl AppState {
                     total_duration_ms: indices.iter().map(|&i| self.history[i].duration_ms).sum(),
                     total_tokens_in,
                     total_tokens_out,
+                    total_cost,
                     turn_count: indices.len(),
                     success: latest.success,
                     mixed_model: models.len() > 1,

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::executors::types::{LlmExecutor, Usage};
-use crate::llm_cost::calculate_cost;
+use consult_llm_core::llm_cost::calculate_cost;
 
 pub struct QueryResult {
     pub response: String,
