@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.11.0 (2026-03-27)
+
+- Added multi-turn thread support for API backends. Threads are stored as JSON
+  files under `$XDG_STATE_HOME/consult-llm-mcp/threads/` and replayed as the
+  messages array on each call. Expired threads (>7 days) are cleaned up
+  automatically. All backends now support `thread_id`.
+- Fixed API cost tracking undercounting tokens for thinking models (e.g.
+  gemini-3.1-pro-preview). Thinking tokens excluded from `completion_tokens` are
+  now derived from `total_tokens`.
+- Monitor: show cost information in history table, detail view header, usage
+  separator lines, and thread detail header. Cost is only shown for API backend
+  consultations.
+- Monitor: show files as compact path list in detail view instead of inlined
+  file contents
+- Fixed `reasoning_effort` incorrectly showing for non-codex models on
+  cursor_cli backend
+
 ## v2.10.0 (2026-03-15)
 
 - Monitor: cycle between sibling consultations (started around the same time)
