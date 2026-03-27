@@ -142,6 +142,10 @@ impl AppState {
                 *scroll = usize::MAX;
                 *auto_scroll = true;
             }),
+            Action::ScrollToTop => self.mutate_scroll(|scroll, auto_scroll, _| {
+                *scroll = 0;
+                *auto_scroll = false;
+            }),
             Action::PromptClearHistory => {
                 self.mode = AppMode::ConfirmClearHistory;
             }
