@@ -346,7 +346,9 @@ impl AppState {
                 let mut any = false;
                 for &i in &sorted_indices {
                     let r = &self.history[i];
-                    if let (Some(ti), Some(to)) = (r.tokens_in, r.tokens_out) {
+                    if r.backend == "api"
+                        && let (Some(ti), Some(to)) = (r.tokens_in, r.tokens_out)
+                    {
                         let c = calculate_cost(ti, to, &r.model);
                         if c.total_cost > 0.0 {
                             sum += c.total_cost;

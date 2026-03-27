@@ -133,8 +133,8 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             ),
             Style::default().fg(DIM_WHITE),
         ));
-        if let Some(ref model) = detail.model {
-            let cost_str = format_cost(Some(total_in), Some(total_out), model);
+        if let (Some(model), Some(backend)) = (&detail.model, &detail.backend) {
+            let cost_str = format_cost(Some(total_in), Some(total_out), model, backend);
             if cost_str != "\u{2014}" {
                 header_spans.push(Span::styled(
                     format!("  {cost_str}"),
@@ -240,6 +240,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             tick,
             detail.show_system_prompt,
             detail.model.as_deref(),
+            detail.backend.as_deref(),
         )
     };
 
@@ -445,6 +446,7 @@ fn render_blocks(
     tick: usize,
     show_system_prompt: bool,
     model: Option<&str>,
+    backend: Option<&str>,
 ) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
@@ -579,6 +581,7 @@ fn render_blocks(
                     *completion_tokens,
                     inner_width,
                     model,
+                    backend,
                 ));
             }
         }
@@ -759,6 +762,7 @@ pub(super) fn render_thread_detail_view(
                 }
             });
             if (ti > 0 || to > 0)
+                && detail.backends.get(i).map(|b| b.as_str()) == Some("api")
                 && let Some(m) = detail.models.get(i)
             {
                 let c = consult_llm_core::llm_cost::calculate_cost(ti, to, m);
@@ -831,8 +835,9 @@ pub(super) fn render_thread_detail_view(
         lines.push(Line::default());
 
         let turn_model = detail.models.get(i).map(|m| m.as_str());
+        let turn_backend = detail.backends.get(i).map(|b| b.as_str());
         let blocks = normalize_events(turn_events);
-        let turn_lines = render_blocks(&blocks, inner_width, tick, false, turn_model);
+        let turn_lines = render_blocks(&blocks, inner_width, tick, false, turn_model, turn_backend);
         lines.extend(turn_lines);
         lines.push(Line::default());
     }
@@ -861,8 +866,16 @@ pub(super) fn render_thread_detail_view(
     lines.push(Line::default());
 
     let active_model = detail.models.get(active_turn_idx).map(|m| m.as_str());
+    let active_backend = detail.backends.get(active_turn_idx).map(|b| b.as_str());
     let active_blocks = normalize_events(&detail.active_events);
-    let active_lines = render_blocks(&active_blocks, inner_width, tick, false, active_model);
+    let active_lines = render_blocks(
+        &active_blocks,
+        inner_width,
+        tick,
+        false,
+        active_model,
+        active_backend,
+    );
     lines.extend(active_lines);
 
     // Append spinner if latest turn is still live
@@ -956,10 +969,12 @@ fn render_usage_line(
     completion_tokens: u64,
     inner_width: usize,
     model: Option<&str>,
+    backend: Option<&str>,
 ) -> Line<'static> {
     let cost_suffix = model
-        .map(|m| {
-            let s = format_cost(Some(prompt_tokens), Some(completion_tokens), m);
+        .zip(backend)
+        .map(|(m, b)| {
+            let s = format_cost(Some(prompt_tokens), Some(completion_tokens), m, b);
             if s == "\u{2014}" {
                 String::new()
             } else {

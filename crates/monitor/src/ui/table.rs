@@ -335,7 +335,12 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
                 let status_color = if record.success { GREEN } else { RED };
                 let duration_str = format_duration_friendly(record.duration_ms);
                 let tokens_str = format_tokens(record.tokens_in, record.tokens_out);
-                let cost_str = format_cost(record.tokens_in, record.tokens_out, &record.model);
+                let cost_str = format_cost(
+                    record.tokens_in,
+                    record.tokens_out,
+                    &record.model,
+                    &record.backend,
+                );
 
                 let mut cells = vec![
                     Line::from(Span::styled(

@@ -51,7 +51,15 @@ pub(crate) fn format_tokens(tokens_in: Option<u64>, tokens_out: Option<u64>) -> 
     }
 }
 
-pub(crate) fn format_cost(tokens_in: Option<u64>, tokens_out: Option<u64>, model: &str) -> String {
+pub(crate) fn format_cost(
+    tokens_in: Option<u64>,
+    tokens_out: Option<u64>,
+    model: &str,
+    backend: &str,
+) -> String {
+    if backend != "api" {
+        return "\u{2014}".to_string();
+    }
     match (tokens_in, tokens_out) {
         (Some(i), Some(o)) => {
             let cost = consult_llm_core::llm_cost::calculate_cost(i, o, model);
