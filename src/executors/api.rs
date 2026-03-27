@@ -41,6 +41,10 @@ struct ChatChoiceMessage {
 struct ApiUsage {
     prompt_tokens: u64,
     completion_tokens: u64,
+    /// Includes prompt + completion + thinking tokens. Used to derive thinking
+    /// token count for models (like Gemini) where `completion_tokens` excludes
+    /// thinking tokens.
+    total_tokens: Option<u64>,
 }
 
 pub struct ApiExecutor {
@@ -177,9 +181,19 @@ impl LlmExecutor for ApiExecutor {
             .filter(|s| !s.is_empty())
             .ok_or_else(|| anyhow::anyhow!("No response from the model via API"))?;
 
-        let usage = chat_resp.usage.map(|u| Usage {
-            prompt_tokens: u.prompt_tokens,
-            completion_tokens: u.completion_tokens,
+        let usage = chat_resp.usage.map(|u| {
+            // Gemini thinking models report thinking tokens only in total_tokens,
+            // not in completion_tokens. Derive the full output cost from total.
+            let effective_completion = match u.total_tokens {
+                Some(total) if total > u.prompt_tokens + u.completion_tokens => {
+                    total - u.prompt_tokens
+                }
+                _ => u.completion_tokens,
+            };
+            Usage {
+                prompt_tokens: u.prompt_tokens,
+                completion_tokens: effective_completion,
+            }
         });
 
         sidecar.write(&ParsedStreamEvent::AssistantText {
