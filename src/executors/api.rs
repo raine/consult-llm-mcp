@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::stream::SidecarWriter;
+use super::thread_store;
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
 
@@ -57,7 +58,7 @@ impl ApiExecutor {
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1/".to_string()),
             capabilities: LlmExecutorCapabilities {
                 is_cli: false,
-                supports_threads: false,
+                supports_threads: true,
                 supports_file_refs: false,
             },
         }
@@ -80,7 +81,7 @@ impl LlmExecutor for ApiExecutor {
         model: &str,
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
-        _thread_id: Option<&str>,
+        thread_id: Option<&str>,
         consultation_id: Option<&str>,
     ) -> anyhow::Result<ExecuteResult> {
         if let Some(fps) = file_paths
@@ -92,6 +93,26 @@ impl LlmExecutor for ApiExecutor {
             log_to_file(&format!("WARNING: {msg}"));
             eprintln!("Warning: {msg}");
         }
+
+        // Resolve thread ID: use existing or generate new
+        let is_new_thread = thread_id.is_none();
+        let active_thread_id = match thread_id {
+            Some(id) => id.to_string(),
+            None => thread_store::generate_thread_id(),
+        };
+
+        // Load existing thread history
+        let history = if thread_id.is_some() {
+            match thread_store::load(&active_thread_id)? {
+                Some(t) => t.turns,
+                None => anyhow::bail!(
+                    "Thread '{}' not found. It may have expired or never existed.",
+                    active_thread_id
+                ),
+            }
+        } else {
+            Vec::new()
+        };
 
         let mut sidecar = SidecarWriter::new(consultation_id);
         sidecar.write(&ParsedStreamEvent::SystemPrompt {
@@ -109,18 +130,29 @@ impl LlmExecutor for ApiExecutor {
         };
         let url = format!("{base}chat/completions");
 
+        // Build messages: system prompt + history turns + current prompt
+        let mut messages = vec![ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.to_string(),
+        }];
+        for turn in &history {
+            messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: turn.user_prompt.clone(),
+            });
+            messages.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: turn.assistant_response.clone(),
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: prompt.to_string(),
+        });
+
         let request = ChatRequest {
             model: model.to_string(),
-            messages: vec![
-                ChatMessage {
-                    role: "system".to_string(),
-                    content: system_prompt.to_string(),
-                },
-                ChatMessage {
-                    role: "user".to_string(),
-                    content: prompt.to_string(),
-                },
-            ],
+            messages,
         };
 
         let resp = self
@@ -160,10 +192,22 @@ impl LlmExecutor for ApiExecutor {
             });
         }
 
+        // Persist turn to disk
+        thread_store::append_turn(
+            &active_thread_id,
+            thread_store::StoredTurn {
+                user_prompt: prompt.to_string(),
+                assistant_response: response.clone(),
+                model: model.to_string(),
+                usage: usage.clone(),
+            },
+            is_new_thread,
+        )?;
+
         Ok(ExecuteResult {
             response,
             usage,
-            thread_id: None,
+            thread_id: Some(active_thread_id),
         })
     }
 }

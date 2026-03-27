@@ -40,7 +40,7 @@ pub struct ConsultLlmArgs {
     /// If true, copy the formatted prompt to the clipboard instead of querying an LLM. When true, the `model` parameter is ignored. Use this to paste the prompt into browser-based LLM services. IMPORTANT: Only use this when the user specifically requests it. When true, wait for the user to provide the external LLM's response before proceeding with any implementation.
     #[serde(default)]
     pub web_mode: bool,
-    /// Thread/session ID for resuming a conversation. Works with CLI backends (Codex, Gemini CLI, Cursor CLI). Returned in the response prefix as [thread_id:xxx].
+    /// Thread/session ID for resuming a conversation. Works with all backends. CLI backends maintain native sessions; API backends replay conversation history from disk. Returned in the response prefix as [thread_id:xxx].
     pub thread_id: Option<String>,
     /// Generate git diff output to include as context. Shows uncommitted changes by default.
     pub git_diff: Option<GitDiffArgs>,

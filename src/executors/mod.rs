@@ -4,6 +4,7 @@ pub mod codex_cli;
 pub mod cursor_cli;
 pub mod gemini_cli;
 pub mod stream;
+pub mod thread_store;
 pub mod types;
 
 use std::path::PathBuf;
