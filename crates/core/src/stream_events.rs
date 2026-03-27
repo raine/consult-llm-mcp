@@ -37,6 +37,9 @@ pub enum ParsedStreamEvent {
     SystemPrompt {
         text: String,
     },
+    FilesContext {
+        files: Vec<String>,
+    },
     #[serde(rename = "usage")]
     Usage {
         prompt_tokens: u64,
@@ -80,6 +83,9 @@ mod tests {
             ParsedStreamEvent::SystemPrompt {
                 text: "You are an expert.".to_string(),
             },
+            ParsedStreamEvent::FilesContext {
+                files: vec!["src/main.rs".to_string(), "src/lib.rs".to_string()],
+            },
             ParsedStreamEvent::Usage {
                 prompt_tokens: 1000,
                 completion_tokens: 200,
@@ -107,6 +113,7 @@ mod tests {
             r#"{"type":"prompt","text":"What is Rust?"}"#,
             r#"{"type":"system_prompt","text":"You are an expert."}"#,
             r#"{"type":"usage","prompt_tokens":500,"completion_tokens":100}"#,
+            r#"{"type":"files_context","files":["src/main.rs","Cargo.toml"]}"#,
         ];
         for line in lines {
             let result = serde_json::from_str::<ParsedStreamEvent>(line);

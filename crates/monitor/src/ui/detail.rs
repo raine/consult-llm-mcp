@@ -370,15 +370,31 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
 fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
     let mut blocks: Vec<RenderedBlock> = Vec::new();
     let mut tool_indices: HashMap<&str, usize> = HashMap::new();
+    let mut pending_files: Option<Vec<String>> = None;
 
     for event in events {
         match event {
             ParsedStreamEvent::SessionStarted { .. } => {}
+            ParsedStreamEvent::FilesContext { files } => {
+                pending_files = Some(files.clone());
+            }
             ParsedStreamEvent::SystemPrompt { text } => {
                 blocks.push(RenderedBlock::SystemPrompt(text.clone()));
             }
             ParsedStreamEvent::Prompt { text } => {
-                blocks.push(RenderedBlock::Prompt(text.clone()));
+                let text = if let Some(files) = pending_files.take() {
+                    let stripped = strip_inlined_files(text);
+                    let mut result = String::from("## Relevant Files\n\n");
+                    for f in &files {
+                        result.push_str(&format!("- `{f}`\n"));
+                    }
+                    result.push('\n');
+                    result.push_str(&stripped);
+                    result
+                } else {
+                    text.clone()
+                };
+                blocks.push(RenderedBlock::Prompt(text));
             }
             ParsedStreamEvent::Thinking { text } => {
                 // Merge consecutive Thinking events into a single block
@@ -436,6 +452,51 @@ fn normalize_events(events: &[ParsedStreamEvent]) -> Vec<RenderedBlock> {
     }
 
     blocks
+}
+
+/// Strip the "## Relevant Files\n\n### File: ...\n```\n...\n```\n\n" section
+/// from a prompt built by `build_prompt()`, preserving everything else.
+fn strip_inlined_files(text: &str) -> String {
+    let Some(start) = text.find("## Relevant Files\n") else {
+        return text.to_string();
+    };
+
+    let before = &text[..start];
+    let after_header = &text[start..];
+
+    // Skip past "## Relevant Files\n\n" then all "### File: ...\n```\n...\n```\n\n" blocks
+    const FENCE: &str = "\n```\n";
+    let mut pos = "## Relevant Files\n".len();
+    // Skip optional blank line after header
+    if after_header[pos..].starts_with('\n') {
+        pos += 1;
+    }
+
+    // Skip each "### File:" block
+    while after_header[pos..].starts_with("### File:") {
+        // Find the opening ``` after the "### File: ..." line
+        if let Some(rel) = after_header[pos..].find(FENCE) {
+            let content_start = pos + rel + FENCE.len();
+            // Find the closing ```
+            if let Some(rel_end) = after_header[content_start..].find(FENCE) {
+                pos = content_start + rel_end + FENCE.len();
+                // Skip trailing blank lines
+                while after_header[pos..].starts_with('\n') {
+                    pos += 1;
+                }
+            } else {
+                // No closing fence found, bail
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    let remaining = &after_header[pos..];
+    let mut result = before.to_string();
+    result.push_str(remaining);
+    result
 }
 
 // ── Pass 2: RenderedBlock → Line ────────────────────────────────────────

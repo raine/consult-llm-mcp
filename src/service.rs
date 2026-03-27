@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::ModelRegistry;
+use crate::executors::stream::SidecarWriter;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
@@ -11,6 +12,7 @@ use crate::logger::{log_prompt, log_response};
 use crate::prompt_builder::build_prompt;
 use crate::schema::{ConsultLlmArgs, GitDiffArgs};
 use crate::system_prompt::get_system_prompt;
+use consult_llm_core::stream_events::ParsedStreamEvent;
 
 fn resolve_git_diff(git_diff: Option<&GitDiffArgs>) -> Option<String> {
     let gd = git_diff?;
@@ -199,6 +201,17 @@ impl ConsultService {
         };
 
         log_prompt(model, &prompt);
+
+        // Emit FilesContext event so the monitor TUI can show a compact file list
+        if let Some(ref files) = args.files
+            && !files.is_empty()
+        {
+            let mut sidecar = SidecarWriter::new(Some(consultation_id));
+            sidecar.write(&ParsedStreamEvent::FilesContext {
+                files: files.clone(),
+            });
+            sidecar.flush();
+        }
 
         let system_prompt = get_system_prompt(executor.capabilities().is_cli, args.task_mode);
 

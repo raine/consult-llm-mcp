@@ -129,7 +129,9 @@ impl StreamReducer {
                         });
                     }
                 }
-                ParsedStreamEvent::Prompt { .. } | ParsedStreamEvent::SystemPrompt { .. } => {}
+                ParsedStreamEvent::Prompt { .. }
+                | ParsedStreamEvent::SystemPrompt { .. }
+                | ParsedStreamEvent::FilesContext { .. } => {}
                 ParsedStreamEvent::Usage {
                     prompt_tokens,
                     completion_tokens,
