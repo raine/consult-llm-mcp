@@ -23,6 +23,7 @@ pub enum Provider {
     OpenAI,
     Gemini,
     DeepSeek,
+    MiniMax,
 }
 
 impl Provider {
@@ -34,6 +35,8 @@ impl Provider {
             Some(Provider::Gemini)
         } else if model.starts_with("deepseek-") {
             Some(Provider::DeepSeek)
+        } else if model.starts_with("MiniMax-") {
+            Some(Provider::MiniMax)
         } else {
             None
         }
@@ -46,6 +49,7 @@ impl Provider {
             Provider::OpenAI => None, // uses default https://api.openai.com/v1/
             Provider::Gemini => Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
             Provider::DeepSeek => Some("https://api.deepseek.com"),
+            Provider::MiniMax => Some("https://api.minimax.io/v1"),
         }
     }
 }
@@ -59,6 +63,7 @@ pub const ALL_MODELS: &[&str] = &[
     "gpt-5.4",
     "gpt-5.3-codex",
     "gpt-5.2-codex",
+    "MiniMax-M2.7",
 ];
 
 /// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
@@ -77,4 +82,5 @@ pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
         &["gpt-5.4", "gpt-5.3-codex", "gpt-5.2", "gpt-5.2-codex"],
     ),
     ("deepseek", &["deepseek-reasoner"]),
+    ("minimax", &["MiniMax-M2.7"]),
 ];

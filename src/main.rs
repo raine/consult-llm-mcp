@@ -107,6 +107,10 @@ async fn main() {
         cfg.deepseek_api_key.clone().unwrap_or_default(),
     );
     config_map.insert(
+        "minimaxApiKey".to_string(),
+        cfg.minimax_api_key.clone().unwrap_or_default(),
+    );
+    config_map.insert(
         "geminiBackend".to_string(),
         format!("{:?}", cfg.gemini_backend).to_lowercase(),
     );

@@ -174,12 +174,15 @@ impl LlmExecutor for ApiExecutor {
         }
 
         let chat_resp: ChatResponse = resp.json().await?;
-        let response = chat_resp
+        let raw_content = chat_resp
             .choices
             .first()
             .and_then(|c| c.message.content.clone())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("No response from the model via API"))?;
+            .unwrap_or_default();
+        let (thinking, response) = extract_think_tags(&raw_content);
+        if response.is_empty() {
+            anyhow::bail!("No response from the model via API");
+        }
 
         let usage = chat_resp.usage.map(|u| {
             // Gemini thinking models report thinking tokens only in total_tokens,
@@ -196,6 +199,11 @@ impl LlmExecutor for ApiExecutor {
             }
         });
 
+        if let Some(ref thinking) = thinking {
+            sidecar.write(&ParsedStreamEvent::Thinking {
+                text: thinking.clone(),
+            });
+        }
         sidecar.write(&ParsedStreamEvent::AssistantText {
             text: response.clone(),
         });
@@ -224,4 +232,33 @@ impl LlmExecutor for ApiExecutor {
             thread_id: Some(active_thread_id),
         })
     }
+}
+
+/// Extract `<think>...</think>` blocks from reasoning models (e.g. MiniMax M2.7)
+/// that embed chain-of-thought in the content field.
+/// Returns (thinking_content, stripped_response).
+fn extract_think_tags(s: &str) -> (Option<String>, String) {
+    let mut thinking = String::new();
+    let mut result = s.to_string();
+    while let Some(start) = result.find("<think>") {
+        if let Some(end) = result.find("</think>") {
+            let content_start = start + "<think>".len();
+            thinking.push_str(result[content_start..end].trim());
+            let end = end + "</think>".len();
+            let end = if result.as_bytes().get(end) == Some(&b'\n') {
+                end + 1
+            } else {
+                end
+            };
+            result.replace_range(start..end, "");
+        } else {
+            break;
+        }
+    }
+    let thinking = if thinking.is_empty() {
+        None
+    } else {
+        Some(thinking)
+    };
+    (thinking, result.trim().to_string())
 }

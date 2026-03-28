@@ -36,6 +36,7 @@ pub struct ProviderAvailability {
     pub openai_api_key: Option<String>,
     pub openai_backend: Backend,
     pub deepseek_api_key: Option<String>,
+    pub minimax_api_key: Option<String>,
 }
 
 impl ProviderAvailability {
@@ -44,6 +45,7 @@ impl ProviderAvailability {
             Provider::OpenAI => &self.openai_backend,
             Provider::Gemini => &self.gemini_backend,
             Provider::DeepSeek => &Backend::Api,
+            Provider::MiniMax => &Backend::Api,
         }
     }
 
@@ -52,6 +54,7 @@ impl ProviderAvailability {
             Provider::OpenAI => self.openai_api_key.as_deref(),
             Provider::Gemini => self.gemini_api_key.as_deref(),
             Provider::DeepSeek => self.deepseek_api_key.as_deref(),
+            Provider::MiniMax => self.minimax_api_key.as_deref(),
         }
     }
 }
@@ -61,6 +64,7 @@ pub struct Config {
     pub openai_api_key: Option<String>,
     pub gemini_api_key: Option<String>,
     pub deepseek_api_key: Option<String>,
+    pub minimax_api_key: Option<String>,
     pub default_model: Option<String>,
     pub gemini_backend: Backend,
     pub openai_backend: Backend,
@@ -75,7 +79,8 @@ impl Config {
         match provider {
             Provider::OpenAI => &self.openai_backend,
             Provider::Gemini => &self.gemini_backend,
-            Provider::DeepSeek => &Backend::Api, // DeepSeek is API-only
+            Provider::DeepSeek => &Backend::Api,
+            Provider::MiniMax => &Backend::Api,
         }
     }
 
@@ -85,6 +90,7 @@ impl Config {
             Provider::OpenAI => self.openai_api_key.as_deref(),
             Provider::Gemini => self.gemini_api_key.as_deref(),
             Provider::DeepSeek => self.deepseek_api_key.as_deref(),
+            Provider::MiniMax => self.minimax_api_key.as_deref(),
         }
     }
 }
@@ -352,6 +358,7 @@ pub fn parse_config(
     let openai_api_key = env("OPENAI_API_KEY");
     let gemini_api_key = env("GEMINI_API_KEY");
     let deepseek_api_key = env("DEEPSEEK_API_KEY");
+    let minimax_api_key = env("MINIMAX_API_KEY");
 
     let enabled_models = filter_by_availability(
         &catalog_models,
@@ -361,6 +368,7 @@ pub fn parse_config(
             openai_api_key: openai_api_key.clone(),
             openai_backend: openai_backend.clone(),
             deepseek_api_key: deepseek_api_key.clone(),
+            minimax_api_key: minimax_api_key.clone(),
         },
     );
 
@@ -408,6 +416,7 @@ pub fn parse_config(
         openai_api_key,
         gemini_api_key,
         deepseek_api_key,
+        minimax_api_key,
         default_model: resolved_default.clone(),
         gemini_backend,
         openai_backend,
@@ -494,6 +503,7 @@ mod tests {
                 openai_api_key: Some("key".into()),
                 openai_backend: Backend::Api,
                 deepseek_api_key: Some("key".into()),
+                minimax_api_key: None,
             },
         );
         assert_eq!(result.len(), 3);
@@ -514,6 +524,7 @@ mod tests {
                 openai_api_key: None,
                 openai_backend: Backend::Api,
                 deepseek_api_key: None,
+                minimax_api_key: None,
             },
         );
         assert!(result.is_empty());
@@ -530,6 +541,7 @@ mod tests {
                 openai_api_key: None,
                 openai_backend: Backend::CodexCli,
                 deepseek_api_key: None,
+                minimax_api_key: None,
             },
         );
         assert_eq!(result.len(), 2);
@@ -546,6 +558,7 @@ mod tests {
                 openai_api_key: None,
                 openai_backend: Backend::Api,
                 deepseek_api_key: None,
+                minimax_api_key: None,
             },
         );
         assert!(result.is_empty());
