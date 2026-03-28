@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use std::env;
 use std::fmt;
 use std::sync::{Arc, OnceLock};
 
 use crate::logger::log_to_file;
-use crate::models::{ALL_MODELS, Provider, SELECTOR_PRIORITIES};
+use crate::models::{
+    ALL_PROVIDERS, PROVIDER_SPECS, Provider, SELECTOR_PRIORITIES, all_builtin_models,
+};
 
 /// Read env var, treating empty strings as unset.
 fn env_non_empty(key: &str) -> Option<String> {
@@ -30,89 +33,54 @@ impl Backend {
             _ => None,
         }
     }
-}
 
-pub struct ProviderAvailability {
-    pub gemini_api_key: Option<String>,
-    pub gemini_backend: Backend,
-    pub openai_api_key: Option<String>,
-    pub openai_backend: Backend,
-    pub deepseek_api_key: Option<String>,
-    pub deepseek_backend: Backend,
-    pub minimax_api_key: Option<String>,
-    pub minimax_backend: Backend,
-}
-
-impl ProviderAvailability {
-    pub fn backend_for(&self, provider: Provider) -> &Backend {
-        match provider {
-            Provider::OpenAI => &self.openai_backend,
-            Provider::Gemini => &self.gemini_backend,
-            Provider::DeepSeek => &self.deepseek_backend,
-            Provider::MiniMax => &self.minimax_backend,
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Backend::Api => "api",
+            Backend::CodexCli => "codex-cli",
+            Backend::GeminiCli => "gemini-cli",
+            Backend::CursorCli => "cursor-cli",
+            Backend::OpenCodeCli => "opencode",
         }
     }
+}
 
-    pub fn api_key_for(&self, provider: Provider) -> Option<&str> {
-        match provider {
-            Provider::OpenAI => self.openai_api_key.as_deref(),
-            Provider::Gemini => self.gemini_api_key.as_deref(),
-            Provider::DeepSeek => self.deepseek_api_key.as_deref(),
-            Provider::MiniMax => self.minimax_api_key.as_deref(),
-        }
-    }
+/// Per-provider runtime configuration parsed from environment variables.
+#[derive(Debug, Clone)]
+pub struct ProviderRuntimeConfig {
+    pub api_key: Option<String>,
+    pub backend: Backend,
+    pub opencode_provider: String,
 }
 
 #[derive(Debug)]
 pub struct Config {
-    pub openai_api_key: Option<String>,
-    pub gemini_api_key: Option<String>,
-    pub deepseek_api_key: Option<String>,
-    pub minimax_api_key: Option<String>,
+    providers: HashMap<Provider, ProviderRuntimeConfig>,
     pub default_model: Option<String>,
-    pub gemini_backend: Backend,
-    pub openai_backend: Backend,
-    pub deepseek_backend: Backend,
-    pub minimax_backend: Backend,
     pub codex_reasoning_effort: String,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
-    /// OpenCode provider prefix overrides per provider family.
-    pub opencode_openai_provider: String,
-    pub opencode_gemini_provider: String,
-    pub opencode_deepseek_provider: String,
-    pub opencode_minimax_provider: String,
 }
 
 impl Config {
     /// Get the configured backend for a provider.
     pub fn backend_for(&self, provider: Provider) -> &Backend {
-        match provider {
-            Provider::OpenAI => &self.openai_backend,
-            Provider::Gemini => &self.gemini_backend,
-            Provider::DeepSeek => &self.deepseek_backend,
-            Provider::MiniMax => &self.minimax_backend,
-        }
+        &self.providers[&provider].backend
     }
 
     /// Get the API key for a provider (when using API backend).
     pub fn api_key_for(&self, provider: Provider) -> Option<&str> {
-        match provider {
-            Provider::OpenAI => self.openai_api_key.as_deref(),
-            Provider::Gemini => self.gemini_api_key.as_deref(),
-            Provider::DeepSeek => self.deepseek_api_key.as_deref(),
-            Provider::MiniMax => self.minimax_api_key.as_deref(),
-        }
+        self.providers[&provider].api_key.as_deref()
     }
 
     /// Get the OpenCode provider prefix for a provider family.
     pub fn opencode_provider_for(&self, provider: Provider) -> &str {
-        match provider {
-            Provider::OpenAI => &self.opencode_openai_provider,
-            Provider::Gemini => &self.opencode_gemini_provider,
-            Provider::DeepSeek => &self.opencode_deepseek_provider,
-            Provider::MiniMax => &self.opencode_minimax_provider,
-        }
+        &self.providers[&provider].opencode_provider
+    }
+
+    /// Iterate over all provider runtime configs.
+    pub fn iter_providers(&self) -> impl Iterator<Item = (&Provider, &ProviderRuntimeConfig)> {
+        self.providers.iter()
     }
 }
 
@@ -176,9 +144,15 @@ pub fn resolve_selector(target: &str, allowed_models: &[String]) -> Option<Strin
 #[derive(Debug)]
 pub enum ConfigError {
     NoModelsAvailable,
-    InvalidGeminiBackend(String),
-    InvalidOpenaiBackend(String),
-    InvalidDefaultModel { model: String, allowed: Vec<String> },
+    InvalidBackend {
+        env_var: String,
+        raw: String,
+        allowed: Vec<String>,
+    },
+    InvalidDefaultModel {
+        model: String,
+        allowed: Vec<String>,
+    },
     InvalidCodexReasoningEffort(String),
 }
 
@@ -189,14 +163,21 @@ impl fmt::Display for ConfigError {
                 f,
                 "Invalid environment variables:\n  No models available. Set API keys or configure CLI backends."
             ),
-            ConfigError::InvalidGeminiBackend(raw) => write!(
-                f,
-                "Invalid environment variables:\n  geminiBackend: Invalid enum value. Expected 'api' | 'gemini-cli' | 'cursor-cli', received '{raw}'"
-            ),
-            ConfigError::InvalidOpenaiBackend(raw) => write!(
-                f,
-                "Invalid environment variables:\n  openaiBackend: Invalid enum value. Expected 'api' | 'codex-cli' | 'cursor-cli', received '{raw}'"
-            ),
+            ConfigError::InvalidBackend {
+                env_var,
+                raw,
+                allowed,
+            } => {
+                let opts = allowed
+                    .iter()
+                    .map(|v| format!("'{v}'"))
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                write!(
+                    f,
+                    "Invalid environment variables:\n  {env_var}: Invalid enum value. Expected {opts}, received '{raw}'"
+                )
+            }
             ConfigError::InvalidDefaultModel { model, allowed } => {
                 let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
                 let opts = allowed
@@ -294,14 +275,17 @@ pub fn build_model_catalog(
     }
 }
 
-pub fn filter_by_availability(models: &[String], providers: &ProviderAvailability) -> Vec<String> {
+pub fn filter_by_availability(
+    models: &[String],
+    providers: &HashMap<Provider, ProviderRuntimeConfig>,
+) -> Vec<String> {
     models
         .iter()
         .filter(|model| match Provider::from_model(model) {
             Some(provider) => {
-                let backend = providers.backend_for(provider);
+                let cfg = &providers[&provider];
                 // CLI backends don't need API keys
-                *backend != Backend::Api || providers.api_key_for(provider).is_some()
+                cfg.backend != Backend::Api || cfg.api_key.is_some()
             }
             None => {
                 log_to_file(&format!(
@@ -314,96 +298,100 @@ pub fn filter_by_availability(models: &[String], providers: &ProviderAvailabilit
         .collect()
 }
 
+/// Parse a single provider's runtime config from environment variables.
+fn parse_provider_config(
+    spec: &crate::models::ProviderSpec,
+    env: &impl Fn(&str) -> Option<String>,
+    opencode_global: &Option<String>,
+) -> Result<ProviderRuntimeConfig, ConfigError> {
+    // 1. Resolve backend string through migration chain
+    let backend_raw = if let Some(legacy_env) = spec.legacy_backend_env {
+        migrate_prefixed_env(
+            env(spec.backend_env).as_deref(),
+            env(legacy_env).as_deref(),
+            legacy_env,
+            spec.backend_env,
+        )
+    } else {
+        env(spec.backend_env)
+    };
+
+    let resolved_backend_str = if let (Some(legacy_mode), Some(cli_value)) =
+        (spec.legacy_mode_env, spec.cli_backend_value)
+    {
+        migrate_backend_env(
+            backend_raw.as_deref(),
+            env(legacy_mode).as_deref(),
+            cli_value,
+            legacy_mode,
+            spec.backend_env,
+        )
+    } else {
+        backend_raw
+    };
+
+    // 2. Validate backend string against provider's allowed values
+    if let Some(ref raw) = resolved_backend_str
+        && !spec.allowed_backends.contains(&raw.as_str())
+    {
+        return Err(ConfigError::InvalidBackend {
+            env_var: spec.backend_env.to_string(),
+            raw: raw.clone(),
+            allowed: spec
+                .allowed_backends
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+        });
+    }
+
+    let backend = resolved_backend_str
+        .as_deref()
+        .and_then(Backend::from_str)
+        .unwrap_or(Backend::Api);
+
+    // 3. API key
+    let api_key = env(spec.api_key_env);
+
+    // 4. OpenCode provider prefix
+    let opencode_provider = env(spec.opencode_env)
+        .or_else(|| opencode_global.clone())
+        .unwrap_or_else(|| spec.default_opencode_provider.to_string());
+
+    Ok(ProviderRuntimeConfig {
+        api_key,
+        backend,
+        opencode_provider,
+    })
+}
+
 /// Pure config parsing: takes an env-lookup function, returns Config + ModelRegistry or an error.
 /// Does not read real env vars, call process::exit, or set globals.
 pub fn parse_config(
     env: impl Fn(&str) -> Option<String>,
 ) -> Result<(Config, Arc<ModelRegistry>), ConfigError> {
-    // Priority: CONSULT_LLM_*_BACKEND > *_BACKEND > *_MODE (deprecated)
-    let gemini_backend_raw = migrate_prefixed_env(
-        env("CONSULT_LLM_GEMINI_BACKEND").as_deref(),
-        env("GEMINI_BACKEND").as_deref(),
-        "GEMINI_BACKEND",
-        "CONSULT_LLM_GEMINI_BACKEND",
-    );
-    let resolved_gemini_backend = migrate_backend_env(
-        gemini_backend_raw.as_deref(),
-        env("GEMINI_MODE").as_deref(),
-        "gemini-cli",
-        "GEMINI_MODE",
-        "CONSULT_LLM_GEMINI_BACKEND",
+    let opencode_global = env("CONSULT_LLM_OPENCODE_PROVIDER");
+
+    // Parse per-provider config via registry loop
+    let mut providers = HashMap::new();
+    for spec in PROVIDER_SPECS {
+        let provider_config = parse_provider_config(spec, &env, &opencode_global)?;
+        providers.insert(spec.provider, provider_config);
+    }
+    debug_assert_eq!(
+        providers.len(),
+        ALL_PROVIDERS.len(),
+        "PROVIDER_SPECS is out of sync with ALL_PROVIDERS"
     );
 
-    let openai_backend_raw = migrate_prefixed_env(
-        env("CONSULT_LLM_OPENAI_BACKEND").as_deref(),
-        env("OPENAI_BACKEND").as_deref(),
-        "OPENAI_BACKEND",
-        "CONSULT_LLM_OPENAI_BACKEND",
-    );
-    let resolved_openai_backend = migrate_backend_env(
-        openai_backend_raw.as_deref(),
-        env("OPENAI_MODE").as_deref(),
-        "codex-cli",
-        "OPENAI_MODE",
-        "CONSULT_LLM_OPENAI_BACKEND",
-    );
-
+    let builtin = all_builtin_models();
     let catalog_models = build_model_catalog(
-        ALL_MODELS,
+        &builtin,
         env("CONSULT_LLM_EXTRA_MODELS").as_deref(),
         env("CONSULT_LLM_ALLOWED_MODELS").as_deref(),
     );
 
-    // Validate backend strings against per-provider allowed values
-    if let Some(ref raw) = resolved_gemini_backend
-        && !matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli" | "opencode")
-    {
-        return Err(ConfigError::InvalidGeminiBackend(raw.clone()));
-    }
-    if let Some(ref raw) = resolved_openai_backend
-        && !matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli" | "opencode")
-    {
-        return Err(ConfigError::InvalidOpenaiBackend(raw.clone()));
-    }
-
-    let gemini_backend = resolved_gemini_backend
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let openai_backend = resolved_openai_backend
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let deepseek_backend = env("CONSULT_LLM_DEEPSEEK_BACKEND")
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let minimax_backend = env("CONSULT_LLM_MINIMAX_BACKEND")
-        .as_deref()
-        .and_then(Backend::from_str)
-        .unwrap_or(Backend::Api);
-
-    let openai_api_key = env("OPENAI_API_KEY");
-    let gemini_api_key = env("GEMINI_API_KEY");
-    let deepseek_api_key = env("DEEPSEEK_API_KEY");
-    let minimax_api_key = env("MINIMAX_API_KEY");
-
-    let enabled_models = filter_by_availability(
-        &catalog_models,
-        &ProviderAvailability {
-            gemini_api_key: gemini_api_key.clone(),
-            gemini_backend: gemini_backend.clone(),
-            openai_api_key: openai_api_key.clone(),
-            openai_backend: openai_backend.clone(),
-            deepseek_api_key: deepseek_api_key.clone(),
-            deepseek_backend: deepseek_backend.clone(),
-            minimax_api_key: minimax_api_key.clone(),
-            minimax_backend: minimax_backend.clone(),
-        },
-    );
+    let enabled_models = filter_by_availability(&catalog_models, &providers);
 
     if enabled_models.is_empty() {
         return Err(ConfigError::NoModelsAvailable);
@@ -445,38 +433,12 @@ pub fn parse_config(
         enabled_models[0].clone()
     };
 
-    // OpenCode provider prefix defaults: match native provider names
-    let opencode_global = env("CONSULT_LLM_OPENCODE_PROVIDER");
-    let opencode_openai_provider = env("CONSULT_LLM_OPENCODE_OPENAI_PROVIDER")
-        .or_else(|| opencode_global.clone())
-        .unwrap_or_else(|| "openai".to_string());
-    let opencode_gemini_provider = env("CONSULT_LLM_OPENCODE_GEMINI_PROVIDER")
-        .or_else(|| opencode_global.clone())
-        .unwrap_or_else(|| "google".to_string());
-    let opencode_deepseek_provider = env("CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER")
-        .or_else(|| opencode_global.clone())
-        .unwrap_or_else(|| "deepseek".to_string());
-    let opencode_minimax_provider = env("CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER")
-        .or_else(|| opencode_global)
-        .unwrap_or_else(|| "minimax".to_string());
-
     let config = Config {
-        openai_api_key,
-        gemini_api_key,
-        deepseek_api_key,
-        minimax_api_key,
+        providers,
         default_model: resolved_default.clone(),
-        gemini_backend,
-        openai_backend,
-        deepseek_backend,
-        minimax_backend,
         codex_reasoning_effort,
         system_prompt_path: env("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
         allowed_models: enabled_models.clone(),
-        opencode_openai_provider,
-        opencode_gemini_provider,
-        opencode_deepseek_provider,
-        opencode_minimax_provider,
     };
 
     let registry = Arc::new(ModelRegistry {
@@ -508,14 +470,31 @@ pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn env_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
-        let map: HashMap<String, String> = pairs
+        let map: std::collections::HashMap<String, String> = pairs
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         move |key: &str| map.get(key).cloned()
+    }
+
+    fn make_providers(
+        entries: &[(Provider, Option<&str>, Backend)],
+    ) -> HashMap<Provider, ProviderRuntimeConfig> {
+        entries
+            .iter()
+            .map(|(p, key, backend)| {
+                (
+                    *p,
+                    ProviderRuntimeConfig {
+                        api_key: key.map(|k| k.to_string()),
+                        backend: backend.clone(),
+                        opencode_provider: String::new(),
+                    },
+                )
+            })
+            .collect()
     }
 
     #[test]
@@ -549,19 +528,13 @@ mod tests {
             "gpt-5.2".into(),
             "deepseek-reasoner".into(),
         ];
-        let result = filter_by_availability(
-            &models,
-            &ProviderAvailability {
-                gemini_api_key: Some("key".into()),
-                gemini_backend: Backend::Api,
-                openai_api_key: Some("key".into()),
-                openai_backend: Backend::Api,
-                deepseek_api_key: Some("key".into()),
-                minimax_api_key: None,
-                deepseek_backend: Backend::Api,
-                minimax_backend: Backend::Api,
-            },
-        );
+        let providers = make_providers(&[
+            (Provider::Gemini, Some("key"), Backend::Api),
+            (Provider::OpenAI, Some("key"), Backend::Api),
+            (Provider::DeepSeek, Some("key"), Backend::Api),
+            (Provider::MiniMax, None, Backend::Api),
+        ]);
+        let result = filter_by_availability(&models, &providers);
         assert_eq!(result.len(), 3);
     }
 
@@ -572,57 +545,39 @@ mod tests {
             "gpt-5.2".into(),
             "deepseek-reasoner".into(),
         ];
-        let result = filter_by_availability(
-            &models,
-            &ProviderAvailability {
-                gemini_api_key: None,
-                gemini_backend: Backend::Api,
-                openai_api_key: None,
-                openai_backend: Backend::Api,
-                deepseek_api_key: None,
-                minimax_api_key: None,
-                deepseek_backend: Backend::Api,
-                minimax_backend: Backend::Api,
-            },
-        );
+        let providers = make_providers(&[
+            (Provider::Gemini, None, Backend::Api),
+            (Provider::OpenAI, None, Backend::Api),
+            (Provider::DeepSeek, None, Backend::Api),
+            (Provider::MiniMax, None, Backend::Api),
+        ]);
+        let result = filter_by_availability(&models, &providers);
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_filter_by_availability_cli_no_key_needed() {
         let models = vec!["gemini-2.5-pro".into(), "gpt-5.2".into()];
-        let result = filter_by_availability(
-            &models,
-            &ProviderAvailability {
-                gemini_api_key: None,
-                gemini_backend: Backend::GeminiCli,
-                openai_api_key: None,
-                openai_backend: Backend::CodexCli,
-                deepseek_api_key: None,
-                minimax_api_key: None,
-                deepseek_backend: Backend::Api,
-                minimax_backend: Backend::Api,
-            },
-        );
+        let providers = make_providers(&[
+            (Provider::Gemini, None, Backend::GeminiCli),
+            (Provider::OpenAI, None, Backend::CodexCli),
+            (Provider::DeepSeek, None, Backend::Api),
+            (Provider::MiniMax, None, Backend::Api),
+        ]);
+        let result = filter_by_availability(&models, &providers);
         assert_eq!(result.len(), 2);
     }
 
     #[test]
     fn test_filter_by_availability_unknown_prefix_rejected() {
         let models = vec!["custom-model".into()];
-        let result = filter_by_availability(
-            &models,
-            &ProviderAvailability {
-                gemini_api_key: None,
-                gemini_backend: Backend::Api,
-                openai_api_key: None,
-                openai_backend: Backend::Api,
-                deepseek_api_key: None,
-                minimax_api_key: None,
-                deepseek_backend: Backend::Api,
-                minimax_backend: Backend::Api,
-            },
-        );
+        let providers = make_providers(&[
+            (Provider::Gemini, None, Backend::Api),
+            (Provider::OpenAI, None, Backend::Api),
+            (Provider::DeepSeek, None, Backend::Api),
+            (Provider::MiniMax, None, Backend::Api),
+        ]);
+        let result = filter_by_availability(&models, &providers);
         assert!(result.is_empty());
     }
 
@@ -818,7 +773,7 @@ mod tests {
             ("GEMINI_API_KEY", "key"),
         ]);
         let err = parse_config(env).unwrap_err();
-        assert!(matches!(err, ConfigError::InvalidGeminiBackend(ref s) if s == "invalid"));
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "invalid"));
     }
 
     #[test]
@@ -828,7 +783,7 @@ mod tests {
             ("OPENAI_API_KEY", "key"),
         ]);
         let err = parse_config(env).unwrap_err();
-        assert!(matches!(err, ConfigError::InvalidOpenaiBackend(ref s) if s == "nope"));
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "nope"));
     }
 
     #[test]
@@ -880,7 +835,10 @@ mod tests {
     fn test_parse_config_cli_backend_no_key() {
         let env = env_from(&[("CONSULT_LLM_GEMINI_BACKEND", "gemini-cli")]);
         let (config, _) = parse_config(env).unwrap();
-        assert_eq!(config.gemini_backend, Backend::GeminiCli);
+        assert_eq!(
+            config.providers[&Provider::Gemini].backend,
+            Backend::GeminiCli
+        );
         assert!(
             config
                 .allowed_models
@@ -920,5 +878,77 @@ mod tests {
         ]);
         let (_, registry) = parse_config(env).unwrap();
         assert_eq!(registry.fallback_model, "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn test_parse_config_invalid_deepseek_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_DEEPSEEK_BACKEND", "codex-cli"),
+            ("DEEPSEEK_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
+    }
+
+    #[test]
+    fn test_provider_registry_completeness() {
+        use crate::models::ALL_PROVIDERS;
+
+        // Every provider in ALL_PROVIDERS must have a spec in PROVIDER_SPECS
+        for provider in ALL_PROVIDERS {
+            let spec = provider.spec();
+            assert!(!spec.model_prefixes.is_empty());
+            assert!(!spec.builtin_models.is_empty());
+            assert!(!spec.allowed_backends.is_empty());
+            assert!(!spec.id.is_empty());
+        }
+
+        // Every spec must correspond to a provider in ALL_PROVIDERS (no duplicates, no orphans)
+        assert_eq!(PROVIDER_SPECS.len(), ALL_PROVIDERS.len());
+        let mut seen = std::collections::HashSet::new();
+        for spec in PROVIDER_SPECS {
+            assert!(
+                seen.insert(spec.provider),
+                "Duplicate ProviderSpec for {:?}",
+                spec.provider
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_builtin_models_order() {
+        use crate::models::all_builtin_models;
+
+        // Verify the model catalog order matches the original ALL_MODELS constant.
+        // Order matters: enabled_models[0] is the fallback when gpt-5.2 is absent.
+        let models = all_builtin_models();
+        assert_eq!(
+            models,
+            vec![
+                "gemini-2.5-pro",
+                "gemini-3-pro-preview",
+                "gemini-3.1-pro-preview",
+                "deepseek-reasoner",
+                "gpt-5.2",
+                "gpt-5.4",
+                "gpt-5.3-codex",
+                "gpt-5.2-codex",
+                "MiniMax-M2.7",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_backend_as_str_roundtrip() {
+        let backends = [
+            Backend::Api,
+            Backend::CodexCli,
+            Backend::GeminiCli,
+            Backend::CursorCli,
+            Backend::OpenCodeCli,
+        ];
+        for b in &backends {
+            assert_eq!(Backend::from_str(b.as_str()), Some(b.clone()));
+        }
     }
 }

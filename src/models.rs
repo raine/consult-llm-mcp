@@ -18,7 +18,7 @@ impl Default for TaskMode {
 }
 
 /// Known LLM provider families, determined by model ID prefix.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Provider {
     OpenAI,
     Gemini,
@@ -26,48 +26,148 @@ pub enum Provider {
     MiniMax,
 }
 
+/// All known providers in deterministic order.
+/// Adding a provider means: add a variant to `Provider`, add it here, and add a `ProviderSpec`.
+pub const ALL_PROVIDERS: &[Provider] = &[
+    Provider::Gemini,
+    Provider::DeepSeek,
+    Provider::OpenAI,
+    Provider::MiniMax,
+];
+
+/// Static metadata for a provider — the single place to define provider-specific constants.
+pub struct ProviderSpec {
+    pub provider: Provider,
+    /// Lowercase identifier used for logging and config key generation (e.g. "openai").
+    pub id: &'static str,
+    /// Prefixes that identify this provider's models (e.g. &["gpt-", "o3-"]).
+    pub model_prefixes: &'static [&'static str],
+    /// API base URL override (None = default OpenAI-compatible URL).
+    pub api_base_url: Option<&'static str>,
+    /// Built-in model IDs shipped with this provider.
+    pub builtin_models: &'static [&'static str],
+    /// Env var for the API key (e.g. "OPENAI_API_KEY").
+    pub api_key_env: &'static str,
+    /// Prefixed backend env var (e.g. "CONSULT_LLM_OPENAI_BACKEND").
+    pub backend_env: &'static str,
+    /// Legacy unprefixed backend env var, if any (e.g. "OPENAI_BACKEND").
+    pub legacy_backend_env: Option<&'static str>,
+    /// Legacy mode env var, if any (e.g. "OPENAI_MODE").
+    pub legacy_mode_env: Option<&'static str>,
+    /// CLI backend value used when migrating legacy mode env (e.g. "codex-cli").
+    pub cli_backend_value: Option<&'static str>,
+    /// Allowed backend string values for validation.
+    pub allowed_backends: &'static [&'static str],
+    /// Per-provider opencode provider env var (e.g. "CONSULT_LLM_OPENCODE_OPENAI_PROVIDER").
+    pub opencode_env: &'static str,
+    /// Default opencode provider prefix (e.g. "openai").
+    pub default_opencode_provider: &'static str,
+}
+
+/// Order matters: `all_builtin_models()` flattens in this order, which determines the
+/// fallback model when gpt-5.2 is not available (first enabled model wins).
+pub static PROVIDER_SPECS: &[ProviderSpec] = &[
+    ProviderSpec {
+        provider: Provider::Gemini,
+        id: "gemini",
+        model_prefixes: &["gemini-"],
+        api_base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
+        builtin_models: &[
+            "gemini-2.5-pro",
+            "gemini-3-pro-preview",
+            "gemini-3.1-pro-preview",
+        ],
+        api_key_env: "GEMINI_API_KEY",
+        backend_env: "CONSULT_LLM_GEMINI_BACKEND",
+        legacy_backend_env: Some("GEMINI_BACKEND"),
+        legacy_mode_env: Some("GEMINI_MODE"),
+        cli_backend_value: Some("gemini-cli"),
+        allowed_backends: &["api", "gemini-cli", "cursor-cli", "opencode"],
+        opencode_env: "CONSULT_LLM_OPENCODE_GEMINI_PROVIDER",
+        default_opencode_provider: "google",
+    },
+    ProviderSpec {
+        provider: Provider::DeepSeek,
+        id: "deepseek",
+        model_prefixes: &["deepseek-"],
+        api_base_url: Some("https://api.deepseek.com"),
+        builtin_models: &["deepseek-reasoner"],
+        api_key_env: "DEEPSEEK_API_KEY",
+        backend_env: "CONSULT_LLM_DEEPSEEK_BACKEND",
+        legacy_backend_env: None,
+        legacy_mode_env: None,
+        cli_backend_value: None,
+        allowed_backends: &["api", "opencode"],
+        opencode_env: "CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER",
+        default_opencode_provider: "deepseek",
+    },
+    ProviderSpec {
+        provider: Provider::OpenAI,
+        id: "openai",
+        model_prefixes: &["gpt-"],
+        api_base_url: None,
+        builtin_models: &["gpt-5.2", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2-codex"],
+        api_key_env: "OPENAI_API_KEY",
+        backend_env: "CONSULT_LLM_OPENAI_BACKEND",
+        legacy_backend_env: Some("OPENAI_BACKEND"),
+        legacy_mode_env: Some("OPENAI_MODE"),
+        cli_backend_value: Some("codex-cli"),
+        allowed_backends: &["api", "codex-cli", "cursor-cli", "opencode"],
+        opencode_env: "CONSULT_LLM_OPENCODE_OPENAI_PROVIDER",
+        default_opencode_provider: "openai",
+    },
+    ProviderSpec {
+        provider: Provider::MiniMax,
+        id: "minimax",
+        model_prefixes: &["MiniMax-"],
+        api_base_url: Some("https://api.minimax.io/v1"),
+        builtin_models: &["MiniMax-M2.7"],
+        api_key_env: "MINIMAX_API_KEY",
+        backend_env: "CONSULT_LLM_MINIMAX_BACKEND",
+        legacy_backend_env: None,
+        legacy_mode_env: None,
+        cli_backend_value: None,
+        allowed_backends: &["api", "opencode"],
+        opencode_env: "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER",
+        default_opencode_provider: "minimax",
+    },
+];
+
 impl Provider {
+    /// Look up the static spec for this provider.
+    pub fn spec(&self) -> &'static ProviderSpec {
+        PROVIDER_SPECS
+            .iter()
+            .find(|s| s.provider == *self)
+            .expect("every Provider variant must have a ProviderSpec entry")
+    }
+
     /// Determine the provider for a model ID based on its prefix.
     pub fn from_model(model: &str) -> Option<Self> {
-        if model.starts_with("gpt-") {
-            Some(Provider::OpenAI)
-        } else if model.starts_with("gemini-") {
-            Some(Provider::Gemini)
-        } else if model.starts_with("deepseek-") {
-            Some(Provider::DeepSeek)
-        } else if model.starts_with("MiniMax-") {
-            Some(Provider::MiniMax)
-        } else {
-            None
-        }
+        PROVIDER_SPECS
+            .iter()
+            .find(|spec| spec.model_prefixes.iter().any(|p| model.starts_with(p)))
+            .map(|spec| spec.provider)
     }
 
     /// API base URL for this provider (when using API backend).
-    /// Returns `None` for providers that use the default OpenAI-compatible URL.
     pub fn api_base_url(&self) -> Option<&'static str> {
-        match self {
-            Provider::OpenAI => None, // uses default https://api.openai.com/v1/
-            Provider::Gemini => Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
-            Provider::DeepSeek => Some("https://api.deepseek.com"),
-            Provider::MiniMax => Some("https://api.minimax.io/v1"),
-        }
+        self.spec().api_base_url
     }
 }
 
-pub const ALL_MODELS: &[&str] = &[
-    "gemini-2.5-pro",
-    "gemini-3-pro-preview",
-    "gemini-3.1-pro-preview",
-    "deepseek-reasoner",
-    "gpt-5.2",
-    "gpt-5.4",
-    "gpt-5.3-codex",
-    "gpt-5.2-codex",
-    "MiniMax-M2.7",
-];
+/// Collect all builtin model IDs from the provider registry, in deterministic order.
+pub fn all_builtin_models() -> Vec<&'static str> {
+    PROVIDER_SPECS
+        .iter()
+        .flat_map(|spec| spec.builtin_models.iter().copied())
+        .collect()
+}
 
 /// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
 /// When a user passes e.g. "gemini", the server picks the first available model from the list.
+/// Kept separate from the provider registry — selectors are a routing concept that may
+/// eventually span multiple providers (e.g. "reasoning" -> models from different providers).
 pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
     (
         "gemini",

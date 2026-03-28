@@ -94,30 +94,17 @@ async fn main() {
     // Log configuration
     let cfg = config::config();
     let mut config_map = std::collections::HashMap::new();
-    config_map.insert(
-        "openaiApiKey".to_string(),
-        cfg.openai_api_key.clone().unwrap_or_default(),
-    );
-    config_map.insert(
-        "geminiApiKey".to_string(),
-        cfg.gemini_api_key.clone().unwrap_or_default(),
-    );
-    config_map.insert(
-        "deepseekApiKey".to_string(),
-        cfg.deepseek_api_key.clone().unwrap_or_default(),
-    );
-    config_map.insert(
-        "minimaxApiKey".to_string(),
-        cfg.minimax_api_key.clone().unwrap_or_default(),
-    );
-    config_map.insert(
-        "geminiBackend".to_string(),
-        format!("{:?}", cfg.gemini_backend).to_lowercase(),
-    );
-    config_map.insert(
-        "openaiBackend".to_string(),
-        format!("{:?}", cfg.openai_backend).to_lowercase(),
-    );
+    for (provider, provider_cfg) in cfg.iter_providers() {
+        let name = provider.spec().id;
+        config_map.insert(
+            format!("{name}ApiKey"),
+            provider_cfg.api_key.clone().unwrap_or_default(),
+        );
+        config_map.insert(
+            format!("{name}Backend"),
+            provider_cfg.backend.as_str().to_string(),
+        );
+    }
     if let Some(ref dm) = cfg.default_model {
         config_map.insert("defaultModel".to_string(), dm.clone());
     }
