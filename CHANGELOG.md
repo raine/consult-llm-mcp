@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.12.0 (2026-03-28)
+
+- Added OpenCode CLI as a new backend option, routing models through OpenCode's
+  75+ providers (Copilot, OpenRouter, Ollama, etc.) without needing direct API
+  keys. Configure per-provider with `CONSULT_LLM_OPENCODE_<FAMILY>_PROVIDER` env
+  vars. Supports multi-turn via `--session` and file refs via `--file`.
+- Added MiniMax M2.7 provider support
+- DeepSeek and MiniMax backends are now configurable (previously hardcoded to
+  API-only), enabling e.g. `CONSULT_LLM_MINIMAX_BACKEND=opencode`
+
 ## v2.11.0 (2026-03-27)
 
 - Added multi-turn thread support for API backends. Threads are stored as JSON
