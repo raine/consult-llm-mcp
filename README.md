@@ -38,6 +38,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 - [Codex CLI backend](#codex-cli): Use the `codex` CLI for OpenAI models
 - [Cursor CLI backend](#cursor-cli): Use the `cursor-agent` CLI to route GPT and
   Gemini models through a single tool
+- [OpenCode CLI backend](#opencode-cli): Use `opencode` CLI with Copilot, OpenRouter,
+  or any of 75+ providers
 - [Multi-turn conversations](#multi-turn-conversations): Resume CLI sessions
   across requests with `thread_id`
 - [Web mode](#web-mode): Copy formatted prompts to clipboard for browser-based
@@ -337,6 +339,7 @@ Each model is routed to a **backend** — either an API endpoint or a CLI tool.
 | **Gemini CLI** | Shells out to `gemini` CLI       | Free quota (Gemini), existing subscriptions, or prefer CLI tools |
 | **Codex CLI**  | Shells out to `codex` CLI        | OpenAI models via Codex subscription                             |
 | **Cursor CLI** | Shells out to `cursor-agent` CLI | Route GPT and Gemini through one tool                            |
+| **OpenCode CLI** | Shells out to `opencode` CLI   | Use Copilot subscription, OpenCode's 75+ providers               |
 | **Web**        | Copies prompt to clipboard       | You prefer browser UIs or want to review prompts                 |
 
 ### API (default)
@@ -431,6 +434,58 @@ review), allow them in `~/.cursor/cli-config.json`:
 
 Glob patterns are supported. The `deny` list takes precedence over `allow`.
 
+#### OpenCode CLI
+
+Use [OpenCode](https://opencode.ai) as a backend to route models through any of
+its 75+ supported providers — including GitHub Copilot, OpenRouter, and local
+models via Ollama.
+
+**Requirements:**
+
+1. Install [OpenCode](https://opencode.ai/docs/installation/)
+2. Configure providers via `opencode providers`
+
+**Setup:**
+
+```bash
+# Route MiniMax models through OpenCode
+claude mcp add consult-llm \
+  -e CONSULT_LLM_MINIMAX_BACKEND=opencode \
+  -- npx -y consult-llm-mcp
+
+# Route OpenAI models through Copilot subscription
+claude mcp add consult-llm \
+  -e CONSULT_LLM_OPENAI_BACKEND=opencode \
+  -e CONSULT_LLM_OPENCODE_OPENAI_PROVIDER=copilot \
+  -- npx -y consult-llm-mcp
+
+# Route everything through OpenCode
+claude mcp add consult-llm \
+  -e CONSULT_LLM_OPENAI_BACKEND=opencode \
+  -e CONSULT_LLM_GEMINI_BACKEND=opencode \
+  -e CONSULT_LLM_DEEPSEEK_BACKEND=opencode \
+  -e CONSULT_LLM_MINIMAX_BACKEND=opencode \
+  -- npx -y consult-llm-mcp
+```
+
+The executor maps model IDs to OpenCode's `provider/model` format automatically.
+For example, `MiniMax-M2.7` becomes `opencode run --model minimax/MiniMax-M2.7`.
+
+**Provider prefix overrides:**
+
+By default, each provider family maps to its natural OpenCode provider ID
+(`openai`, `google`, `deepseek`, `minimax`). Override with per-family env vars
+when you want to route through a different OpenCode provider:
+
+- `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER` — default: `openai`
+- `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER` — default: `google`
+- `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` — default: `deepseek`
+- `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER` — default: `minimax`
+- `CONSULT_LLM_OPENCODE_PROVIDER` — global fallback for all families
+
+For example, `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER=copilot` turns
+`gpt-5.2` into `opencode run --model copilot/gpt-5.2`.
+
 #### Multi-turn conversations
 
 CLI backends support multi-turn conversations via the `thread_id` parameter. The
@@ -501,9 +556,13 @@ See the "Using web mode..." example above for a concrete transcript.
     (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.)
   - Selectors are resolved to the best available model at startup
 - `CONSULT_LLM_GEMINI_BACKEND` - Backend for Gemini models (optional)
-  - Options: `api` (default), `gemini-cli`, `cursor-cli`
+  - Options: `api` (default), `gemini-cli`, `cursor-cli`, `opencode`
 - `CONSULT_LLM_OPENAI_BACKEND` - Backend for OpenAI models (optional)
-  - Options: `api` (default), `codex-cli`, `cursor-cli`
+  - Options: `api` (default), `codex-cli`, `cursor-cli`, `opencode`
+- `CONSULT_LLM_DEEPSEEK_BACKEND` - Backend for DeepSeek models (optional)
+  - Options: `api` (default), `opencode`
+- `CONSULT_LLM_MINIMAX_BACKEND` - Backend for MiniMax models (optional)
+  - Options: `api` (default), `opencode`
 - `CONSULT_LLM_ALLOWED_MODELS` - Restrict which concrete models can be used
   (optional)
   - Comma-separated list, e.g., `gpt-5.4,gemini-3.1-pro-preview`
@@ -519,6 +578,10 @@ See the "Using web mode..." example above for a concrete transcript.
 - `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
   CLI (optional, default: `high`)
   - See [Codex CLI](#codex-cli) for details and available options
+- `CONSULT_LLM_OPENCODE_PROVIDER` - Global OpenCode provider prefix (optional)
+  - Overrides the default provider ID for all families when using the `opencode`
+    backend
+  - See [OpenCode CLI](#opencode-cli) for details and per-family overrides
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)
   - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location

@@ -16,6 +16,7 @@ pub enum Backend {
     CodexCli,
     GeminiCli,
     CursorCli,
+    OpenCodeCli,
 }
 
 impl Backend {
@@ -25,6 +26,7 @@ impl Backend {
             "codex-cli" => Some(Backend::CodexCli),
             "gemini-cli" => Some(Backend::GeminiCli),
             "cursor-cli" => Some(Backend::CursorCli),
+            "opencode" => Some(Backend::OpenCodeCli),
             _ => None,
         }
     }
@@ -36,7 +38,9 @@ pub struct ProviderAvailability {
     pub openai_api_key: Option<String>,
     pub openai_backend: Backend,
     pub deepseek_api_key: Option<String>,
+    pub deepseek_backend: Backend,
     pub minimax_api_key: Option<String>,
+    pub minimax_backend: Backend,
 }
 
 impl ProviderAvailability {
@@ -44,8 +48,8 @@ impl ProviderAvailability {
         match provider {
             Provider::OpenAI => &self.openai_backend,
             Provider::Gemini => &self.gemini_backend,
-            Provider::DeepSeek => &Backend::Api,
-            Provider::MiniMax => &Backend::Api,
+            Provider::DeepSeek => &self.deepseek_backend,
+            Provider::MiniMax => &self.minimax_backend,
         }
     }
 
@@ -68,9 +72,16 @@ pub struct Config {
     pub default_model: Option<String>,
     pub gemini_backend: Backend,
     pub openai_backend: Backend,
+    pub deepseek_backend: Backend,
+    pub minimax_backend: Backend,
     pub codex_reasoning_effort: String,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
+    /// OpenCode provider prefix overrides per provider family.
+    pub opencode_openai_provider: String,
+    pub opencode_gemini_provider: String,
+    pub opencode_deepseek_provider: String,
+    pub opencode_minimax_provider: String,
 }
 
 impl Config {
@@ -79,8 +90,8 @@ impl Config {
         match provider {
             Provider::OpenAI => &self.openai_backend,
             Provider::Gemini => &self.gemini_backend,
-            Provider::DeepSeek => &Backend::Api,
-            Provider::MiniMax => &Backend::Api,
+            Provider::DeepSeek => &self.deepseek_backend,
+            Provider::MiniMax => &self.minimax_backend,
         }
     }
 
@@ -91,6 +102,16 @@ impl Config {
             Provider::Gemini => self.gemini_api_key.as_deref(),
             Provider::DeepSeek => self.deepseek_api_key.as_deref(),
             Provider::MiniMax => self.minimax_api_key.as_deref(),
+        }
+    }
+
+    /// Get the OpenCode provider prefix for a provider family.
+    pub fn opencode_provider_for(&self, provider: Provider) -> &str {
+        match provider {
+            Provider::OpenAI => &self.opencode_openai_provider,
+            Provider::Gemini => &self.opencode_gemini_provider,
+            Provider::DeepSeek => &self.opencode_deepseek_provider,
+            Provider::MiniMax => &self.opencode_minimax_provider,
         }
     }
 }
@@ -335,12 +356,12 @@ pub fn parse_config(
 
     // Validate backend strings against per-provider allowed values
     if let Some(ref raw) = resolved_gemini_backend
-        && !matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli")
+        && !matches!(raw.as_str(), "api" | "gemini-cli" | "cursor-cli" | "opencode")
     {
         return Err(ConfigError::InvalidGeminiBackend(raw.clone()));
     }
     if let Some(ref raw) = resolved_openai_backend
-        && !matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli")
+        && !matches!(raw.as_str(), "api" | "codex-cli" | "cursor-cli" | "opencode")
     {
         return Err(ConfigError::InvalidOpenaiBackend(raw.clone()));
     }
@@ -351,6 +372,16 @@ pub fn parse_config(
         .unwrap_or(Backend::Api);
 
     let openai_backend = resolved_openai_backend
+        .as_deref()
+        .and_then(Backend::from_str)
+        .unwrap_or(Backend::Api);
+
+    let deepseek_backend = env("CONSULT_LLM_DEEPSEEK_BACKEND")
+        .as_deref()
+        .and_then(Backend::from_str)
+        .unwrap_or(Backend::Api);
+
+    let minimax_backend = env("CONSULT_LLM_MINIMAX_BACKEND")
         .as_deref()
         .and_then(Backend::from_str)
         .unwrap_or(Backend::Api);
@@ -368,7 +399,9 @@ pub fn parse_config(
             openai_api_key: openai_api_key.clone(),
             openai_backend: openai_backend.clone(),
             deepseek_api_key: deepseek_api_key.clone(),
+            deepseek_backend: deepseek_backend.clone(),
             minimax_api_key: minimax_api_key.clone(),
+            minimax_backend: minimax_backend.clone(),
         },
     );
 
@@ -412,6 +445,21 @@ pub fn parse_config(
         enabled_models[0].clone()
     };
 
+    // OpenCode provider prefix defaults: match native provider names
+    let opencode_global = env("CONSULT_LLM_OPENCODE_PROVIDER");
+    let opencode_openai_provider = env("CONSULT_LLM_OPENCODE_OPENAI_PROVIDER")
+        .or_else(|| opencode_global.clone())
+        .unwrap_or_else(|| "openai".to_string());
+    let opencode_gemini_provider = env("CONSULT_LLM_OPENCODE_GEMINI_PROVIDER")
+        .or_else(|| opencode_global.clone())
+        .unwrap_or_else(|| "google".to_string());
+    let opencode_deepseek_provider = env("CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER")
+        .or_else(|| opencode_global.clone())
+        .unwrap_or_else(|| "deepseek".to_string());
+    let opencode_minimax_provider = env("CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER")
+        .or_else(|| opencode_global)
+        .unwrap_or_else(|| "minimax".to_string());
+
     let config = Config {
         openai_api_key,
         gemini_api_key,
@@ -420,9 +468,15 @@ pub fn parse_config(
         default_model: resolved_default.clone(),
         gemini_backend,
         openai_backend,
+        deepseek_backend,
+        minimax_backend,
         codex_reasoning_effort,
         system_prompt_path: env("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
         allowed_models: enabled_models.clone(),
+        opencode_openai_provider,
+        opencode_gemini_provider,
+        opencode_deepseek_provider,
+        opencode_minimax_provider,
     };
 
     let registry = Arc::new(ModelRegistry {
@@ -504,6 +558,8 @@ mod tests {
                 openai_backend: Backend::Api,
                 deepseek_api_key: Some("key".into()),
                 minimax_api_key: None,
+                deepseek_backend: Backend::Api,
+                minimax_backend: Backend::Api,
             },
         );
         assert_eq!(result.len(), 3);
@@ -525,6 +581,8 @@ mod tests {
                 openai_backend: Backend::Api,
                 deepseek_api_key: None,
                 minimax_api_key: None,
+                deepseek_backend: Backend::Api,
+                minimax_backend: Backend::Api,
             },
         );
         assert!(result.is_empty());
@@ -542,6 +600,8 @@ mod tests {
                 openai_backend: Backend::CodexCli,
                 deepseek_api_key: None,
                 minimax_api_key: None,
+                deepseek_backend: Backend::Api,
+                minimax_backend: Backend::Api,
             },
         );
         assert_eq!(result.len(), 2);
@@ -559,6 +619,8 @@ mod tests {
                 openai_backend: Backend::Api,
                 deepseek_api_key: None,
                 minimax_api_key: None,
+                deepseek_backend: Backend::Api,
+                minimax_backend: Backend::Api,
             },
         );
         assert!(result.is_empty());

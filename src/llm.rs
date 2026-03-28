@@ -6,6 +6,7 @@ use crate::executors::api::ApiExecutor;
 use crate::executors::codex_cli::CodexCliExecutor;
 use crate::executors::cursor_cli::CursorCliExecutor;
 use crate::executors::gemini_cli::GeminiCliExecutor;
+use crate::executors::opencode_cli::OpenCodeCliExecutor;
 use crate::executors::types::LlmExecutor;
 use crate::models::Provider;
 
@@ -56,6 +57,10 @@ impl ExecutorProvider {
             Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
             Backend::CursorCli => {
                 Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
+            }
+            Backend::OpenCodeCli => {
+                let prefix = cfg.opencode_provider_for(provider).to_string();
+                Arc::new(OpenCodeCliExecutor::new(prefix))
             }
         };
 
