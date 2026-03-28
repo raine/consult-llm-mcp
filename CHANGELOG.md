@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.12.1 (2026-03-28)
+
+- CLI backends now receive prompts via stdin instead of command-line arguments,
+  avoiding exposure in `ps` output and ARG_MAX limits with large prompts
+
 ## v2.12.0 (2026-03-28)
 
 - Added OpenCode CLI as a new backend option, routing models through OpenCode's
