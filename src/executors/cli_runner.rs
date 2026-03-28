@@ -1,5 +1,5 @@
 use std::time::Instant;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
 use crate::logger::log_cli_debug;
@@ -11,9 +11,13 @@ pub struct CliResult {
 }
 
 /// Run a CLI command, calling `on_line` for each stdout line as it arrives.
+/// When `stdin_data` is provided, it is written to the child's stdin (then closed)
+/// instead of connecting stdin to /dev/null. This keeps large prompts out of the
+/// process argument list.
 pub async fn run_cli_streaming<F>(
     command: &str,
     args: &[String],
+    stdin_data: Option<&str>,
     mut on_line: F,
 ) -> anyhow::Result<CliResult>
 where
@@ -24,15 +28,20 @@ where
         &format!("Spawning {command} CLI (streaming)"),
         Some(&serde_json::json!({
             "args": args,
-            "promptLength": args.last().map(|s| s.len()),
+            "stdinLength": stdin_data.map(|s| s.len()),
             "cwd": cwd,
         })),
     );
 
+    let use_stdin = stdin_data.is_some();
     let start = Instant::now();
     let mut child = Command::new(command)
         .args(args)
-        .stdin(std::process::Stdio::null())
+        .stdin(if use_stdin {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -41,6 +50,14 @@ where
                 "Failed to spawn {command} CLI. Is it installed and in PATH? Error: {e}"
             )
         })?;
+
+    // Write prompt to stdin and close it so the child sees EOF.
+    if let Some(data) = stdin_data
+        && let Some(mut stdin) = child.stdin.take()
+    {
+        stdin.write_all(data.as_bytes()).await?;
+        stdin.shutdown().await?;
+    }
 
     let stdout = child.stdout.take().expect("stdout was piped");
     let stderr_pipe = child.stderr.take().expect("stderr was piped");

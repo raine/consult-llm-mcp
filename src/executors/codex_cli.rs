@@ -186,11 +186,11 @@ impl LlmExecutor for CodexCliExecutor {
         if let Some(tid) = thread_id {
             args.push(tid.to_string());
         }
-        args.push(full_prompt);
 
         run_cli_executor(
             "codex",
             &args,
+            &full_prompt,
             prompt,
             system_prompt,
             consultation_id,

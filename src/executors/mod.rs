@@ -54,16 +54,18 @@ pub fn build_extra_dir_args(file_paths: Option<&[PathBuf]>, flag: &str) -> Vec<S
 
 /// Run a CLI tool with streaming, parse output, and return the result.
 /// Shared by all CLI executors to avoid duplicating the spawn → stream → check flow.
+/// The prompt is passed via stdin to keep it out of the process argument list.
 pub async fn run_cli_executor(
     command: &str,
     args: &[String],
+    stdin_prompt: &str,
     prompt: &str,
     system_prompt: &str,
     consultation_id: Option<&str>,
     parse_line: fn(&str) -> StreamEvents,
 ) -> anyhow::Result<ExecuteResult> {
     let mut reducer = StreamReducer::new(consultation_id, Some(prompt), Some(system_prompt));
-    let result = run_cli_streaming(command, args, |line| {
+    let result = run_cli_streaming(command, args, Some(stdin_prompt), |line| {
         reducer.process(parse_line(line));
     })
     .await?;

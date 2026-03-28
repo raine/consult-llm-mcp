@@ -296,11 +296,11 @@ impl LlmExecutor for CursorCliExecutor {
             args.push("--resume".to_string());
             args.push(tid.to_string());
         }
-        args.push(message);
 
         let mut result = run_cli_executor(
             "cursor-agent",
             &args,
+            &message,
             prompt,
             system_prompt,
             consultation_id,

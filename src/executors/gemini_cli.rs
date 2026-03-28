@@ -181,12 +181,11 @@ impl LlmExecutor for GeminiCliExecutor {
             args.push("-r".to_string());
             args.push(tid.to_string());
         }
-        args.push("-p".to_string());
-        args.push(message);
 
         run_cli_executor(
             "gemini",
             &args,
+            &message,
             prompt,
             system_prompt,
             consultation_id,

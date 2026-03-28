@@ -144,12 +144,10 @@ impl LlmExecutor for OpenCodeCliExecutor {
             }
         }
 
-        args.push("--".to_string());
-        args.push(full_prompt);
-
         run_cli_executor(
             "opencode",
             &args,
+            &full_prompt,
             prompt,
             system_prompt,
             consultation_id,
