@@ -1,7 +1,7 @@
 # consult-llm-mcp
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.4, Gemini
-3.1 Pro, DeepSeek Reasoner) when Sonnet has you running in circles and you need
+3.1 Pro, DeepSeek Reasoner, MiniMax M2.7) when Sonnet has you running in circles and you need
 to bring in the heavy artillery. Supports multi-turn conversations.
 
 ```
@@ -28,7 +28,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
 ## Features
 
-- Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, DeepSeek Reasoner) with
+- Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, DeepSeek Reasoner, MiniMax
+  M2.7) with
   relevant files as context
 - Include git changes for code review
 - Comprehensive logging with cost estimation (if using API)
@@ -85,6 +86,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
      -e OPENAI_API_KEY=your_openai_key \
      -e GEMINI_API_KEY=your_gemini_key \
      -e DEEPSEEK_API_KEY=your_deepseek_key \
+     -e MINIMAX_API_KEY=your_minimax_key \
      -- npx -y consult-llm-mcp
    ```
 
@@ -492,8 +494,10 @@ See the "Using web mode..." example above for a concrete transcript.
 - `GEMINI_API_KEY` - Your Google AI API key (required for Gemini models in API
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
+- `MINIMAX_API_KEY` - Your MiniMax API key (required for MiniMax models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Accepts selectors (`gemini`, `openai`, `deepseek`) or exact model IDs
+  - Accepts selectors (`gemini`, `openai`, `deepseek`, `minimax`) or exact model
+    IDs
     (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.)
   - Selectors are resolved to the best available model at startup
 - `CONSULT_LLM_GEMINI_BACKEND` - Backend for Gemini models (optional)
@@ -511,7 +515,7 @@ See the "Using web mode..." example above for a concrete transcript.
   - Comma-separated list, e.g., `grok-3,kimi-k2.5`
   - Merged with built-in models and included in the tool schema
   - Useful for newly released models with a known provider prefix (`gpt-`,
-    `gemini-`, `deepseek-`)
+    `gemini-`, `deepseek-`, `MiniMax-`)
 - `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
   CLI (optional, default: `high`)
   - See [Codex CLI](#codex-cli) for details and available options
@@ -645,6 +649,7 @@ models complex questions.
 - **gemini-3-pro-preview**: Google's Gemini 3 Pro Preview
 - **gemini-3.1-pro-preview**: Google's Gemini 3.1 Pro Preview
 - **deepseek-reasoner**: DeepSeek's reasoning model
+- **MiniMax-M2.7**: MiniMax's M2.7 reasoning model (204K context)
 - **gpt-5.4**: OpenAI's GPT-5.4 model
 - **gpt-5.2**: OpenAI's GPT-5.2 model
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3

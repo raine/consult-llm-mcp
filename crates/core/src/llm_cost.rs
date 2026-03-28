@@ -39,6 +39,10 @@ fn get_pricing(model: &str) -> Option<ModelPricing> {
             input_per_million: 0.55,
             output_per_million: 2.19,
         },
+        "MiniMax-M2.7" => ModelPricing {
+            input_per_million: 0.30,
+            output_per_million: 1.20,
+        },
         _ => return None,
     })
 }
