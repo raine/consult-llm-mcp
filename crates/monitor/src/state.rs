@@ -69,6 +69,8 @@ pub(crate) struct ThreadDetailState {
     pub(crate) total_duration_ms: u64,
     pub(crate) turn_count: usize,
     pub(crate) success: Option<bool>,
+    /// Line index where the last "Response:" header starts (for jump-to-response).
+    pub(crate) response_line_offset: Option<usize>,
 }
 
 pub(crate) struct DetailState {
@@ -95,6 +97,8 @@ pub(crate) struct DetailState {
     pub(crate) cached_has_active_tools: bool,
     /// Whether the system prompt overlay is visible.
     pub(crate) show_system_prompt: bool,
+    /// Line index where the "Response:" header starts (for jump-to-response).
+    pub(crate) response_line_offset: Option<usize>,
     /// Sibling consultation IDs (same project, similar start time) including self.
     pub(crate) siblings: Vec<String>,
     /// Index of the current consultation within `siblings`.

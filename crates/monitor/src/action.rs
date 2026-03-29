@@ -40,4 +40,6 @@ pub(crate) enum Action {
     NextSibling,
     /// Switch to previous sibling consultation
     PrevSibling,
+    /// Jump scroll to the response section
+    ScrollToResponse,
 }

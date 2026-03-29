@@ -229,8 +229,11 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         && !has_active_tools
         && !detail.cached_has_active_tools;
 
-    let mut lines = if cache_valid {
-        detail.cached_lines.clone().unwrap()
+    let (mut lines, response_offset) = if cache_valid {
+        (
+            detail.cached_lines.clone().unwrap(),
+            detail.response_line_offset,
+        )
     } else {
         let blocks = normalize_events(&detail.events);
 
@@ -267,6 +270,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         detail.cached_event_count = event_count;
         detail.cached_width = inner_width;
         detail.cached_has_active_tools = has_active_tools;
+        detail.response_line_offset = response_offset;
     }
 
     // ── Scroll / viewport ───────────────────────────────────────────
@@ -311,6 +315,8 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         Span::styled(" scroll  ", Style::default().fg(DIM_WHITE)),
         Span::styled("d/u", Style::default().fg(TEAL)),
         Span::styled(" half-page  ", Style::default().fg(DIM_WHITE)),
+        Span::styled("r", Style::default().fg(TEAL)),
+        Span::styled(" response  ", Style::default().fg(DIM_WHITE)),
         Span::styled("s", Style::default().fg(TEAL)),
         Span::styled(" sys prompt", Style::default().fg(DIM_WHITE)),
     ];
@@ -508,10 +514,11 @@ fn render_blocks(
     show_system_prompt: bool,
     model: Option<&str>,
     backend: Option<&str>,
-) -> Vec<Line<'static>> {
+) -> (Vec<Line<'static>>, Option<usize>) {
     let mut lines: Vec<Line> = Vec::new();
     let mut current_phase = Phase::Start;
     let mut response_header_shown = false;
+    let mut response_line_offset: Option<usize> = None;
     let last_idx = blocks.len().saturating_sub(1);
 
     for (i, block) in blocks.iter().enumerate() {
@@ -619,6 +626,7 @@ fn render_blocks(
             RenderedBlock::Text(text) => {
                 if !response_header_shown {
                     response_header_shown = true;
+                    response_line_offset = Some(lines.len());
                     lines.push(Line::from(vec![Span::styled(
                         "  Response:",
                         Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
@@ -648,7 +656,7 @@ fn render_blocks(
         }
     }
 
-    lines
+    (lines, response_line_offset)
 }
 
 /// Pick the live spinner label based on what the last event was.
@@ -898,7 +906,8 @@ pub(super) fn render_thread_detail_view(
         let turn_model = detail.models.get(i).map(|m| m.as_str());
         let turn_backend = detail.backends.get(i).map(|b| b.as_str());
         let blocks = normalize_events(turn_events);
-        let turn_lines = render_blocks(&blocks, inner_width, tick, false, turn_model, turn_backend);
+        let (turn_lines, _) =
+            render_blocks(&blocks, inner_width, tick, false, turn_model, turn_backend);
         lines.extend(turn_lines);
         lines.push(Line::default());
     }
@@ -929,7 +938,8 @@ pub(super) fn render_thread_detail_view(
     let active_model = detail.models.get(active_turn_idx).map(|m| m.as_str());
     let active_backend = detail.backends.get(active_turn_idx).map(|b| b.as_str());
     let active_blocks = normalize_events(&detail.active_events);
-    let active_lines = render_blocks(
+    let active_turn_base = lines.len();
+    let (active_lines, active_response_offset) = render_blocks(
         &active_blocks,
         inner_width,
         tick,
@@ -938,6 +948,7 @@ pub(super) fn render_thread_detail_view(
         active_backend,
     );
     lines.extend(active_lines);
+    let response_line_offset = active_response_offset.map(|off| active_turn_base + off);
 
     // Append spinner if latest turn is still live
     let is_live = detail
@@ -954,9 +965,10 @@ pub(super) fn render_thread_detail_view(
         )]));
     }
 
-    // Store turn_line_offsets back into state
+    // Store turn_line_offsets and response offset back into state
     if let AppMode::ThreadDetail(ref mut detail) = state.mode {
         detail.turn_line_offsets = turn_line_offsets;
+        detail.response_line_offset = response_line_offset;
     }
 
     // ── Scroll / viewport ───────────────────────────────────────────

@@ -146,6 +146,19 @@ impl AppState {
                 *scroll = 0;
                 *auto_scroll = false;
             }),
+            Action::ScrollToResponse => {
+                let offset = match &self.mode {
+                    AppMode::Detail(d) => d.response_line_offset,
+                    AppMode::ThreadDetail(d) => d.response_line_offset,
+                    _ => None,
+                };
+                if let Some(offset) = offset {
+                    self.mutate_scroll(|scroll, auto_scroll, _| {
+                        *scroll = offset;
+                        *auto_scroll = false;
+                    });
+                }
+            }
             Action::PromptClearHistory => {
                 self.mode = AppMode::ConfirmClearHistory;
             }
@@ -363,6 +376,7 @@ impl AppState {
             cached_width: 0,
             cached_has_active_tools: false,
             show_system_prompt: false,
+            response_line_offset: None,
             siblings: Vec::new(),
             sibling_index: 0,
         });
@@ -480,6 +494,7 @@ impl AppState {
             total_duration_ms,
             turn_count,
             success,
+            response_line_offset: None, // computed during rendering
         });
     }
 
