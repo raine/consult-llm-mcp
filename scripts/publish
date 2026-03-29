@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-bump="${1:-}"
+SKIP_CHANGELOG=false
+bump=""
+
+for arg in "$@"; do
+	case "$arg" in
+		--skip-changelog) SKIP_CHANGELOG=true ;;
+		patch|minor|major|beta) bump="$arg" ;;
+		*)
+			echo "error: unknown argument: $arg" >&2
+			echo "usage: scripts/publish <patch|minor|major|beta> [--skip-changelog]" >&2
+			exit 1
+			;;
+	esac
+done
 
 if [[ -z "$bump" ]]; then
-	echo "usage: scripts/publish <patch|minor|major|beta>" >&2
-	exit 1
-fi
-
-if [[ "$bump" != "patch" && "$bump" != "minor" && "$bump" != "major" && "$bump" != "beta" ]]; then
-	echo "error: bump must be patch, minor, major, or beta (got: $bump)" >&2
+	echo "usage: scripts/publish <patch|minor|major|beta> [--skip-changelog]" >&2
 	exit 1
 fi
 
@@ -34,7 +42,7 @@ cleanup() {
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		echo "Failure detected, rolling back version changes..." >&2
-		git restore package.json Cargo.toml Cargo.lock 2>/dev/null || true
+		git restore package.json Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || true
 	fi
 	exit $rc
 }
@@ -51,9 +59,93 @@ VERSION=$(node -p "require('./package.json').version")
 sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 cargo check --quiet 2>/dev/null # update Cargo.lock
 
+# Generate changelog
+if [[ "$SKIP_CHANGELOG" == false ]]; then
+	echo "Generating changelog entry for v${VERSION}..."
+
+	# shellcheck disable=SC2016
+	CHANGELOG_PROMPT=$(sed "s/__VERSION__/$VERSION/g" <<'PROMPT_EOF'
+# Changelog Updater (Pending Release)
+
+## Task
+
+Generate a user-focused changelog entry for the upcoming release `v__VERSION__` and insert it into CHANGELOG.md.
+
+## Steps
+
+1. **Find the previous tag**
+
+   ```bash
+   git describe --tags --abbrev=0
+   ```
+
+   If this fails (no previous tag exists), this is the first release—compare against the initial commit instead.
+
+2. **Get the commits since the last tag**
+
+   ```bash
+   git log --oneline PREVIOUS_TAG..HEAD
+   ```
+
+3. **Review the actual changes** to understand context
+
+   ```bash
+   git diff PREVIOUS_TAG..HEAD --stat
+   ```
+
+   Read relevant changed files as needed to understand what the changes do.
+
+4. **Update CHANGELOG.md**
+
+   - Insert the new entry at the top (after the `# Changelog` header), as the newest release
+   - Use heading level `##` for version entries
+   - Use today's date in YYYY-MM-DD format
+
+## Writing Guidelines
+
+- Write from the user's perspective: what can they now do, what's fixed, what's improved?
+- Use plain language, avoid implementation details like function names, file paths, or internal refactors
+- Focus on behavior changes, new capabilities, and bug fixes users would notice
+- Skip purely internal changes (refactoring, test improvements, CI changes) unless they affect users
+- Keep entries concise—one line per change is usually enough
+- If there are no user-facing changes, still create a minimal entry noting the release
+
+## Linking Issues and Pull Requests
+
+- Determine the GitHub repository URL from the git remote (e.g., `git remote get-url origin`)
+- When commits reference GitHub issues or pull requests (e.g., `#70`, `fixes #70`, `closes #65`), link them at the end of the relevant changelog entry
+- Even when commits don't explicitly reference issues or PRs, check recent closed issues and merged pull requests (`gh issue list --state closed --limit 20`, `gh pr list --state merged --limit 20`) to find ones related to the changes, and link them
+- Format: `([#70](https://github.com/OWNER/REPO/issues/70))` for issues, `([#68](https://github.com/OWNER/REPO/pull/68))` for pull requests
+- If multiple entries relate to the same issue/PR, link it on each relevant entry
+
+## Entry Format
+
+```markdown
+## v__VERSION__ (YYYY-MM-DD)
+
+- Change description ([#70](https://github.com/OWNER/REPO/issues/70))
+- Another change description
+```
+PROMPT_EOF
+)
+
+	claude --dangerously-skip-permissions --no-session-persistence -p "$CHANGELOG_PROMPT"
+	prettier --write CHANGELOG.md 2>/dev/null || true
+
+	# Open editor for review
+	${EDITOR:-vim} CHANGELOG.md
+fi
+
+# Confirm before committing and pushing
+read -rp "Proceed with release v${VERSION}? [y/n] " response
+if [[ "$response" != "y" && "$response" != "yes" ]]; then
+	echo "Aborting release."
+	exit 1
+fi
+
 trap - EXIT
 
-git add package.json Cargo.toml Cargo.lock
+git add package.json Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "$VERSION"
 git tag "v$VERSION"
 git push
