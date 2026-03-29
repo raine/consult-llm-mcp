@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.13.0 (2026-03-29)
+
+- Monitor: press `r` in detail view to jump directly to the response section,
+  available in both single consultation and thread detail views
+
 ## v2.12.1 (2026-03-28)
 
 - CLI backends now receive prompts via stdin instead of command-line arguments,

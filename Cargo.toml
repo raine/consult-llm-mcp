@@ -2,7 +2,7 @@
 members = [".", "crates/core", "crates/monitor"]
 
 [workspace.package]
-version = "2.12.1"
+version = "2.13.0"
 edition = "2024"
 
 [workspace.dependencies]
