@@ -58,8 +58,11 @@ pub fn log_response(model: &str, response: &str, cost_info: &str) {
 }
 
 pub fn log_server_start(version: &str) {
+    let cwd = std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "<unknown>".to_string());
     log_to_file(&format!(
-        "MCP SERVER STARTED - consult-llm-mcp v{version}\n{}",
+        "MCP SERVER STARTED - consult-llm-mcp v{version}\ncwd: {cwd}\n{}",
         "=".repeat(80)
     ));
 }
