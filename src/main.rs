@@ -115,6 +115,23 @@ async fn main() {
     config_map.insert("allowedModels".to_string(), cfg.allowed_models.join(", "));
     logger::log_configuration(&config_map);
 
+    // Log available models with their backends
+    let model_lines: Vec<String> = cfg
+        .allowed_models
+        .iter()
+        .map(|m| {
+            let backend = models::Provider::from_model(m)
+                .map(|p| cfg.backend_for(p).as_str())
+                .unwrap_or("unknown");
+            format!("  {m} ({backend})")
+        })
+        .collect();
+    logger::log_to_file(&format!(
+        "AVAILABLE MODELS:\n{}\n{}",
+        model_lines.join("\n"),
+        "=".repeat(80)
+    ));
+
     let executor_provider = Arc::new(llm::ExecutorProvider::new());
     let consult_service = Arc::new(service::ConsultService::new(registry, executor_provider));
     let server = server::ConsultServer::new(consult_service);
