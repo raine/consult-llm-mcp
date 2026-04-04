@@ -371,6 +371,7 @@ impl AppState {
             success: meta.success,
             project: meta.project,
             task_mode: meta.task_mode,
+            error: meta.error,
             cached_lines: None,
             cached_event_count: 0,
             cached_width: 0,
@@ -511,6 +512,7 @@ impl AppState {
                     project: server.project.clone(),
                     task_mode: ac.task_mode.clone(),
                     reasoning_effort: ac.reasoning_effort.clone(),
+                    error: None,
                 };
             }
         }
@@ -530,6 +532,7 @@ impl AppState {
                     project: server.project.clone(),
                     task_mode: cc.task_mode.clone(),
                     reasoning_effort: None,
+                    error: cc.error.clone(),
                 };
             }
         }
@@ -554,6 +557,7 @@ impl AppState {
                 project: Some(hr.project.clone()),
                 task_mode: None,
                 reasoning_effort: hr.reasoning_effort.clone(),
+                error: hr.error.clone(),
             };
         }
         DetailMetadata {
@@ -565,6 +569,7 @@ impl AppState {
             project: None,
             task_mode: None,
             reasoning_effort: None,
+            error: None,
         }
     }
 

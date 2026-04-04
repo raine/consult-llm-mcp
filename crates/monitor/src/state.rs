@@ -87,6 +87,7 @@ pub(crate) struct DetailState {
     pub(crate) success: Option<bool>,
     pub(crate) project: Option<String>,
     pub(crate) task_mode: Option<String>,
+    pub(crate) error: Option<String>,
     /// Cached rendered lines from normalize_events + render_blocks.
     pub(crate) cached_lines: Option<Vec<RatatuiLine<'static>>>,
     /// Event count when cache was built (invalidate when events arrive).
@@ -114,6 +115,7 @@ pub(crate) struct DetailMetadata {
     pub(crate) project: Option<String>,
     pub(crate) task_mode: Option<String>,
     pub(crate) reasoning_effort: Option<String>,
+    pub(crate) error: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]

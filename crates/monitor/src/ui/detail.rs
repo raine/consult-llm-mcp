@@ -258,6 +258,9 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         )]));
     }
 
+    // Clone error before mutable borrow for cache update
+    let detail_error = detail.error.clone();
+
     // Update cache (store lines before the live spinner was appended)
     if !cache_valid && let AppMode::Detail(ref mut detail) = state.mode {
         let cache_lines = if is_live {
@@ -271,6 +274,34 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         detail.cached_width = inner_width;
         detail.cached_has_active_tools = has_active_tools;
         detail.response_line_offset = response_offset;
+    }
+
+    // Show error message when the consultation failed (after cache, like spinner)
+    if let Some(ref error) = detail_error {
+        let prefix = "  Error: ";
+        let cont = "         ";
+        let wrap_width = inner_width.saturating_sub(cont.len());
+        lines.push(Line::default());
+        if wrap_width > 0 {
+            let mut remaining = error.as_str();
+            let mut first = true;
+            while !remaining.is_empty() {
+                let indent = if first { prefix } else { cont };
+                first = false;
+                let chunk_len = remaining.len().min(wrap_width);
+                let (chunk, rest) = remaining.split_at(chunk_len);
+                lines.push(Line::from(vec![Span::styled(
+                    format!("{indent}{chunk}"),
+                    Style::default().fg(RED),
+                )]));
+                remaining = rest;
+            }
+        } else {
+            lines.push(Line::from(vec![Span::styled(
+                format!("{prefix}{error}"),
+                Style::default().fg(RED),
+            )]));
+        }
     }
 
     // ── Scroll / viewport ───────────────────────────────────────────
