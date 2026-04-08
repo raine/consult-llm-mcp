@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.13.1 (2026-04-08)
+
+- Monitor now shows the full error message in the detail view when a consultation
+  fails, instead of only indicating failure
+- System prompts for review and plan modes now encourage bolder architectural
+  recommendations rather than defaulting to minimal changes
+- Improved startup logging: available models are now logged with their backends,
+  and the working directory is included in the server start log
+
 ## v2.13.0 (2026-03-29)
 
 - Monitor: press `r` in detail view to jump directly to the response section,
