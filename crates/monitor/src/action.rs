@@ -42,4 +42,10 @@ pub(crate) enum Action {
     PrevSibling,
     /// Jump scroll to the response section
     ScrollToResponse,
+    /// Prompt user to confirm killing a process
+    PromptKillProcess(u32),
+    /// Confirmed: kill the process
+    KillProcess(u32),
+    /// Cancel the kill confirmation
+    CancelKill,
 }

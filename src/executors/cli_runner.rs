@@ -18,6 +18,7 @@ pub async fn run_cli_streaming<F>(
     command: &str,
     args: &[String],
     stdin_data: Option<&str>,
+    on_spawn: Option<Box<dyn FnOnce(u32) + Send>>,
     mut on_line: F,
 ) -> anyhow::Result<CliResult>
 where
@@ -50,6 +51,11 @@ where
                 "Failed to spawn {command} CLI. Is it installed and in PATH? Error: {e}"
             )
         })?;
+
+    let child_pid = child.id();
+    if let (Some(cb), Some(pid)) = (on_spawn, child_pid) {
+        cb(pid);
+    }
 
     // Write prompt to stdin and close it so the child sees EOF.
     if let Some(data) = stdin_data

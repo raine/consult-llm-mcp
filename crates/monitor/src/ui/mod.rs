@@ -21,7 +21,12 @@ pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
         }
         AppMode::ConfirmClearHistory => {
             table::render_table_view(frame, area, state);
-            render_confirm_dialog(frame, area);
+            render_confirm_dialog(frame, area, "Clear all history?");
+        }
+        AppMode::ConfirmKillProcess(pid) => {
+            let pid = *pid;
+            table::render_table_view(frame, area, state);
+            render_confirm_dialog(frame, area, &format!("Kill CLI process {pid}?"));
         }
         AppMode::Detail(_) => {
             detail::render_detail_view(frame, area, state);
@@ -70,6 +75,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
             ("k / ↑", "Move up"),
             ("Tab", "Switch focus"),
             ("Enter", "Open detail view"),
+            ("K", "Kill process"),
             ("/", "Filter history"),
             ("X", "Clear history"),
             ("q", "Quit"),
@@ -135,8 +141,8 @@ fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
     frame.render_widget(content, inner);
 }
 
-fn render_confirm_dialog(frame: &mut ratatui::Frame, area: Rect) {
-    let popup_width = 36;
+fn render_confirm_dialog(frame: &mut ratatui::Frame, area: Rect, message: &str) {
+    let popup_width = (message.len() as u16 + 8).max(36);
     let popup_height = 5;
 
     let [popup_area] = Layout::horizontal([Constraint::Length(popup_width)])
@@ -159,7 +165,7 @@ fn render_confirm_dialog(frame: &mut ratatui::Frame, area: Rect) {
 
     let lines = vec![
         Line::from(Span::styled(
-            "Clear all history?",
+            message.to_string(),
             Style::default().fg(DIM_WHITE).add_modifier(Modifier::BOLD),
         ))
         .alignment(Alignment::Center),

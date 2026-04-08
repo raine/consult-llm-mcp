@@ -30,6 +30,7 @@ pub(crate) fn handle_key(
         AppMode::Detail(_) => handle_detail_key(key),
         AppMode::ThreadDetail(_) => handle_thread_detail_key(key),
         AppMode::ConfirmClearHistory => handle_confirm_clear_key(key),
+        AppMode::ConfirmKillProcess(pid) => handle_confirm_kill_key(key, *pid),
     }
 }
 
@@ -48,6 +49,18 @@ fn handle_table_key(
         KeyCode::Char('k') | KeyCode::Up => Some(Action::MoveUp),
         KeyCode::Char('/') => Some(Action::StartFilter),
         KeyCode::Char('X') => Some(Action::PromptClearHistory),
+        KeyCode::Char('K') => {
+            if matches!(state.focus, Focus::Active)
+                && let Some(info) = row_infos.get(state.selected)
+                && !info.consultation_id.is_empty()
+                && let Some(server) = state.servers.get(&info.server_id)
+                && let Some(consult) = server.active_consults.get(&info.consultation_id)
+                && let Some(child_pid) = consult.child_pid
+            {
+                return Some(Action::PromptKillProcess(child_pid));
+            }
+            None
+        }
         KeyCode::Enter => match state.focus {
             Focus::Active => {
                 if let Some(info) = row_infos.get(state.selected)
@@ -88,6 +101,13 @@ fn handle_confirm_clear_key(key: KeyEvent) -> Option<Action> {
     match key.code {
         KeyCode::Char('y') => Some(Action::ClearHistory),
         _ => Some(Action::CancelClear),
+    }
+}
+
+fn handle_confirm_kill_key(key: KeyEvent, pid: u32) -> Option<Action> {
+    match key.code {
+        KeyCode::Char('y') => Some(Action::KillProcess(pid)),
+        _ => Some(Action::CancelKill),
     }
 }
 

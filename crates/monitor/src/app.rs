@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 
 use arboard::Clipboard;
 use consult_llm_core::jsonl::read_jsonl_from_offset;
-use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent};
+use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent, ProgressStage};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use crate::action::Action;
@@ -240,6 +240,26 @@ impl AppState {
                 self.invalidate_filter_cache();
                 self.clamp_history_selection();
             }
+            Action::PromptKillProcess(pid) => {
+                self.mode = AppMode::ConfirmKillProcess(pid);
+            }
+            Action::KillProcess(pid) => {
+                use std::process::Command;
+                let result = Command::new("kill").arg(pid.to_string()).status();
+                match result {
+                    Ok(status) if status.success() => {
+                        self.flash = Some((format!("Sent SIGTERM to PID {pid}"), 20));
+                    }
+                    _ => {
+                        self.flash = Some((format!("Failed to kill PID {pid}"), 20));
+                    }
+                }
+                self.mode = AppMode::Table;
+            }
+            Action::CancelKill => {
+                self.mode = AppMode::Table;
+                self.flash = None;
+            }
         }
     }
 
@@ -292,6 +312,7 @@ impl AppState {
                             thread_id: thread_id.clone(),
                             task_mode: task_mode.clone(),
                             reasoning_effort: reasoning_effort.clone(),
+                            child_pid: None,
                         },
                     );
                     server.last_consult_at = Some(started_at);
@@ -301,6 +322,9 @@ impl AppState {
                 if let Some(server) = self.servers.get_mut(server_id)
                     && let Some(consult) = server.active_consults.get_mut(id)
                 {
+                    if let ProgressStage::CliSpawned { pid } = stage {
+                        consult.child_pid = Some(*pid);
+                    }
                     consult.last_progress = Some(stage.to_string());
                 }
             }

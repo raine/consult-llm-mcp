@@ -44,6 +44,7 @@ pub(crate) enum AppMode {
     Detail(DetailState),
     ThreadDetail(ThreadDetailState),
     ConfirmClearHistory,
+    ConfirmKillProcess(u32),
 }
 
 pub(crate) struct ThreadDetailState {
@@ -178,6 +179,8 @@ pub(crate) struct ActiveConsult {
     pub(crate) task_mode: Option<String>,
     /// Reasoning effort level (e.g. for Codex models)
     pub(crate) reasoning_effort: Option<String>,
+    /// PID of the spawned CLI backend process (if any)
+    pub(crate) child_pid: Option<u32>,
 }
 
 pub(crate) struct CompletedConsult {

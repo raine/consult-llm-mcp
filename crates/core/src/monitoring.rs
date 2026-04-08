@@ -50,6 +50,7 @@ pub enum ProgressStage {
     ToolUse { tool: String },
     ToolResult { tool: String, success: bool },
     Responding,
+    CliSpawned { pid: u32 },
 }
 
 impl std::fmt::Display for ProgressStage {
@@ -65,6 +66,7 @@ impl std::fmt::Display for ProgressStage {
                 }
             }
             ProgressStage::Responding => write!(f, "Responding..."),
+            ProgressStage::CliSpawned { pid } => write!(f, "CLI spawned (PID {pid})"),
         }
     }
 }

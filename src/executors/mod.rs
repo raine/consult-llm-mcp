@@ -65,7 +65,19 @@ pub async fn run_cli_executor(
     parse_line: fn(&str) -> StreamEvents,
 ) -> anyhow::Result<ExecuteResult> {
     let mut reducer = StreamReducer::new(consultation_id, Some(prompt), Some(system_prompt));
-    let result = run_cli_streaming(command, args, Some(stdin_prompt), |line| {
+    let on_spawn: Option<Box<dyn FnOnce(u32) + Send>> =
+        consultation_id.map(|cid| -> Box<dyn FnOnce(u32) + Send> {
+            let cid = cid.to_string();
+            Box::new(move |pid| {
+                consult_llm_core::monitoring::emit(
+                    consult_llm_core::monitoring::MonitorEvent::ConsultProgress {
+                        id: cid,
+                        stage: consult_llm_core::monitoring::ProgressStage::CliSpawned { pid },
+                    },
+                );
+            })
+        });
+    let result = run_cli_streaming(command, args, Some(stdin_prompt), on_spawn, |line| {
         reducer.process(parse_line(line));
     })
     .await?;
