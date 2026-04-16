@@ -59,7 +59,7 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full opening prompt text and file list so it can make the MCP call independently.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full opening prompt text and file list so it can make the MCP call independently.
 
 **Gemini subagent** — prompt must include:
 - Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
@@ -105,7 +105,7 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full rebuttal prompt text and thread_id.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full rebuttal prompt text and thread_id.
 
 **Gemini subagent** — prompt must include:
 - Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: rebuttal prompt with Codex's latest response as the opponent, `thread_id`: `gemini_thread_id`
@@ -218,7 +218,7 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). Each subagent prompt must include the full review prompt, thread_id, and git_diff details.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full review prompt, thread_id, and git_diff details.
 
 **Gemini subagent** — prompt must include:
 - Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `gemini_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
