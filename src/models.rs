@@ -24,6 +24,18 @@ pub enum Provider {
     Gemini,
     DeepSeek,
     MiniMax,
+    Anthropic,
+}
+
+/// HTTP wire-format family used when calling the provider's native API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApiProtocol {
+    /// OpenAI-compatible `/chat/completions` — used by OpenAI, Gemini (OpenAI-compat
+    /// endpoint), DeepSeek, MiniMax.
+    OpenAiCompat,
+    /// Anthropic `/v1/messages` — `x-api-key` auth, top-level `system`, content-block
+    /// responses, distinct usage shape.
+    AnthropicMessages,
 }
 
 /// All known providers in deterministic order.
@@ -33,6 +45,7 @@ pub const ALL_PROVIDERS: &[Provider] = &[
     Provider::DeepSeek,
     Provider::OpenAI,
     Provider::MiniMax,
+    Provider::Anthropic,
 ];
 
 /// Static metadata for a provider — the single place to define provider-specific constants.
@@ -44,6 +57,8 @@ pub struct ProviderSpec {
     pub model_prefixes: &'static [&'static str],
     /// API base URL override (None = default OpenAI-compatible URL).
     pub api_base_url: Option<&'static str>,
+    /// API wire format — picks which executor to instantiate in `Backend::Api` mode.
+    pub api_protocol: ApiProtocol,
     /// Built-in model IDs shipped with this provider.
     pub builtin_models: &'static [&'static str],
     /// Env var for the API key (e.g. "OPENAI_API_KEY").
@@ -72,6 +87,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         id: "gemini",
         model_prefixes: &["gemini-"],
         api_base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
+        api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &[
             "gemini-2.5-pro",
             "gemini-3-pro-preview",
@@ -91,6 +107,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         id: "deepseek",
         model_prefixes: &["deepseek-"],
         api_base_url: Some("https://api.deepseek.com"),
+        api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["deepseek-reasoner"],
         api_key_env: "DEEPSEEK_API_KEY",
         backend_env: "CONSULT_LLM_DEEPSEEK_BACKEND",
@@ -106,6 +123,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         id: "openai",
         model_prefixes: &["gpt-"],
         api_base_url: None,
+        api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["gpt-5.2", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2-codex"],
         api_key_env: "OPENAI_API_KEY",
         backend_env: "CONSULT_LLM_OPENAI_BACKEND",
@@ -121,6 +139,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         id: "minimax",
         model_prefixes: &["MiniMax-"],
         api_base_url: Some("https://api.minimax.io/v1"),
+        api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["MiniMax-M2.7"],
         api_key_env: "MINIMAX_API_KEY",
         backend_env: "CONSULT_LLM_MINIMAX_BACKEND",
@@ -130,6 +149,22 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api", "opencode"],
         opencode_env: "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER",
         default_opencode_provider: "minimax",
+    },
+    ProviderSpec {
+        provider: Provider::Anthropic,
+        id: "anthropic",
+        model_prefixes: &["claude-"],
+        api_base_url: Some("https://api.anthropic.com"),
+        api_protocol: ApiProtocol::AnthropicMessages,
+        builtin_models: &["claude-opus-4-7"],
+        api_key_env: "ANTHROPIC_API_KEY",
+        backend_env: "CONSULT_LLM_ANTHROPIC_BACKEND",
+        legacy_backend_env: None,
+        legacy_mode_env: None,
+        cli_backend_value: None,
+        allowed_backends: &["api"],
+        opencode_env: "CONSULT_LLM_OPENCODE_ANTHROPIC_PROVIDER",
+        default_opencode_provider: "anthropic",
     },
 ];
 
@@ -153,6 +188,11 @@ impl Provider {
     /// API base URL for this provider (when using API backend).
     pub fn api_base_url(&self) -> Option<&'static str> {
         self.spec().api_base_url
+    }
+
+    /// API wire format for this provider (when using API backend).
+    pub fn api_protocol(&self) -> ApiProtocol {
+        self.spec().api_protocol
     }
 }
 
@@ -183,4 +223,5 @@ pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
     ),
     ("deepseek", &["deepseek-reasoner"]),
     ("minimax", &["MiniMax-M2.7"]),
+    ("anthropic", &["claude-opus-4-7"]),
 ];

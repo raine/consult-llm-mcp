@@ -934,8 +934,51 @@ mod tests {
                 "gpt-5.3-codex",
                 "gpt-5.2-codex",
                 "MiniMax-M2.7",
+                "claude-opus-4-7",
             ]
         );
+    }
+
+    #[test]
+    fn test_parse_config_with_anthropic_key() {
+        let env = env_from(&[("ANTHROPIC_API_KEY", "sk-ant-test")]);
+        let (config, registry) = parse_config(env).unwrap();
+        assert!(
+            config
+                .allowed_models
+                .contains(&"claude-opus-4-7".to_string())
+        );
+        assert_eq!(config.providers[&Provider::Anthropic].backend, Backend::Api);
+        assert_eq!(
+            registry.resolve_model(Some("anthropic")).unwrap(),
+            "claude-opus-4-7"
+        );
+    }
+
+    #[test]
+    fn test_parse_config_invalid_anthropic_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_ANTHROPIC_BACKEND", "codex-cli"),
+            ("ANTHROPIC_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
+    }
+
+    #[test]
+    fn test_anthropic_provider_uses_messages_protocol() {
+        assert_eq!(
+            Provider::Anthropic.api_protocol(),
+            crate::models::ApiProtocol::AnthropicMessages
+        );
+        for p in [
+            Provider::OpenAI,
+            Provider::Gemini,
+            Provider::DeepSeek,
+            Provider::MiniMax,
+        ] {
+            assert_eq!(p.api_protocol(), crate::models::ApiProtocol::OpenAiCompat);
+        }
     }
 
     #[test]

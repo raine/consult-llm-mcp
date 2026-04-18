@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added Anthropic provider support with the `claude-opus-4-7` model. Configure
+  with `ANTHROPIC_API_KEY`; select via the `anthropic` selector or the exact
+  model ID. API backend only (no CLI backend).
+
 ## v2.13.1 (2026-04-08)
 
 - Monitor now shows the full error message in the detail view when a

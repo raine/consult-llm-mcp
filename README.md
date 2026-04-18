@@ -1,7 +1,7 @@
 # consult-llm-mcp
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.4, Gemini
-3.1 Pro, DeepSeek Reasoner, MiniMax M2.7) when Sonnet has you running in circles and you need
+3.1 Pro, Claude Opus 4.7, DeepSeek Reasoner, MiniMax M2.7) when Sonnet has you running in circles and you need
 to bring in the heavy artillery. Supports multi-turn conversations.
 
 ```
@@ -28,8 +28,8 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 
 ## Features
 
-- Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, DeepSeek Reasoner, MiniMax
-  M2.7) with
+- Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, Claude Opus 4.7, DeepSeek
+  Reasoner, MiniMax M2.7) with
   relevant files as context
 - Include git changes for code review
 - Comprehensive logging with cost estimation (if using API)
@@ -87,6 +87,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
    claude mcp add consult-llm \
      -e OPENAI_API_KEY=your_openai_key \
      -e GEMINI_API_KEY=your_gemini_key \
+     -e ANTHROPIC_API_KEY=your_anthropic_key \
      -e DEEPSEEK_API_KEY=your_deepseek_key \
      -e MINIMAX_API_KEY=your_minimax_key \
      -- npx -y consult-llm-mcp
@@ -550,10 +551,11 @@ See the "Using web mode..." example above for a concrete transcript.
   mode)
 - `DEEPSEEK_API_KEY` - Your DeepSeek API key (required for DeepSeek models)
 - `MINIMAX_API_KEY` - Your MiniMax API key (required for MiniMax models)
+- `ANTHROPIC_API_KEY` - Your Anthropic API key (required for Claude models)
 - `CONSULT_LLM_DEFAULT_MODEL` - Override the default model (optional)
-  - Accepts selectors (`gemini`, `openai`, `deepseek`, `minimax`) or exact model
-    IDs
-    (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.)
+  - Accepts selectors (`gemini`, `openai`, `anthropic`, `deepseek`, `minimax`)
+    or exact model IDs
+    (`gpt-5.4`, `gemini-3.1-pro-preview`, `claude-opus-4-7`, etc.)
   - Selectors are resolved to the best available model at startup
 - `CONSULT_LLM_GEMINI_BACKEND` - Backend for Gemini models (optional)
   - Options: `api` (default), `gemini-cli`, `cursor-cli`, `opencode`
@@ -563,6 +565,8 @@ See the "Using web mode..." example above for a concrete transcript.
   - Options: `api` (default), `opencode`
 - `CONSULT_LLM_MINIMAX_BACKEND` - Backend for MiniMax models (optional)
   - Options: `api` (default), `opencode`
+- `CONSULT_LLM_ANTHROPIC_BACKEND` - Backend for Anthropic models (optional)
+  - Options: `api` (default)
 - `CONSULT_LLM_ALLOWED_MODELS` - Restrict which concrete models can be used
   (optional)
   - Comma-separated list, e.g., `gpt-5.4,gemini-3.1-pro-preview`
@@ -574,7 +578,7 @@ See the "Using web mode..." example above for a concrete transcript.
   - Comma-separated list, e.g., `grok-3,kimi-k2.5`
   - Merged with built-in models and included in the tool schema
   - Useful for newly released models with a known provider prefix (`gpt-`,
-    `gemini-`, `deepseek-`, `MiniMax-`)
+    `gemini-`, `deepseek-`, `MiniMax-`, `claude-`)
 - `CONSULT_LLM_CODEX_REASONING_EFFORT` - Configure reasoning effort for Codex
   CLI (optional, default: `high`)
   - See [Codex CLI](#codex-cli) for details and available options
@@ -632,17 +636,19 @@ claude mcp add consult-llm \
 
 ### Controlling which models are used
 
-The `model` parameter accepts **selectors** (`gemini`, `openai`, `deepseek`)
-that the server resolves to the best available concrete model. When no model is
-specified, the server uses `CONSULT_LLM_DEFAULT_MODEL` or its built-in fallback.
+The `model` parameter accepts **selectors** (`gemini`, `openai`, `anthropic`,
+`deepseek`) that the server resolves to the best available concrete model. When
+no model is specified, the server uses `CONSULT_LLM_DEFAULT_MODEL` or its
+built-in fallback.
 
 **Selector resolution order** (first available wins):
 
-| Selector   | Priority                                                       |
-| ---------- | -------------------------------------------------------------- |
-| `gemini`   | gemini-3.1-pro-preview → gemini-3-pro-preview → gemini-2.5-pro |
-| `openai`   | gpt-5.4 → gpt-5.3-codex → gpt-5.2 → gpt-5.2-codex              |
-| `deepseek` | deepseek-reasoner                                              |
+| Selector    | Priority                                                       |
+| ----------- | -------------------------------------------------------------- |
+| `gemini`    | gemini-3.1-pro-preview → gemini-3-pro-preview → gemini-2.5-pro |
+| `openai`    | gpt-5.4 → gpt-5.3-codex → gpt-5.2 → gpt-5.2-codex              |
+| `anthropic` | claude-opus-4-7                                                |
+| `deepseek`  | deepseek-reasoner                                              |
 
 **Restricting models with `CONSULT_LLM_ALLOWED_MODELS`:**
 
@@ -672,10 +678,10 @@ models complex questions.
   - All files are added as context with file paths and code blocks
 
 - **model** (optional): Model selector or exact model ID
-  - Selectors: `gemini`, `openai`, `deepseek` — the server resolves to the best
-    available model for each family
-  - Exact model IDs (`gpt-5.4`, `gemini-3.1-pro-preview`, etc.) are also
-    accepted as an advanced override
+  - Selectors: `gemini`, `openai`, `anthropic`, `deepseek` — the server resolves
+    to the best available model for each family
+  - Exact model IDs (`gpt-5.4`, `gemini-3.1-pro-preview`, `claude-opus-4-7`,
+    etc.) are also accepted as an advanced override
   - When omitted, the server uses the configured default
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM
@@ -717,6 +723,7 @@ models complex questions.
 - **gpt-5.2**: OpenAI's GPT-5.2 model
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3
 - **gpt-5.2-codex**: OpenAI's Codex model based on GPT-5.2
+- **claude-opus-4-7**: Anthropic's Claude Opus 4.7
 
 ## Logging
 

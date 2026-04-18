@@ -43,6 +43,10 @@ fn get_pricing(model: &str) -> Option<ModelPricing> {
             input_per_million: 0.30,
             output_per_million: 1.20,
         },
+        "claude-opus-4-7" => ModelPricing {
+            input_per_million: 5.0,
+            output_per_million: 25.0,
+        },
         _ => return None,
     })
 }

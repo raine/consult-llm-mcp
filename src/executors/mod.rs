@@ -1,3 +1,4 @@
+pub mod anthropic_api;
 pub mod api;
 pub mod cli_runner;
 pub mod codex_cli;

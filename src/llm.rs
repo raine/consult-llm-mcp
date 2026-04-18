@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::config::{Backend, config};
+use crate::executors::anthropic_api::AnthropicApiExecutor;
 use crate::executors::api::ApiExecutor;
 use crate::executors::codex_cli::CodexCliExecutor;
 use crate::executors::cursor_cli::CursorCliExecutor;
 use crate::executors::gemini_cli::GeminiCliExecutor;
 use crate::executors::opencode_cli::OpenCodeCliExecutor;
 use crate::executors::types::LlmExecutor;
-use crate::models::Provider;
+use crate::models::{ApiProtocol, Provider};
 
 pub struct ExecutorProvider {
     cache: Mutex<HashMap<String, Arc<dyn LlmExecutor>>>,
@@ -45,11 +46,19 @@ impl ExecutorProvider {
                 let key = cfg.api_key_for(provider).ok_or_else(|| {
                     anyhow::anyhow!("API key is required for {provider:?} models in API mode")
                 })?;
-                Arc::new(ApiExecutor::new(
-                    self.http_client.clone(),
-                    key.to_string(),
-                    provider.api_base_url().map(|s| s.to_string()),
-                ))
+                let base = provider.api_base_url().map(|s| s.to_string());
+                match provider.api_protocol() {
+                    ApiProtocol::OpenAiCompat => Arc::new(ApiExecutor::new(
+                        self.http_client.clone(),
+                        key.to_string(),
+                        base,
+                    )),
+                    ApiProtocol::AnthropicMessages => Arc::new(AnthropicApiExecutor::new(
+                        self.http_client.clone(),
+                        key.to_string(),
+                        base,
+                    )),
+                }
             }
             Backend::CodexCli => {
                 Arc::new(CodexCliExecutor::new(cfg.codex_reasoning_effort.clone()))
