@@ -181,7 +181,6 @@ impl LlmExecutor for AnthropicApiExecutor {
         let msg_resp: MessagesResponse = resp.json().await?;
 
         match msg_resp.stop_reason.as_deref() {
-            Some("refusal") => anyhow::bail!("Anthropic API refused to generate a response"),
             Some("pause_turn") => anyhow::bail!(
                 "Anthropic API returned pause_turn — long-running turn was paused mid-stream"
             ),
@@ -190,6 +189,18 @@ impl LlmExecutor for AnthropicApiExecutor {
                     "WARNING: Anthropic response for {model} truncated by max_tokens ({DEFAULT_MAX_TOKENS})"
                 ));
                 eprintln!("Warning: response truncated by max_tokens ({DEFAULT_MAX_TOKENS})");
+            }
+            Some("model_context_window_exceeded") => {
+                log_to_file(&format!(
+                    "WARNING: Anthropic response for {model} truncated — model context window exceeded"
+                ));
+                eprintln!("Warning: response truncated — model context window exceeded");
+            }
+            Some("refusal") => {
+                log_to_file(&format!(
+                    "WARNING: Anthropic response for {model} stopped with refusal — model declined to answer"
+                ));
+                eprintln!("Warning: model declined to answer (refusal)");
             }
             _ => {}
         }
@@ -304,6 +315,36 @@ mod tests {
         }"#;
         let r: MessagesResponse = serde_json::from_str(json).unwrap();
         assert!(matches!(r.content[0], ContentBlock::Other));
+    }
+
+    #[test]
+    fn deserializes_refusal_with_content() {
+        // Refusals come back as a successful response with content; we should
+        // surface the content rather than drop it.
+        let json = r#"{
+            "content": [{"type": "text", "text": "I can't help with that."}],
+            "stop_reason": "refusal",
+            "usage": {"input_tokens": 5, "output_tokens": 7}
+        }"#;
+        let r: MessagesResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(r.stop_reason.as_deref(), Some("refusal"));
+        assert!(
+            matches!(r.content[0], ContentBlock::Text { ref text } if text.contains("can't help"))
+        );
+    }
+
+    #[test]
+    fn deserializes_context_window_exceeded() {
+        let json = r#"{
+            "content": [{"type": "text", "text": "partial"}],
+            "stop_reason": "model_context_window_exceeded",
+            "usage": {"input_tokens": 100, "output_tokens": 50}
+        }"#;
+        let r: MessagesResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            r.stop_reason.as_deref(),
+            Some("model_context_window_exceeded")
+        );
     }
 
     #[test]
