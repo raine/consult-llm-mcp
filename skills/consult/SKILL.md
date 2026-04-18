@@ -78,8 +78,10 @@ Call `mcp__consult-llm__consult_llm` with:
 
 - ALWAYS gather file context before consulting
 - **Pass through the user's query faithfully** — do NOT add your own theories,
-  suspects, analysis, or suggested solutions to the prompt. The user's words are
-  the prompt. You may lightly rephrase for clarity or add brief factual context
+  suspects, analysis, or suggested solutions to the prompt. The user's intent
+  is the prompt. Rephrase as needed so the prompt reads as a direct question to
+  the LLM, not a meta-instruction to you. You may add brief factual context
   (e.g. "we recently changed X to Y"), but never inject your own diagnostic
-  opinions or hypotheses.
+  opinions or hypotheses. Do not pass the user's query through verbatim if it
+  is phrased as an instruction to you rather than a question for the LLM.
 - Provide focused, relevant files (quality over quantity)
