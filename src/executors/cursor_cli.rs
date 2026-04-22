@@ -215,13 +215,18 @@ fn extract_cursor_tool_error(tool_call: &serde_json::Value) -> Option<String> {
 fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     let mut cursor_model = model.replace("-preview", "");
 
-    // cursor-agent encodes reasoning effort in the model name
-    // e.g. gpt-5.3-codex + high → gpt-5.3-codex-high
-    if cursor_model.contains("-codex") {
+    // cursor-agent encodes reasoning effort in the model name for models
+    // that require it. e.g. gpt-5.3-codex + high → gpt-5.3-codex-high,
+    // gpt-5.4 + high → gpt-5.4-high. Bare gpt-5.4 is no longer accepted.
+    if model_requires_reasoning_suffix(&cursor_model) {
         cursor_model = format!("{cursor_model}-{codex_reasoning_effort}");
     }
 
     cursor_model
+}
+
+fn model_requires_reasoning_suffix(model: &str) -> bool {
+    model.contains("-codex") || model == "gpt-5.4"
 }
 
 fn append_files(text: &str, file_paths: Option<&[PathBuf]>) -> String {
@@ -255,7 +260,7 @@ impl LlmExecutor for CursorCliExecutor {
     }
 
     fn reasoning_effort(&self, model: &str) -> Option<&str> {
-        if model.contains("-codex") {
+        if model_requires_reasoning_suffix(model) {
             Some(&self.codex_reasoning_effort)
         } else {
             None
