@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## v2.13.2 (2026-04-22)
 
 - Added Anthropic provider support with the `claude-opus-4-7` model. Configure
   with `ANTHROPIC_API_KEY`; select via the `anthropic` selector or the exact
   model ID. API backend only (no CLI backend).
+- Monitor: press `K` on an active consultation to kill a stuck agent process
+  after confirming
+- Fixed cursor-cli backend failing with "Cannot use this model: gpt-5.4" when
+  using the `openai` selector, by automatically appending the reasoning effort
+  suffix
 
 ## v2.13.1 (2026-04-08)
 
