@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.13.3 (2026-04-23)
+
+- Added gpt-5.5 model support ($5/$30 per million tokens). The `openai` selector
+  now resolves to gpt-5.5, and the Cursor CLI backend automatically appends the
+  reasoning effort suffix when routing through cursor-agent
+
 ## v2.13.2 (2026-04-22)
 
 - Added Anthropic provider support with the `claude-opus-4-7` model. Configure
