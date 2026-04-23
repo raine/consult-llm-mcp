@@ -11,6 +11,10 @@ pub struct CostResult {
 
 fn get_pricing(model: &str) -> Option<ModelPricing> {
     Some(match model {
+        "gpt-5.5" => ModelPricing {
+            input_per_million: 5.0,
+            output_per_million: 30.0,
+        },
         "gpt-5.4" => ModelPricing {
             input_per_million: 2.5,
             output_per_million: 15.0,

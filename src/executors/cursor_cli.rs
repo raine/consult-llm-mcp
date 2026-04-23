@@ -217,7 +217,7 @@ fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
 
     // cursor-agent encodes reasoning effort in the model name for models
     // that require it. e.g. gpt-5.3-codex + high → gpt-5.3-codex-high,
-    // gpt-5.4 + high → gpt-5.4-high. Bare gpt-5.4 is no longer accepted.
+    // gpt-5.4 + high → gpt-5.4-high. Bare gpt-5.4/gpt-5.5 are not accepted.
     if model_requires_reasoning_suffix(&cursor_model) {
         cursor_model = format!("{cursor_model}-{codex_reasoning_effort}");
     }
@@ -226,7 +226,7 @@ fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
 }
 
 fn model_requires_reasoning_suffix(model: &str) -> bool {
-    model.contains("-codex") || model == "gpt-5.4"
+    model.contains("-codex") || model == "gpt-5.4" || model == "gpt-5.5"
 }
 
 fn append_files(text: &str, file_paths: Option<&[PathBuf]>) -> String {

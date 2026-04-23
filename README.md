@@ -646,7 +646,7 @@ built-in fallback.
 | Selector    | Priority                                                       |
 | ----------- | -------------------------------------------------------------- |
 | `gemini`    | gemini-3.1-pro-preview → gemini-3-pro-preview → gemini-2.5-pro |
-| `openai`    | gpt-5.4 → gpt-5.3-codex → gpt-5.2 → gpt-5.2-codex              |
+| `openai`    | gpt-5.5 → gpt-5.4 → gpt-5.3-codex → gpt-5.2 → gpt-5.2-codex    |
 | `anthropic` | claude-opus-4-7                                                |
 | `deepseek`  | deepseek-reasoner                                              |
 
@@ -719,6 +719,7 @@ models complex questions.
 - **gemini-3.1-pro-preview**: Google's Gemini 3.1 Pro Preview
 - **deepseek-reasoner**: DeepSeek's reasoning model
 - **MiniMax-M2.7**: MiniMax's M2.7 reasoning model (204K context)
+- **gpt-5.5**: OpenAI's GPT-5.5 model
 - **gpt-5.4**: OpenAI's GPT-5.4 model
 - **gpt-5.2**: OpenAI's GPT-5.2 model
 - **gpt-5.3-codex**: OpenAI's Codex model based on GPT-5.3

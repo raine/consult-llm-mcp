@@ -827,8 +827,8 @@ mod tests {
         ]);
         let (config, registry) = parse_config(env).unwrap();
         // Selector should be resolved to concrete model at startup
-        assert_eq!(config.default_model, Some("gpt-5.4".to_string()));
-        assert_eq!(registry.default_model, Some("gpt-5.4".to_string()));
+        assert_eq!(config.default_model, Some("gpt-5.5".to_string()));
+        assert_eq!(registry.default_model, Some("gpt-5.5".to_string()));
     }
 
     #[test]
@@ -931,6 +931,7 @@ mod tests {
                 "deepseek-reasoner",
                 "gpt-5.2",
                 "gpt-5.4",
+                "gpt-5.5",
                 "gpt-5.3-codex",
                 "gpt-5.2-codex",
                 "MiniMax-M2.7",
