@@ -14,9 +14,9 @@ pub struct Cli {
     #[command(subcommand)]
     pub cmd: Option<Command>,
 
-    /// Model selector ("gemini", "openai", "anthropic", "deepseek", "minimax") or exact ID
+    /// Model selector (repeatable: -m gemini -m openai). Use a provider family name or exact model ID.
     #[arg(short = 'm', long = "model")]
-    pub model: Option<String>,
+    pub model: Vec<String>,
 
     /// File context (repeatable)
     #[arg(short = 'f', long = "file")]

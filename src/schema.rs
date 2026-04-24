@@ -2,6 +2,23 @@ use serde::Deserialize;
 
 pub use crate::models::TaskMode;
 
+/// Accepts either a single model identifier or an array of identifiers.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum ModelSelector {
+    Many(Vec<String>),
+    One(String),
+}
+
+impl ModelSelector {
+    pub fn into_vec(self) -> Vec<String> {
+        match self {
+            Self::One(s) => vec![s],
+            Self::Many(v) => v,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct GitDiffArgs {
     /// Path to git repository (defaults to current working directory)
@@ -23,8 +40,8 @@ pub struct ConsultLlmArgs {
     pub prompt: String,
     /// Array of file paths to include as context. All files are added as context with file paths and code blocks.
     pub files: Option<Vec<String>>,
-    /// Optional model selector. Usually omit this to use the server's configured default. Use 'gemini', 'openai', 'anthropic', 'deepseek', or 'minimax' to pick a provider family. Exact model IDs are also accepted as an advanced override. Ignored when `web_mode` is `true`.
-    pub model: Option<String>,
+    /// Optional model selector. Pass a single string (e.g. "gemini") for one model, or an array (e.g. ["gemini", "openai"]) to consult multiple models in parallel. Usually omit to use the configured default. Max 5 models per call.
+    pub model: Option<ModelSelector>,
     /// Controls the system prompt persona. Choose based on the task: "review": critical code reviewer for finding bugs, security issues, and quality problems. "debug": focused troubleshooter for root cause analysis from errors, logs, and stack traces — ignores style issues. "plan": constructive architect for exploring trade-offs and designing solutions — always includes a final recommendation. "create": generative writer for producing documentation, content, or designs. "general" (default): neutral prompt that defers to your instructions in the prompt field.
     #[serde(default)]
     pub task_mode: TaskMode,

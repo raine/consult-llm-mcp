@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::cli::{Cli, input, output};
 use crate::config;
 use crate::llm::ExecutorProvider;
-use crate::schema::{ConsultLlmArgs, GitDiffArgs};
+use crate::schema::{ConsultLlmArgs, GitDiffArgs, ModelSelector};
 use crate::service::{ConsultOutcome, ConsultService};
 
 pub fn build_args(cli: &Cli, prompt: String) -> ConsultLlmArgs {
@@ -16,6 +16,11 @@ pub fn build_args(cli: &Cli, prompt: String) -> ConsultLlmArgs {
     } else {
         None
     };
+    let model = match cli.model.len() {
+        0 => None,
+        1 => Some(ModelSelector::One(cli.model[0].clone())),
+        _ => Some(ModelSelector::Many(cli.model.clone())),
+    };
     ConsultLlmArgs {
         prompt,
         files: if cli.files.is_empty() {
@@ -23,7 +28,7 @@ pub fn build_args(cli: &Cli, prompt: String) -> ConsultLlmArgs {
         } else {
             Some(cli.files.clone())
         },
-        model: cli.model.clone(),
+        model,
         task_mode: cli.task.into(),
         web_mode: cli.web,
         thread_id: cli.thread_id.clone(),
@@ -52,6 +57,9 @@ pub async fn run_ask(cli: Cli) -> Result<(), input::CliError> {
             ..
         } => {
             output::print_response(&model, thread_id.as_deref(), &body);
+        }
+        ConsultOutcome::GroupResponse { body, .. } => {
+            println!("{body}");
         }
         ConsultOutcome::WebPrompt {
             clipboard_text,

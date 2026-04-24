@@ -40,6 +40,7 @@ uuid = { workspace = true }
 smallvec = "1"
 tempfile = "3"
 clap = { version = "4", features = ["derive"] }
+futures = "0.3"
 
 [[bin]]
 name = "consult-llm"

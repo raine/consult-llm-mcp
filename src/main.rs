@@ -10,6 +10,7 @@ mod external_dirs;
 mod file;
 mod git;
 mod git_worktree;
+mod group_thread_store;
 mod llm;
 mod llm_query;
 mod logger;

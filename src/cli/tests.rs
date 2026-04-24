@@ -5,7 +5,7 @@ use crate::schema::TaskMode;
 fn bare_cli(files: Vec<String>, diff_files: Vec<String>) -> super::Cli {
     super::Cli {
         cmd: None,
-        model: None,
+        model: vec![],
         files,
         thread_id: None,
         task: TaskArg::General,
