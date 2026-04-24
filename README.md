@@ -29,28 +29,27 @@ Installed binaries: `consult-llm`, `consult-llm-monitor` (repo: [consult-llm-mcp
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
 ```
 
-2. Pick a backend.
-
-CLI backends are the easiest to start with:
-
-- Gemini models: `gemini login`
-- OpenAI models: `codex login`
-
-Common setup:
+2. Pick a backend and scaffold your config:
 
 ```bash
-export CONSULT_LLM_GEMINI_BACKEND=gemini-cli
-export CONSULT_LLM_OPENAI_BACKEND=codex-cli
+consult-llm init-config
 ```
 
-Or use API keys:
+CLI backends are the easiest to start with — no API key needed:
+
+```yaml
+# ~/.consult-llm/config.yaml
+gemini:
+  backend: gemini-cli # requires: gemini login
+openai:
+  backend: codex-cli # requires: codex login
+```
+
+Or set API keys as environment variables:
 
 ```bash
 export OPENAI_API_KEY=your_openai_key
 export GEMINI_API_KEY=your_gemini_key
-export ANTHROPIC_API_KEY=your_anthropic_key
-export DEEPSEEK_API_KEY=your_deepseek_key
-export MINIMAX_API_KEY=your_minimax_key
 ```
 
 3. Install the skills so your agent can call `consult-llm` for you:
@@ -125,7 +124,7 @@ Requirements:
 # ~/.consult-llm/config.yaml
 openai:
   backend: codex-cli
-  reasoning_effort: high  # none | minimal | low | medium | high | xhigh
+  reasoning_effort: high # none | minimal | low | medium | high | xhigh
 ```
 
 ### Cursor CLI
@@ -147,11 +146,11 @@ If your prompts need shell commands in Cursor CLI ask mode, allow them in
 # ~/.consult-llm/config.yaml
 openai:
   backend: opencode
-  opencode_provider: openai       # optional: override the OpenCode provider
+  opencode_provider: openai # optional: override the OpenCode provider
 gemini:
   backend: opencode
 opencode:
-  default_provider: copilot       # applies to all providers without an override
+  default_provider: copilot # applies to all providers without an override
 ```
 
 ## Configuration
