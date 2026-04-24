@@ -60,6 +60,167 @@ consult-llm install-skills
 
 Then invoke skills from inside your agent (see [Usage](#usage) right below).
 
+## Example workflows
+
+Some real-world examples. Click to expand.
+
+<details>
+<summary>Explain the problem, ask a smarter LLM for help</summary>
+
+```
+  <Some long explanation of the issue here>
+
+  Consult LLM for assistance, use gemini
+
+⏺ I see the issue! The frontend is trying to use the hint for "isn't" but the
+  server generated a hint for "isn't it" (the full phrase). Let me consult
+  Gemini about this segmentation mismatch.
+
+⏺ Write(hint-segmentation-issue.md)
+  ⎿  Wrote 53 lines to hint-segmentation-issue.md
+     # Hint Segmentation Mismatch Issue
+     ...
+
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini hint-segmentation-issue.md web/src/components/HintsText.tsx web/src/utils/hints.ts server/src/routes/public/hints.ts
+  What's the best fix for this hint segmentation mismatch?
+  EOF)
+  ⎿  [model:gemini-3.1-pro-preview] [thread_id:a3f7c...]
+
+     An excellent analysis of the problem. The root cause has been correctly
+     identified: a race condition within `handleConfirmGenerateHints`. The
+     component state updates in the background after `await generateHints()`,
+     but the function continues executing with a stale `activeSegment` variable,
+     causing it to request a hint for a smaller text segment ("isn't") instead
+     of the full, newly-available hint phrase ("isn't it").
+     … +607 lines (ctrl+r to expand)
+
+⏺ The LLM identified the core issue — stale state after an async operation.
+  I'll re-target the hint key after generation to find the correct match.
+
+⏺ Update Todos
+  ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint key
+       targeting in handleConfirmGenerateHints
+```
+
+</details>
+
+<details>
+<summary>Using web mode to copy prompts to clipboard for browser-based LLMs</summary>
+
+```
+> I need help implementing a -b/--background flag for my Rust CLI.
+  Use consult LLM with web mode
+
+⏺ I'll use web mode to copy the formatted prompt to your clipboard so you can
+  paste it into any browser-based LLM service.
+
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini --browser src/cli.rs src/workflow.rs src/tmux.rs
+  What is the best approach to implement a -b/--background flag for the
+  "workmux add" command that creates a tmux window without switching to it?
+  EOF)
+  ⎿  ✓ Prompt copied to clipboard!
+
+     Please paste it into your browser-based LLM service and share the response
+     here before I proceed with any implementation.
+
+     Note: File paths were included:
+       - src/cli.rs
+       - src/workflow.rs
+       - src/tmux.rs
+
+> [User pastes the response from the external LLM]
+
+⏺ Thank you! Based on the recommendations, I'll now implement the solution...
+```
+
+This is useful when:
+
+- You want to use a free browser-based LLM service instead of API credits
+- You prefer a specific LLM's web interface
+- You want to review the full prompt before submitting it
+
+</details>
+
+<details>
+<summary>Debugging a broken Neovim plugin</summary>
+
+````
+⏺ Fixed! Added nil checks and updated the iter_matches call.
+
+> Still not working:
+
+  E5108: Error executing lua /Users/raine/code/testonly.nvim/lua/testonly.lua:92:
+  attempt to call method 'child' (a nil value)
+
+  Ask gemini
+
+⏺ Let me consult Gemini to understand the current Neovim treesitter API:
+
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini lua/testonly.lua
+  I'm debugging a Neovim plugin broken by treesitter API changes. Error:
+  "attempt to call method 'child' (a nil value)" on line 92. The code uses
+  iter_matches() to access child nodes but the API seems to have changed in
+  newer Neovim versions. What's the correct approach?
+  EOF)
+  ⎿  [model:gemini-3.1-pro-preview] [thread_id:b9e2a...]
+
+     The root cause: iter_matches() can return nil nodes in newer Neovim
+     versions. Switch to iter_captures() which never returns nil nodes, and
+     use named_child(0) instead of child(0) to skip punctuation nodes.
+     … +93 lines (ctrl+r to expand)
+
+⏺ Update(lua/testonly.lua)
+  ⎿  Updated lua/testonly.lua with 7 additions and 10 removals
+     - for _, match, _ in parsed_query:iter_matches(root, bufnr, ...) do
+     -   for id, node in pairs(match) do
+     -     local child = node:child(0)
+     + for id, node, _ in parsed_query:iter_captures(root, bufnr, ...) do
+     +   local first_child = node:named_child(0)
+````
+
+</details>
+
+<details>
+<summary>Consulting multiple LLMs for comparison</summary>
+
+```
+> /consult The branch completions should be dynamic — git should only be
+  called when using tab to autocomplete. Ask gemini and codex
+
+⏺ I'll consult both Gemini and Codex about making branch completions dynamic.
+
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini src/cli.rs src/git.rs
+  I have a Rust CLI using clap that needs dynamic shell completions. Currently,
+  branch completions are generated at script generation time via
+  possible_values(), which calls git. Instead, git should only run when the
+  user presses TAB. Running `workmux completions zsh` takes ~210ms because it
+  runs git during generation. How can I implement truly dynamic completions?
+  EOF)
+  ⎿  [model:gemini-3.1-pro-preview] [thread_id:c1d4e...]
+
+     The root cause: clap_complete::generate() calls possible_values() during
+     script generation, baking current branches into the static script. This
+     is both slow (happens every shell startup) and stale (branches change).
+     … +116 lines (ctrl+r to expand)
+
+⏺ Bash(cat <<'EOF' | consult-llm -m codex src/cli.rs src/git.rs
+  [same prompt]
+  EOF)
+  ⎿  [model:gpt-5.5] [thread_id:d2f5b...]
+
+     WorktreeBranchParser::possible_values runs git during script generation,
+     so workmux completions zsh always pays the git cost even though the result
+     is only needed at tab time.
+     … +77 lines (ctrl+r to expand)
+
+⏺ Both Gemini and Codex independently arrived at the same root cause and
+  solution. I'll implement the dynamic completion approach now.
+```
+
+This shows using `/consult` to ask multiple LLMs about the same problem in parallel and compare their responses.
+
+</details>
+
 ## Usage
 
 The CLI is invoked by your agent via the installed skills; you don't call it directly. From inside Claude Code, OpenCode, or Codex:
@@ -137,6 +298,42 @@ consult-llm config set openai.opencode_provider openai  # optional: override the
 consult-llm config set gemini.backend opencode
 consult-llm config set opencode.default_provider copilot  # applies to providers without an override
 ```
+
+## Multi-turn conversations
+
+CLI backends support multi-turn conversations. The first response includes a
+`[thread_id:xxx]` prefix — pass that ID back with `--thread-id` to continue
+the conversation with full context from prior turns.
+
+```
+> Ask codex what's the best caching strategy for our read-heavy API
+
+⏺ Bash(cat <<'EOF' | consult-llm -m codex
+  What's the best caching strategy for a read-heavy API?
+  EOF)
+  ⎿  [model:gpt-5.5] [thread_id:thread_b1ff711...]
+
+     Redis with TTL-based invalidation. Set short TTLs for volatile data ...
+
+⏺ Codex recommends Redis with TTL-based invalidation — but our payment
+  endpoints need strong consistency. Let me push back on that.
+
+⏺ Bash(cat <<'EOF' | consult-llm -m codex --thread-id thread_b1ff711...
+  What if we need strong consistency guarantees? Does that change your
+  recommendation?
+  EOF)
+  ⎿  [model:gpt-5.5] [thread_id:thread_b1ff711...]
+
+     Yes — with strong consistency, the TTL approach breaks down. Consider
+     write-through caching or cache invalidation on writes instead ...
+
+⏺ Codex revised its recommendation based on the consistency constraint. I'll
+  use write-through caching for the payment endpoints.
+```
+
+This works with all CLI backends (Gemini CLI, Codex CLI, Cursor CLI). See the
+[debate skills](#skills) for multi-LLM workflows that use thread IDs to
+maintain context across debate rounds.
 
 ## Configuration
 
@@ -247,11 +444,42 @@ All prompts and responses are logged to:
 $XDG_STATE_HOME/consult-llm/consult-llm.log
 ```
 
-Default:
+Default: `~/.local/state/consult-llm/consult-llm.log`
 
-```text
-~/.local/state/consult-llm/consult-llm.log
+Each entry includes tool call arguments, the full prompt, the full response,
+and token usage with cost estimates.
+
+<details>
+<summary>Example log entry</summary>
+
 ```
+[2025-06-22T20:16:04.673Z] RUN: consult-llm
+Arguments: {
+  "model": "deepseek-v4-pro",
+  "files": [
+    "refactor-analysis.md",
+    "src/main.ts",
+    "src/schema.ts",
+    "src/config.ts"
+  ]
+}
+================================================================================
+[2025-06-22T20:16:04.675Z] PROMPT (model: deepseek-v4-pro):
+## Relevant Files
+
+### File: src/main.ts
+...
+
+Please provide specific suggestions for refactoring with example code structure
+where helpful.
+================================================================================
+[2025-06-22T20:19:20.632Z] RESPONSE (model: deepseek-v4-pro):
+Based on the analysis, here are the key refactoring suggestions...
+
+Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.012877)
+```
+
+</details>
 
 ## Monitor
 
