@@ -108,8 +108,10 @@ Requirements:
 1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 2. Run `gemini login`
 
-```bash
-export CONSULT_LLM_GEMINI_BACKEND=gemini-cli
+```yaml
+# ~/.consult-llm/config.yaml
+gemini:
+  backend: gemini-cli
 ```
 
 ### Codex CLI
@@ -119,21 +121,21 @@ Requirements:
 1. Install Codex CLI
 2. Run `codex login`
 
-```bash
-export CONSULT_LLM_OPENAI_BACKEND=codex-cli
-```
-
-Reasoning effort defaults to `high`. Override with:
-
-```bash
-export CONSULT_LLM_CODEX_REASONING_EFFORT=xhigh
+```yaml
+# ~/.consult-llm/config.yaml
+openai:
+  backend: codex-cli
+  reasoning_effort: high  # none | minimal | low | medium | high | xhigh
 ```
 
 ### Cursor CLI
 
-```bash
-export CONSULT_LLM_OPENAI_BACKEND=cursor-cli
-export CONSULT_LLM_GEMINI_BACKEND=cursor-cli
+```yaml
+# ~/.consult-llm/config.yaml
+openai:
+  backend: cursor-cli
+gemini:
+  backend: cursor-cli
 ```
 
 If your prompts need shell commands in Cursor CLI ask mode, allow them in
@@ -141,20 +143,16 @@ If your prompts need shell commands in Cursor CLI ask mode, allow them in
 
 ### OpenCode
 
-```bash
-export CONSULT_LLM_OPENAI_BACKEND=opencode
-export CONSULT_LLM_GEMINI_BACKEND=opencode
-export CONSULT_LLM_DEEPSEEK_BACKEND=opencode
-export CONSULT_LLM_MINIMAX_BACKEND=opencode
+```yaml
+# ~/.consult-llm/config.yaml
+openai:
+  backend: opencode
+  opencode_provider: openai       # optional: override the OpenCode provider
+gemini:
+  backend: opencode
+opencode:
+  default_provider: copilot       # applies to all providers without an override
 ```
-
-Provider-prefix override env vars:
-
-- `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`
-- `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`
-- `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER`
-- `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`
-- `CONSULT_LLM_OPENCODE_PROVIDER`
 
 ## Configuration
 
@@ -191,7 +189,32 @@ opencode:
   default_provider: copilot
 ```
 
-### Environment variables (highest precedence)
+### API keys
+
+API keys cannot go in config files and must be set as environment variables:
+
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `MINIMAX_API_KEY`
+
+### Custom system prompt
+
+```bash
+consult-llm init-prompt   # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+```
+
+Override the path in config:
+
+```yaml
+system_prompt_path: /path/to/project/.consult-llm/SYSTEM_PROMPT.md
+```
+
+<details>
+<summary>All environment variables</summary>
+
+Environment variables override config file values.
 
 | Variable                                 | Description                                                   | Allowed values                                 | Default                           |
 | ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
@@ -217,26 +240,7 @@ opencode:
 | `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.consult-llm/SYSTEM_PROMPT.md` |
 | `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               | —                                 |
 
-### Custom system prompt
-
-Create the default prompt file:
-
-```bash
-consult-llm init-prompt
-consult-llm init-config   # scaffold user config file
-```
-
-Default location:
-
-```text
-~/.consult-llm/SYSTEM_PROMPT.md
-```
-
-Override it with:
-
-```bash
-export CONSULT_LLM_SYSTEM_PROMPT_PATH=/path/to/project/.consult-llm/SYSTEM_PROMPT.md
-```
+</details>
 
 ## Logging
 
