@@ -272,13 +272,23 @@ run metadata, event streams, and shared history.
 
 ## Skills
 
-Install all shipped skills globally:
+### Architecture
+
+The skill system has two layers:
+
+**`consult-llm` (base CLI)** handles the mechanics: reading stdin, attaching file context, calling the right backend, streaming the response, and managing thread IDs for multi-turn conversations. A dedicated `consult-llm` reference skill documents this contract and is loaded by other skills before they invoke the CLI.
+
+**Workflow skills** compose on top. They gather context from the codebase, decide which models to call and how, and synthesize the results for you. When you run `/consult` or `/debate`, the agent reads a skill file that tells it how to orchestrate one or more `consult-llm` calls and what to do with the responses.
+
+This separation means the CLI stays simple and testable while the orchestration logic lives in plain Markdown that you can read and customize.
+
+### Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
 ```
 
-Platforms supported by the installer:
+Platforms supported:
 
 - Claude Code: `~/.claude/skills/`
 - OpenCode: `~/.config/opencode/skills/`
@@ -290,15 +300,15 @@ To uninstall:
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash -s uninstall
 ```
 
-Included skills:
+### Included skills
 
-- `consult`: ask Gemini, Codex, or browser/web mode through the CLI
-- `collab`: Gemini and Codex brainstorm together
-- `collab-vs`: Claude brainstorms with one opponent LLM
-- `debate`: Gemini and Codex critique competing approaches
-- `debate-vs`: Claude debates one opponent LLM
+- `consult`: ask Gemini, Codex, or both; supports `--gemini`, `--codex`, and `--browser` flags
+- `collab`: Gemini and Codex brainstorm together, building on each other's ideas
+- `collab-vs`: Claude brainstorms with one opponent LLM in alternating turns
+- `debate`: Gemini and Codex propose and critique competing approaches
+- `debate-vs`: Claude debates one opponent LLM, then synthesizes the best answer
 
-See `skills/*/SKILL.md` for the exact prompts and CLI invocation patterns.
+See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 
 ## Updating
 
