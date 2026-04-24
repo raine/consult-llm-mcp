@@ -38,11 +38,7 @@ Strip all flags from the arguments to get the user query.
 
 **`--codex`** — single call with `-m openai`.
 
-**No flag (default)** — spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — run in the foreground so you can process their results immediately. Each subagent prompt must include the full user query and file list so it can make the CLI call independently.
-
-Each subagent's prompt must instruct it to:
-- Invoke `consult-llm` per the `/consult-llm` skill, with `-m gemini` or `-m openai` respectively, and `-f <path>` for each relevant file.
-- Return the COMPLETE response, including the `[thread_id:xxx]` prefix on the first line.
+**No flag (default)** — call Gemini then Codex sequentially, each with their respective `-m` flag and `-f <path>` for each relevant file.
 
 **`--browser`** — single call with `--web` (model flag is ignored in web mode).
 
