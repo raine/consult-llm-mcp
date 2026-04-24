@@ -33,7 +33,7 @@ Selectors and allowed models resolvable in this environment (availability depend
 !`consult-llm models`
 ```
 
-Pass a selector or an exact model ID to `-m`. Selectors with `-> -` have no configured API key and will fail. **Usually omit `-m`** to use the configured default; pass it explicitly only when the user names a specific model. `-m` is ignored when `--web` is used.
+Pass a selector or an exact model ID to `-m`. Only enabled selectors are listed — anything not shown has no available model. **Usually omit `-m`** to use the configured default; pass it explicitly only when the user names a specific model. `-m` is ignored when `--web` is used.
 
 ## Task modes
 
