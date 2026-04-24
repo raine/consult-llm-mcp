@@ -137,6 +137,43 @@ consult-llm init-prompt
 consult-llm update
 ```
 
+### Diagnosing your setup
+
+`consult-llm doctor` checks that your environment is wired up correctly:
+
+```
+consult-llm v2.13.4 doctor: OK
+
+Providers:
+  gemini     gemini-3.1-pro-preview  api        ✓   GEMINI_API_KEY set
+  deepseek                                      -   not in allowed_models
+  openai     gpt-5.5                 codex-cli  ✓   codex (/opt/homebrew/bin/codex)
+  minimax                                       -   not in allowed_models
+  anthropic                                     -   not in allowed_models
+
+Config:
+  allowed_models          gpt-5.5,gemini-3.1-pro-preview  [~/.consult-llm/config.yaml]
+  codex.reasoning_effort  high                      [~/.consult-llm/config.yaml]
+  openai.backend          codex-cli                 [~/.consult-llm/config.yaml]
+
+Config files:
+  user           ~/.consult-llm/config.yaml  ✓
+  project        .consult-llm.yaml           not found
+  project-local  .consult-llm.local.yaml     not found
+
+State:
+  sessions  ~/.local/state/consult-llm/sessions         ✓ writable
+  ...
+```
+
+- **Providers** — one row per provider: the model that would be selected, the configured backend, and whether its dependency (API key or CLI binary) is satisfied. Providers excluded by `allowed_models` show as `-`.
+- **Config** — non-default config values and which file they came from.
+- **Config files** — which config files were found and loaded.
+- **State** — session storage directories and their writability.
+- **Warnings** — printed at the bottom if anything is broken.
+
+Pass `--verbose` to see all config keys including unset defaults, with raw environment variable names.
+
 ## Backends
 
 Each model resolves to a provider backend.
