@@ -46,7 +46,7 @@ jobs:
             libc: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -117,14 +117,14 @@ jobs:
         run: tar -cf npm-stage.tar -C npm-stage .
 
       - name: Upload npm package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: npm-${{ matrix.suffix }}
           path: npm-stage.tar
           retention-days: 1
 
       - name: Upload GitHub release artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: gh-release-${{ matrix.suffix }}
           path: gh-release/
@@ -138,9 +138,9 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
 
@@ -154,7 +154,7 @@ jobs:
           fi
 
       - name: Download npm artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
           pattern: npm-*
@@ -223,7 +223,7 @@ jobs:
       contents: write
     steps:
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: artifacts
           pattern: gh-release-*
