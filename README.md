@@ -52,7 +52,7 @@ export GEMINI_API_KEY=your_gemini_key
 3. Install the skills so your agent can call `consult-llm` for you:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+consult-llm install-skills
 ```
 
 Then invoke skills from inside your agent (see [Usage](#usage) right below).
@@ -75,6 +75,7 @@ consult-llm doctor                    # diagnose backend auth and config
 consult-llm config set <key> <value>  # set a config value (user config by default)
 consult-llm init-config               # scaffold ~/.consult-llm/config.yaml
 consult-llm init-prompt               # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+consult-llm install-skills            # install bundled skills to platform skill dirs
 consult-llm update                    # self-update the binary
 ```
 
@@ -277,7 +278,15 @@ The skill system has two layers:
 ### Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+consult-llm install-skills
+```
+
+Installs to all detected platforms. Target a specific one with `--platform`:
+
+```bash
+consult-llm install-skills --platform claude
+consult-llm install-skills --platform opencode
+consult-llm install-skills --platform codex
 ```
 
 Platforms supported:
@@ -285,12 +294,6 @@ Platforms supported:
 - Claude Code: `~/.claude/skills/`
 - OpenCode: `~/.config/opencode/skills/`
 - Codex: `~/.codex/skills/`
-
-To uninstall:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash -s uninstall
-```
 
 ### Included skills
 
@@ -335,7 +338,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
 4. **Install skills** so your agent can call `consult-llm` for you:
 
    ```bash
-   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+   consult-llm install-skills
    ```
 
 5. **Keep your existing env vars:** `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. You can optionally migrate them to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).

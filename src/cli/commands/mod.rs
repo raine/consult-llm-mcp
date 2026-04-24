@@ -2,5 +2,6 @@ pub mod config;
 pub mod doctor;
 pub mod init_config;
 pub mod init_prompt;
+pub mod install_skills;
 pub mod models;
 pub mod update;

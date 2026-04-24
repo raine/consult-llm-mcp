@@ -54,6 +54,8 @@ async fn main() {
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::Config(args)) => cli::commands::config::run(args)
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::InstallSkills(args)) => cli::commands::install_skills::run(args)
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::Update) => cli::commands::update::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::CheckUpdate) => update::run_background_check()
