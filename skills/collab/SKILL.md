@@ -49,17 +49,13 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full seed prompt text and file list so it can make the CLI call independently.
+Invoke `consult-llm` with `-m gemini -m openai` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc. Both models are queried in parallel in a single call.
 
-**Gemini subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+The response is in group format:
+- Line 1: `[thread_id:group_xxx]`
+- Each model section: `## Model: <id>` header, then `[model:<id>] [thread_id:<per-model-id>]`, then the response body
 
-**Codex subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
-
-**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
+**Extract thread IDs:** Parse `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` values in each model's section header line. These are needed for Phase 3 since each model receives a different prompt.
 
 Present both sets of ideas to the user.
 
@@ -83,7 +79,7 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread ID.
+Each model receives a different prompt (the other model's response embedded), so two separate calls are needed. Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread ID.
 
 **Gemini subagent** — prompt must instruct it to:
 - Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-t <gemini_thread_id>`. Send the build-on prompt (with Codex's latest ideas embedded) on stdin via quoted heredoc.

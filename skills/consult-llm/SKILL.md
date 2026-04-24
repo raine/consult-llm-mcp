@@ -35,6 +35,8 @@ Selectors and allowed models resolvable in this environment (availability depend
 
 Pass a selector or an exact model ID to `-m`. Only enabled selectors are listed — anything not shown has no available model. **Usually omit `-m`** to use the configured default; pass it explicitly only when the user names a specific model. `-m` is ignored when `--web` is used.
 
+**Multi-model:** repeat `-m` to consult multiple models in parallel (e.g. `-m gemini -m openai`, max 5). The response is a group format: first line is `[thread_id:group_xxx]`, each model's answer under a `## Model: <id>` header preceded by `[model:<id>] [thread_id:<per-model-id>]`. Pass `-t group_xxx` to resume all models together on the next turn; pass an individual per-model thread ID with a single `-m <model>` to resume just that model while keeping the group context.
+
 ## Task modes
 
 Pick a `--task` mode based on the kind of question. Omit for neutral general-purpose.

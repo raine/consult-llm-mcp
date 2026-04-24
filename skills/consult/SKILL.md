@@ -38,13 +38,14 @@ Strip all flags from the arguments to get the user query.
 
 **`--codex`** — single call with `-m openai`.
 
-**No flag (default)** — call both Gemini (`-m gemini`) and Codex (`-m openai`), each with `-f <path>` for each relevant file. Never background the calls — wait for each response before proceeding.
+**No flag (default)** — single call with `-m gemini -m openai` and `-f <path>` for each relevant file. The CLI queries both models in parallel and returns a combined response with per-model sections.
 
 **`--browser`** — single call with `--web` (model flag is ignored in web mode).
 
 ### 3. Present results
 
-- **Normal mode:** summarize key insights, recommendations, and considerations. When both LLMs were consulted, synthesize — highlight agreements, note disagreements, present a unified takeaway.
+- **Normal mode (single model):** summarize key insights, recommendations, and considerations.
+- **Normal mode (both models):** the CLI output already contains labeled per-model sections. Synthesize — highlight agreements, note disagreements, present a unified takeaway.
 - **Web mode:** inform the user the prompt was copied to clipboard and ask them to paste it into their browser-based LLM and share the response back.
 
 ## Critical rules
