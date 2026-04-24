@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.13.4 (2026-04-24)
+
+- Updated DeepSeek model from `deepseek-reasoner` to `deepseek-v4-pro`. The
+  `deepseek` selector now resolves to the new model
+
 ## v2.13.3 (2026-04-23)
 
 - Added gpt-5.5 model support ($5/$30 per million tokens). The `openai` selector
