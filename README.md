@@ -280,7 +280,6 @@ The skill system has two layers:
 
 **Workflow skills** compose on top. They gather context from the codebase, decide which models to call and how, and synthesize the results for you. When you run `/consult` or `/debate`, the agent reads a skill file that tells it how to orchestrate one or more `consult-llm` calls and what to do with the responses.
 
-This separation means the CLI stays simple and testable while the orchestration logic lives in plain Markdown that you can read and customize.
 
 ### Install
 
