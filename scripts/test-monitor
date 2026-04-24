@@ -160,15 +160,15 @@ scenario_c() {
 	emit_consult_started "$file" "$c1" "gpt-5.4" "api"
 	echo "[C] consulting gpt-5.4..."
 	sleep 1
-	emit_consult_started "$file" "$c2" "deepseek-reasoner" "api"
-	echo "[C] consulting deepseek-reasoner (concurrent)..."
+	emit_consult_started "$file" "$c2" "deepseek-v4-pro" "api"
+	echo "[C] consulting deepseek-v4-pro (concurrent)..."
 
 	sleep 3
 	emit_consult_finished_ok "$file" "$c1" 4100
 	echo "[C] gpt-5.4 done"
 	sleep 2
 	emit_consult_finished_err "$file" "$c2" 6200 "http 429 rate limit exceeded"
-	echo "[C] deepseek-reasoner rate limited"
+	echo "[C] deepseek-v4-pro rate limited"
 	sleep 1
 
 	c3=$(new_uuid)

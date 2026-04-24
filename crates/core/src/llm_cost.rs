@@ -39,7 +39,7 @@ fn get_pricing(model: &str) -> Option<ModelPricing> {
             input_per_million: 2.0,
             output_per_million: 12.0,
         },
-        "deepseek-reasoner" => ModelPricing {
+        "deepseek-v4-pro" => ModelPricing {
             input_per_million: 0.55,
             output_per_million: 2.19,
         },

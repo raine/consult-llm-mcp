@@ -526,7 +526,7 @@ mod tests {
         let models = vec![
             "gemini-2.5-pro".into(),
             "gpt-5.2".into(),
-            "deepseek-reasoner".into(),
+            "deepseek-v4-pro".into(),
         ];
         let providers = make_providers(&[
             (Provider::Gemini, Some("key"), Backend::Api),
@@ -543,7 +543,7 @@ mod tests {
         let models = vec![
             "gemini-2.5-pro".into(),
             "gpt-5.2".into(),
-            "deepseek-reasoner".into(),
+            "deepseek-v4-pro".into(),
         ];
         let providers = make_providers(&[
             (Provider::Gemini, None, Backend::Api),
@@ -928,7 +928,7 @@ mod tests {
                 "gemini-2.5-pro",
                 "gemini-3-pro-preview",
                 "gemini-3.1-pro-preview",
-                "deepseek-reasoner",
+                "deepseek-v4-pro",
                 "gpt-5.2",
                 "gpt-5.4",
                 "gpt-5.5",

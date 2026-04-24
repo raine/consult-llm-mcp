@@ -108,7 +108,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         model_prefixes: &["deepseek-"],
         api_base_url: Some("https://api.deepseek.com"),
         api_protocol: ApiProtocol::OpenAiCompat,
-        builtin_models: &["deepseek-reasoner"],
+        builtin_models: &["deepseek-v4-pro"],
         api_key_env: "DEEPSEEK_API_KEY",
         backend_env: "CONSULT_LLM_DEEPSEEK_BACKEND",
         legacy_backend_env: None,
@@ -233,7 +233,7 @@ pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
             "gpt-5.2-codex",
         ],
     ),
-    ("deepseek", &["deepseek-reasoner"]),
+    ("deepseek", &["deepseek-v4-pro"]),
     ("minimax", &["MiniMax-M2.7"]),
     ("anthropic", &["claude-opus-4-7"]),
 ];
