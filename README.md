@@ -356,7 +356,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    }
    ```
 
-   becomes:
+   becomes `~/.consult-llm/config.yaml`:
 
    ```yaml
    allowed_models: [gpt-5.4, gemini-3.1-pro-preview, MiniMax-M2.7]
