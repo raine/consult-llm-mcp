@@ -8,7 +8,8 @@ pub fn read_prompt(prompt_file: Option<&str>) -> Result<String, CliError> {
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
         return Err(CliError::Usage(
-            "no prompt provided. Pipe via stdin or pass --prompt-file <path>".into(),
+            "no prompt provided\n\n  Usage:  cat <<'EOF' | consult-llm [-m <model>] [-f <file>]\n          Your question here.\n          EOF\n\n  From your agent: /consult, /debate, /collab\n  Run 'consult-llm --help' for full options."
+                .into(),
         ));
     }
     let mut buf = String::new();
