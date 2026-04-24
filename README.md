@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/
 consult-llm init-config
 ```
 
-CLI backends are the easiest to start with — no API key needed:
+CLI backends are the easiest to start with (no API key needed):
 
 ```yaml
 # ~/.consult-llm/config.yaml
@@ -66,7 +66,7 @@ Then from inside Claude Code, OpenCode, or Codex:
 
 ## Usage
 
-The CLI is invoked by your agent via the installed skills — you don't call it directly. From inside Claude Code, OpenCode, or Codex:
+The CLI is invoked by your agent via the installed skills; you don't call it directly. From inside Claude Code, OpenCode, or Codex:
 
 ```
 /consult what's the best way to structure this state machine?
@@ -158,9 +158,9 @@ opencode:
 consult-llm reads layered YAML config files. Resolution order (highest to lowest precedence):
 
 1. Environment variables
-2. `.consult-llm.local.yaml` — project-local overrides, not committed to git
-3. `.consult-llm.yaml` — committed project config
-4. `~/.consult-llm/config.yaml` — user config
+2. `.consult-llm.local.yaml` (project-local overrides, not committed to git)
+3. `.consult-llm.yaml` (committed project config)
+4. `~/.consult-llm/config.yaml` (user config)
 
 Project files are discovered by walking up from the current directory to the nearest `.git` root or `$HOME`.
 
@@ -215,11 +215,11 @@ Environment variables override config file values.
 
 | Variable                                 | Description                                                   | Allowed values                                 | Default                           |
 | ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
-| `OPENAI_API_KEY`                         | OpenAI API key                                                | —                                              | —                                 |
-| `GEMINI_API_KEY`                         | Gemini API key                                                | —                                              | —                                 |
-| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             | —                                              | —                                 |
-| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              | —                                              | —                                 |
-| `MINIMAX_API_KEY`                        | MiniMax API key                                               | —                                              | —                                 |
+| `OPENAI_API_KEY`                         | OpenAI API key                                                |                                                |                                   |
+| `GEMINI_API_KEY`                         | Gemini API key                                                |                                                |                                   |
+| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                |                                   |
+| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                |                                   |
+| `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                |                                   |
 | `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use when `-m` is omitted                 | selector or exact model ID                     | first available                   |
 | `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`     | `api`                             |
 | `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`      | `api`                             |
@@ -227,7 +227,7 @@ Environment variables override config file values.
 | `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                               | `api`                             |
 | `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                          | `api`                             |
 | `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                      | all                               |
-| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      | —                                 |
+| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      |                                   |
 | `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh` | `high`                            |
 | `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                  | per-model default                 |
 | `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                  | `openai`                          |
@@ -235,7 +235,7 @@ Environment variables override config file values.
 | `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                  | `deepseek`                        |
 | `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                  | `minimax`                         |
 | `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.consult-llm/SYSTEM_PROMPT.md` |
-| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               | —                                 |
+| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               |                                   |
 
 </details>
 
@@ -334,9 +334,9 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
    ```
 
-5. **Keep your existing env vars** — `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. You can optionally migrate them to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
+5. **Keep your existing env vars:** `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. You can optionally migrate them to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
 
-> **Note:** Thread history from the MCP version does not carry over — the CLI uses a different storage format.
+> **Note:** Thread history from the MCP version does not carry over - the CLI uses a different storage format.
 
 ## Why CLI
 
