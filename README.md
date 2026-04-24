@@ -341,7 +341,37 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    consult-llm install-skills
    ```
 
-5. **Keep your existing env vars:** `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. API keys stay as env vars — they cannot go in config files. Other settings (backends, default model, etc.) can be moved to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
+5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.consult-llm/config.yaml`. API keys must stay as env vars.
+
+   For example, this MCP config:
+
+   ```json
+   "env": {
+     "CONSULT_LLM_GEMINI_BACKEND": "api",
+     "CONSULT_LLM_OPENAI_BACKEND": "codex-cli",
+     "CONSULT_LLM_CODEX_REASONING_EFFORT": "xhigh",
+     "CONSULT_LLM_ALLOWED_MODELS": "gpt-5.4,gemini-3.1-pro-preview,MiniMax-M2.7",
+     "CONSULT_LLM_MINIMAX_BACKEND": "opencode",
+     "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER": "minimax"
+   }
+   ```
+
+   becomes:
+
+   ```yaml
+   allowed_models: [gpt-5.4, gemini-3.1-pro-preview, MiniMax-M2.7]
+
+   gemini:
+     backend: api
+
+   openai:
+     backend: codex-cli
+     reasoning_effort: xhigh
+
+   minimax:
+     backend: opencode
+     opencode_provider: minimax
+   ```
 
 ## Development
 
