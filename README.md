@@ -304,6 +304,10 @@ Default:
 
 `consult-llm-monitor` is a real-time TUI for active runs and history.
 
+<p align="center">
+  <img src="meta/monitor-demo.gif" alt="consult-llm-monitor demo" width="800">
+</p>
+
 ```bash
 consult-llm-monitor
 ```
