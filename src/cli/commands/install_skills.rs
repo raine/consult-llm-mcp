@@ -55,22 +55,23 @@ impl Platform {
     }
 }
 
-fn all_platforms() -> anyhow::Result<Vec<Platform>> {
-    let home =
-        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
-    Ok(vec![
+fn all_platforms(home: &Path) -> Vec<Platform> {
+    let config_dir = dirs::config_dir().unwrap_or_else(|| home.join(".config"));
+    vec![
         Platform::new("Claude Code", PlatformArg::Claude, home.join(".claude")),
         Platform::new(
             "OpenCode",
             PlatformArg::Opencode,
-            home.join(".config").join("opencode"),
+            config_dir.join("opencode"),
         ),
         Platform::new("Codex", PlatformArg::Codex, home.join(".codex")),
-    ])
+    ]
 }
 
 pub fn run(args: InstallSkillsArgs) -> anyhow::Result<()> {
-    let platforms = all_platforms()?;
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    let platforms = all_platforms(&home);
 
     let targets: Vec<&Platform> = platforms
         .iter()
@@ -86,11 +87,14 @@ pub fn run(args: InstallSkillsArgs) -> anyhow::Result<()> {
         );
     }
 
-    let color = std::io::stdout().is_terminal();
+    let color = std::io::stdout().is_terminal()
+        && std::env::var("NO_COLOR")
+            .map(|v| v.is_empty())
+            .unwrap_or(true);
     let mut any_failed = false;
 
     for platform in targets {
-        let failed = install_platform(platform, color);
+        let failed = install_platform(platform, color, &home);
         if failed {
             any_failed = true;
         }
@@ -104,7 +108,7 @@ pub fn run(args: InstallSkillsArgs) -> anyhow::Result<()> {
 }
 
 /// Returns true if any skill failed to install.
-fn install_platform(platform: &Platform, color: bool) -> bool {
+fn install_platform(platform: &Platform, color: bool, home: &Path) -> bool {
     println!("==> {}", platform.name);
     let mut failed = false;
 
@@ -112,42 +116,46 @@ fn install_platform(platform: &Platform, color: bool) -> bool {
         let skill_dir = platform.skills_dir.join(name);
         let dest = skill_dir.join("SKILL.md");
 
-        let up_to_date = dest.exists()
-            && fs::read(&dest)
-                .map(|b| b == content.as_bytes())
-                .unwrap_or(false);
+        let up_to_date = fs::read(&dest).is_ok_and(|b| b == content.as_bytes());
 
         if up_to_date {
-            print_line("up-to-date", &dest, color, None);
+            print_line("up-to-date", &dest, color, None, home);
             continue;
         }
 
         if let Err(e) = fs::create_dir_all(&skill_dir) {
-            eprintln!("  error creating {}: {e}", skill_dir.display());
+            eprintln!("  error creating {}: {e}", shrink_path(&skill_dir, home));
             failed = true;
             continue;
         }
         if let Err(e) = fs::write(&dest, content.as_bytes()) {
-            eprintln!("  error writing {}: {e}", dest.display());
+            eprintln!("  error writing {}: {e}", shrink_path(&dest, home));
             failed = true;
             continue;
         }
 
-        print_line("written", &dest, color, Some(32));
+        print_line("written", &dest, color, Some(32), home);
     }
 
     println!();
     failed
 }
 
-fn print_line(status: &str, path: &Path, color: bool, ansi_color: Option<u8>) {
+fn print_line(status: &str, path: &Path, color: bool, ansi_color: Option<u8>, home: &Path) {
+    let display = shrink_path(path, home);
     if color {
         if let Some(code) = ansi_color {
-            println!("  \x1b[{code}m{status:<12}\x1b[0m {}", path.display());
+            println!("  \x1b[{code}m{status:<12}\x1b[0m {display}");
         } else {
-            println!("  \x1b[2m{status:<12}\x1b[0m {}", path.display());
+            println!("  \x1b[2m{status:<12}\x1b[0m {display}");
         }
     } else {
-        println!("  {status:<12} {}", path.display());
+        println!("  {status:<12} {display}");
     }
+}
+
+fn shrink_path(path: &Path, home: &Path) -> String {
+    path.strip_prefix(home)
+        .map(|rel| format!("~/{}", rel.display()))
+        .unwrap_or_else(|_| path.display().to_string())
 }
