@@ -1,87 +1,58 @@
 ---
 name: consult
 description: Consult an external LLM with the user's query.
-allowed-tools: Glob, Grep, Read, mcp__consult-llm__consult_llm
+allowed-tools: Bash, Glob, Grep, Read
 ---
 
-Consult an external LLM with the user's query.
+Consult an external LLM with the user's query via the `consult-llm` CLI.
+
+Load `consult-llm` skill for CLI invocation mechanics.
+
+## Argument handling
 
 **Arguments:** `$ARGUMENTS`
 
-Check the arguments for flags:
+Check `$ARGUMENTS` for flags:
 
 **Reviewer flags** (mutually exclusive):
-- `--gemini` → consult only Gemini
-- `--codex` → consult only Codex
+- `--gemini` → consult only Gemini (`-m gemini`)
+- `--codex` → consult only Codex (`-m openai`)
 - No flag → consult both Gemini and Codex in parallel (default)
 
 **Mode flags:**
-- `--browser` → use web mode (copy prompt to clipboard)
+- `--browser` → use web mode (`--web`, copies prompt to clipboard)
 
-Strip all flags from arguments to get the user query.
+Strip all flags from the arguments to get the user query.
 
-When consulting with external LLMs:
+## Workflow
 
-**1. Gather Context First**:
+### 1. Gather context
 
-- Use Glob/Grep to find relevant files
-- Read key files to understand their relevance
-- Select files directly related to the question
+- Use Glob/Grep to find relevant files.
+- Read key files to confirm relevance.
+- Select files directly related to the question — quality over quantity.
 
-**2. Call the MCP Tool**:
+### 2. Invoke
 
-Based on the reviewer flag:
+**`--gemini`** — single call with `-m gemini`.
 
-### If `--gemini`: Gemini only
+**`--codex`** — single call with `-m openai`.
 
-Call `mcp__consult-llm__consult_llm` with:
-- `model`: "gemini"
-- `prompt`: The user's query, passed through faithfully (see Critical Rules)
-- `files`: Array of relevant file paths
+**No flag (default)** — spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — run in the foreground so you can process their results immediately. Each subagent prompt must include the full user query and file list so it can make the CLI call independently.
 
-### If `--codex`: Codex only
+Each subagent's prompt must instruct it to:
+- Invoke `consult-llm` per the `/consult-llm` skill, with `-m gemini` or `-m openai` respectively, and `-f <path>` for each relevant file.
+- Return the COMPLETE response, including the `[thread_id:xxx]` prefix on the first line.
 
-Call `mcp__consult-llm__consult_llm` with:
-- `model`: "openai"
-- `prompt`: The user's query, passed through faithfully (see Critical Rules)
-- `files`: Array of relevant file paths
+**`--browser`** — single call with `--web` (model flag is ignored in web mode).
 
-### If no flag (default): Both Gemini and Codex in parallel
+### 3. Present results
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full user query and file list so it can make the MCP call independently.
+- **Normal mode:** summarize key insights, recommendations, and considerations. When both LLMs were consulted, synthesize — highlight agreements, note disagreements, present a unified takeaway.
+- **Web mode:** inform the user the prompt was copied to clipboard and ask them to paste it into their browser-based LLM and share the response back.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the user's query passed through faithfully (see Critical Rules), `files`: [array of relevant file paths]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+## Critical rules
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the user's query passed through faithfully (see Critical Rules), `files`: [array of relevant file paths]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-### If `--browser`: Web mode
-
-Call `mcp__consult-llm__consult_llm` with:
-- `web_mode`: true
-- `prompt`: The user's query, passed through faithfully (see Critical Rules)
-- `files`: Array of relevant file paths
-- (model parameter is ignored in web mode)
-
-**3. Present Results**:
-
-- **API mode**: Summarize key insights, recommendations, and considerations from
-  the response. When both LLMs were consulted, synthesize their responses —
-  highlight agreements, note disagreements, and present a unified summary.
-- **Web mode**: Inform user the prompt was copied to clipboard and ask them to
-  paste it into their browser-based LLM and share the response back
-
-**Critical Rules**:
-
-- ALWAYS gather file context before consulting
-- **Pass through the user's query faithfully** — do NOT add your own theories,
-  suspects, analysis, or suggested solutions to the prompt. The user's intent
-  is the prompt. Rephrase as needed so the prompt reads as a direct question to
-  the LLM, not a meta-instruction to you. You may add brief factual context
-  (e.g. "we recently changed X to Y"), but never inject your own diagnostic
-  opinions or hypotheses. Do not pass the user's query through verbatim if it
-  is phrased as an instruction to you rather than a question for the LLM.
-- Provide focused, relevant files (quality over quantity)
+- ALWAYS gather file context before consulting.
+- **Pass through the user's query faithfully** — do NOT add your own theories, suspects, analysis, or suggested solutions to the prompt. The user's intent is the prompt. Rephrase as needed so the prompt reads as a direct question to the LLM, not a meta-instruction to you. You may add brief factual context (e.g. "we recently changed X to Y"), but never inject your own diagnostic opinions or hypotheses. Do not pass the user's query verbatim if it is phrased as an instruction to you rather than a question for the LLM.
+- Provide focused, relevant files (quality over quantity).

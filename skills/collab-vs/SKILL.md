@@ -5,14 +5,16 @@ description: Claude brainstorms with an opponent LLM (Gemini or Codex) in altern
 
 Brainstorm collaboratively with an opponent LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.
 
+Load `consult-llm` skill for CLI invocation mechanics.
+
 **Arguments:** `$ARGUMENTS`
 
 Check the arguments for flags:
 
 **Partner flags** (mutually exclusive, exactly one required):
 
-- `--gemini` → brainstorm with Gemini (`model`: "gemini")
-- `--codex` → brainstorm with Codex (`model`: "openai")
+- `--gemini` → brainstorm with Gemini (`-m gemini`)
+- `--codex` → brainstorm with Codex (`-m openai`)
 
 Strip all flags from arguments to get the task description.
 
@@ -68,10 +70,7 @@ response. Continue until the ideas converge into a clear approach — typically
 
 **Step 1 — PARTNER responds** to Claude's seed:
 
-Call `mcp__consult-llm__consult_llm` with:
-- `model`: MODEL
-- `prompt`: Build-on prompt below, with Claude's seed ideas
-- `files`: Array of relevant source files discovered in Phase 1
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the build-on prompt below (with Claude's seed ideas embedded) on stdin via quoted heredoc.
 
 **Build-on prompt:**
 ```
@@ -89,7 +88,7 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Save `partner_thread_id` from the `[thread_id:xxx]` prefix.
+Save `partner_thread_id` from the `[thread_id:xxx]` prefix on line 1 of stdout.
 
 Present PARTNER's response to the user as `## PARTNER's Ideas (Round 1)`.
 
@@ -111,9 +110,7 @@ Present this to the user.
 
 ### Subsequent rounds
 
-Continue alternating (PARTNER → Claude), always passing the previous response
-to the partner via the build-on prompt and using `thread_id` to maintain
-context.
+Continue alternating (PARTNER → Claude). On each PARTNER turn, invoke `consult-llm` with `-m <MODEL>` and `-t <partner_thread_id>` to continue the conversation, sending the build-on prompt (with Claude's latest response embedded) on stdin via quoted heredoc.
 
 **When to stop:** Both sides are refining details rather than introducing new
 ideas, and a clear approach has emerged. Don't stop while there are still
@@ -172,4 +169,3 @@ Guidelines:
 - **DRY, YAGNI** - only what's needed
 - **Be honest** - credit the partner when its ideas were better
 
-Save the plan to `history/plan-<feature-name>.md`.

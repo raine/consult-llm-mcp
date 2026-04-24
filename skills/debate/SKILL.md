@@ -5,6 +5,8 @@ description: LLMs propose and critique approaches, agent moderates the debate an
 
 Have Gemini and Codex debate the best approach, then synthesize and implement.
 
+Load `consult-llm` skill for CLI invocation mechanics.
+
 ## Configuration
 
 **Arguments:** `$ARGUMENTS`
@@ -59,15 +61,15 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full opening prompt text and file list so it can make the MCP call independently.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full opening prompt text and file list so it can make the CLI call independently.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Gemini subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Codex subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
 **Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
 
@@ -75,7 +77,7 @@ Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose
 
 For each round (default 2, configurable with `--rounds N`, max 3):
 
-Have each LLM critique the other's latest argument (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponent's latest response.
+Have each LLM critique the other's latest argument (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponent's latest response.
 
 **Round 1 rebuttal prompt (same for both, swap the opponent's argument):**
 ```
@@ -105,15 +107,15 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full rebuttal prompt text and thread_id.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full rebuttal prompt text and thread ID.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: rebuttal prompt with Codex's latest response as the opponent, `thread_id`: `gemini_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Gemini subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-t <gemini_thread_id>`. Send the rebuttal prompt (with Codex's latest response embedded) on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: rebuttal prompt with Gemini's latest response as the opponent, `thread_id`: `codex_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Codex subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-t <codex_thread_id>`. Send the rebuttal prompt (with Gemini's latest response embedded) on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
 Present both responses to the user after each round.
 
@@ -205,7 +207,7 @@ Implementation rules:
 
 **If `--skip-final`:** Skip to Phase 7 (Summary).
 
-After implementation, have both LLMs review the result (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and the debate, so you only need to send the review prompt and the diff.
+After implementation, have both LLMs review the result (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and the debate, so you only need to send the review prompt and the diff.
 
 **Final review prompt:**
 ```
@@ -218,15 +220,15 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full review prompt, thread_id, and git_diff details.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full review prompt, thread ID, and the list of changed files + base ref.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `gemini_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Gemini subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini`, `--task review`, `-t <gemini_thread_id>`, `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `codex_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Codex subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m openai`, `--task review`, `-t <codex_thread_id>`, `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

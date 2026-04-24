@@ -5,6 +5,8 @@ description: Gemini and Codex collaboratively brainstorm solutions, building on 
 
 Have Gemini and Codex collaboratively brainstorm solutions, then synthesize the best ideas into a plan. Both LLMs build on each other's ideas across rounds rather than critiquing positions.
 
+Load `consult-llm` skill for CLI invocation mechanics.
+
 **Arguments:** `$ARGUMENTS`
 
 ## Phase 1: Understand the Task (No Questions)
@@ -47,15 +49,15 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full seed prompt text and file list so it can make the MCP call independently.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full seed prompt text and file list so it can make the CLI call independently.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Gemini subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Codex subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
 **Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
 
@@ -63,7 +65,7 @@ Present both sets of ideas to the user.
 
 ## Phase 3: Build On Each Other
 
-Each round, share both LLMs' ideas with each other and ask them to build on them (in parallel). Use `thread_id` to continue each LLM's conversation. Continue until the ideas converge into a clear approach — typically 2-3 rounds, but use as many as needed.
+Each round, share both LLMs' ideas with each other and ask them to build on them (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation. Continue until the ideas converge into a clear approach — typically 2-3 rounds, but use as many as needed.
 
 **Build-on prompt (same for both, include the other's ideas):**
 ```
@@ -81,15 +83,15 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread_id.
+Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread ID.
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: build-on prompt with Codex's ideas, `thread_id`: `gemini_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Gemini subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-t <gemini_thread_id>`. Send the build-on prompt (with Codex's latest ideas embedded) on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: build-on prompt with Gemini's ideas, `thread_id`: `codex_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+**Codex subagent** — prompt must instruct it to:
+- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-t <codex_thread_id>`. Send the build-on prompt (with Gemini's latest ideas embedded) on stdin via quoted heredoc.
+- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
 
 Present both responses to the user after each round.
 

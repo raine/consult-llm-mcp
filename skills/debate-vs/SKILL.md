@@ -1,10 +1,12 @@
 ---
 name: debate-vs
-description: Claude debates an opponent LLM (Gemini or Codex) through multi-turn MCP conversation, then synthesizes the best approach and implements.
+description: Claude debates an opponent LLM (Gemini or Codex) through a multi-turn conversation, then synthesizes the best approach and implements.
 ---
 
 Debate an opponent LLM on the best implementation approach using multi-turn
 conversations, then synthesize and implement.
+
+Load `consult-llm` skill for CLI invocation mechanics.
 
 ## Configuration
 
@@ -14,8 +16,8 @@ Check the arguments for flags:
 
 **Opponent flags** (mutually exclusive, exactly one required):
 
-- `--gemini` → debate Gemini (`model`: "gemini")
-- `--codex` → debate Codex (`model`: "openai")
+- `--gemini` → debate Gemini (`-m gemini`)
+- `--codex` → debate Codex (`-m openai`)
 
 **Mode flags:**
 
@@ -75,11 +77,7 @@ Present this to the user so they can see your position.
 
 ### Step 2: Opponent's Opening Argument
 
-Call `mcp__consult-llm__consult_llm` with:
-
-- `model`: MODEL
-- `prompt`: The opening argument prompt below
-- `files`: Array of relevant source files discovered in Phase 1
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the opening prompt below on stdin via quoted heredoc.
 
 **Opening prompt:**
 
@@ -101,8 +99,8 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-**Extract the thread_id** from the response prefix `[thread_id:xxx]`. Store it
-for subsequent rounds.
+**Extract the thread_id** from the response prefix `[thread_id:xxx]` on line 1
+of stdout. Store it for subsequent rounds.
 
 Present the opponent's opening argument to the user as
 `## OPPONENT's Opening Argument`.
@@ -128,12 +126,7 @@ Present this to the user.
 
 ### Opponent's Turn
 
-Call `mcp__consult-llm__consult_llm` with:
-
-- `model`: MODEL
-- `thread_id`: The thread_id from the previous response
-- `prompt`: The rebuttal prompt below
-- `files`: Array of relevant source files
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-t <thread_id>` (from the previous response). Send the rebuttal prompt below on stdin via quoted heredoc.
 
 **Rebuttal prompt:**
 
@@ -151,7 +144,8 @@ Provide your counter-argument:
 Be constructive but thorough in your critique.
 ```
 
-**Update the thread_id** from the response prefix if a new one is returned.
+**Update the thread_id** from the response prefix on line 1 if a new one is
+returned.
 
 Present the opponent's rebuttal to the user as
 `## OPPONENT's Rebuttal (Round N)`.
@@ -257,13 +251,7 @@ Implementation rules:
 After implementation, have the opponent review using the existing thread (full
 debate context):
 
-Call `mcp__consult-llm__consult_llm` with:
-
-- `model`: MODEL
-- `task_mode`: "review"
-- `thread_id`: The thread_id from the debate
-- `prompt`: Final review prompt below
-- `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>`, `--task review`, `-t <thread_id>` (from the debate), `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt below on stdin via quoted heredoc.
 
 **Final review prompt:**
 
