@@ -9,13 +9,15 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
 ## Features
 
-- Query powerful AI models with relevant file context
-- Route models through API, Gemini CLI, Codex CLI, Cursor CLI, or OpenCode
-- Resume conversations with `thread_id`
-- Include git diffs for review and debugging
-- Copy fully formatted prompts to the clipboard with `--web`
-- Watch live runs and history in `consult-llm-monitor`
-- Install reusable multi-LLM skills for Claude Code, OpenCode, and Codex
+- Query powerful AI models (GPT-5.5/5.4, Gemini 3.1 Pro, Claude Opus 4.7, DeepSeek V4 Pro, MiniMax M2.7) with relevant file context
+- [Gemini CLI backend](#gemini-cli): use the `gemini` CLI for Gemini models
+- [Codex CLI backend](#codex-cli): use the `codex` CLI for OpenAI models
+- [Cursor CLI backend](#cursor-cli): route GPT and Gemini through `cursor-agent`
+- [OpenCode backend](#opencode): use `opencode` with Copilot, OpenRouter, or 75+ providers
+- [Multi-turn conversations](#multi-turn-conversations): resume sessions across requests with `thread_id`
+- [Web mode](#web-mode): copy formatted prompts to clipboard for browser-based LLMs
+- [Skills](#skills): multi-LLM debate, collaboration, and consultation workflows
+- [Monitor TUI](#monitor): real-time dashboard for active runs and history
 
 <img src="meta/monitor-screenshot.webp" alt="consult-llm-monitor screenshot" width="600">
 
