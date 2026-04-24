@@ -32,6 +32,25 @@ fn mode_overlay(mode: TaskMode) -> &'static str {
 /// mode-neutral base — task_mode overlays are appended at runtime.
 pub const DEFAULT_SYSTEM_PROMPT: &str = BASE_SYSTEM_PROMPT;
 
+pub fn init_system_prompt() -> anyhow::Result<()> {
+    let home = dirs::home_dir().expect("Could not determine home directory");
+    let config_dir = home.join(".consult-llm");
+    let prompt_path = config_dir.join("SYSTEM_PROMPT.md");
+
+    if prompt_path.exists() {
+        anyhow::bail!(
+            "System prompt already exists at: {}\nRemove it first if you want to reinitialize.",
+            prompt_path.display()
+        );
+    }
+
+    std::fs::create_dir_all(&config_dir)?;
+    std::fs::write(&prompt_path, DEFAULT_SYSTEM_PROMPT)?;
+    println!("Created system prompt at: {}", prompt_path.display());
+    println!("You can now edit this file to customize the system prompt.");
+    Ok(())
+}
+
 pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
     let cfg = config();
     let custom_path = cfg.system_prompt_path.clone().unwrap_or_else(|| {

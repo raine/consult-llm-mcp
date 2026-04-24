@@ -69,59 +69,14 @@ jobs:
             cargo build --release --target ${{ matrix.target }} --workspace --locked
           fi
 
-      - name: Stage npm platform package
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          PKG_NAME="consult-llm-mcp-${{ matrix.suffix }}"
-          PKG_DIR="npm-stage/$PKG_NAME"
-          mkdir -p "$PKG_DIR"
-
-          LIBC_FIELD=""
-          if [ -n "${{ matrix.libc }}" ]; then
-            LIBC_FIELD=$(printf ',\n  "libc": ["%s"]' "${{ matrix.libc }}")
-          fi
-
-          cat > "$PKG_DIR/package.json" <<-PKGJSON
-          {
-            "name": "$PKG_NAME",
-            "version": "$VERSION",
-            "description": "Platform binary for consult-llm-mcp (${{ matrix.suffix }})",
-            "repository": {
-              "type": "git",
-              "url": "git+https://github.com/raine/consult-llm-mcp.git"
-            },
-            "os": ["${{ matrix.os }}"],
-            "cpu": ["${{ matrix.cpu }}"]${LIBC_FIELD},
-            "files": ["consult-llm-mcp"],
-            "license": "MIT"
-          }
-          PKGJSON
-
-          cp "target/${{ matrix.target }}/release/consult-llm-mcp" "$PKG_DIR/consult-llm-mcp"
-          chmod +x "$PKG_DIR/consult-llm-mcp"
-
-          echo "Validating $PKG_NAME..."
-          (cd "$PKG_DIR" && npm pack --dry-run)
-
       - name: Stage GitHub release archive
         run: |
           mkdir -p gh-release
-          ARCHIVE="consult-llm-mcp-${{ matrix.suffix }}.tar.gz"
+          ARCHIVE="consult-llm-${{ matrix.suffix }}.tar.gz"
           tar -czf "gh-release/$ARCHIVE" \
             -C "target/${{ matrix.target }}/release" \
-            consult-llm-mcp consult-llm-monitor
+            consult-llm consult-llm-monitor
           (cd gh-release && shasum -a 256 "$ARCHIVE" > "${ARCHIVE%.tar.gz}.sha256")
-
-      # Tar before uploading to preserve executable bits (GitHub artifacts use zip which strips +x)
-      - name: Tar npm package for upload
-        run: tar -cf npm-stage.tar -C npm-stage .
-
-      - name: Upload npm package artifact
-        uses: actions/upload-artifact@v5
-        with:
-          name: npm-${{ matrix.suffix }}
-          path: npm-stage.tar
-          retention-days: 1
 
       - name: Upload GitHub release artifact
         uses: actions/upload-artifact@v5
@@ -130,94 +85,9 @@ jobs:
           path: gh-release/
           retention-days: 1
 
-  publish-npm:
-    name: Publish to npm
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-
-      - name: Validate tag matches package.json
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "error: tag version ($TAG_VERSION) does not match package.json ($PKG_VERSION)" >&2
-            exit 1
-          fi
-
-      - name: Download npm artifacts
-        uses: actions/download-artifact@v5
-        with:
-          path: artifacts
-          pattern: npm-*
-
-      - name: Extract npm packages
-        run: |
-          mkdir -p npm-stage
-          for tarball in artifacts/npm-*/npm-stage.tar; do
-            tar -xf "$tarball" -C npm-stage
-          done
-
-      - name: Publish platform packages
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAG="latest"
-          if [[ "$VERSION" == *"beta"* ]]; then TAG="beta"; fi
-
-          for suffix in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
-            PKG_NAME="consult-llm-mcp-$suffix"
-            PKG_DIR="npm-stage/$PKG_NAME"
-
-            if npm view "$PKG_NAME@$VERSION" version >/dev/null 2>&1; then
-              echo "$PKG_NAME@$VERSION already published, skipping..."
-            else
-              echo "Publishing $PKG_NAME@$VERSION..."
-              (cd "$PKG_DIR" && npm publish --provenance --access public --tag "$TAG")
-            fi
-          done
-
-      - name: Publish root wrapper package
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          TAG="latest"
-          if [[ "$VERSION" == *"beta"* ]]; then TAG="beta"; fi
-
-          # Stage root package
-          mkdir -p root-stage
-          cp package.json README.md CHANGELOG.md LICENSE run.sh root-stage/
-          chmod +x root-stage/run.sh
-
-          # Inject optionalDependencies
-          VERSION="$VERSION" node -e '
-            const fs = require("fs");
-            const pkg = JSON.parse(fs.readFileSync("root-stage/package.json", "utf8"));
-            pkg.optionalDependencies = {
-              "consult-llm-mcp-darwin-arm64": process.env.VERSION,
-              "consult-llm-mcp-darwin-x64": process.env.VERSION,
-              "consult-llm-mcp-linux-x64": process.env.VERSION,
-              "consult-llm-mcp-linux-arm64": process.env.VERSION
-            };
-            fs.writeFileSync("root-stage/package.json", JSON.stringify(pkg, null, 2) + "\n");
-          '
-
-          if npm view "consult-llm-mcp@$VERSION" version >/dev/null 2>&1; then
-            echo "consult-llm-mcp@$VERSION already published, skipping..."
-          else
-            echo "Publishing consult-llm-mcp@$VERSION..."
-            (cd root-stage && npm publish --provenance --access public --tag "$TAG")
-          fi
-
   github-release:
     name: GitHub Release
-    needs: [build, publish-npm]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write

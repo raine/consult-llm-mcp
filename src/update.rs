@@ -19,12 +19,6 @@ fn platform_suffix() -> Result<&'static str> {
     }
 }
 
-/// Check if the binary is managed by npm (installed via node_modules).
-fn is_npm_install(exe_path: &std::path::Path) -> bool {
-    let path_str = exe_path.to_string_lossy();
-    path_str.contains("/node_modules/") || path_str.contains("\\node_modules\\")
-}
-
 /// Fetch the latest release tag from GitHub API using curl.
 fn fetch_latest_version() -> Result<String> {
     let output = Command::new("curl")
@@ -209,12 +203,6 @@ pub fn run() -> Result<()> {
     let current_exe =
         std::env::current_exe().context("Could not determine current executable path")?;
 
-    let canonical_exe = std::fs::canonicalize(&current_exe).unwrap_or(current_exe.clone());
-
-    if is_npm_install(&canonical_exe) {
-        bail!("consult-llm is managed by npm. Run `npm update consult-llm-mcp` instead.");
-    }
-
     let platform = platform_suffix()?;
     let artifact_name = format!("consult-llm-{platform}");
 
@@ -331,15 +319,6 @@ pub fn check_and_notify() {
         return;
     }
 
-    // Skip for package-manager-managed installs
-    let is_managed = std::env::current_exe()
-        .ok()
-        .and_then(|p| std::fs::canonicalize(&p).ok())
-        .is_some_and(|p| is_npm_install(&p));
-    if is_managed {
-        return;
-    }
-
     let cache_path = match update_cache_path() {
         Some(p) => p,
         None => return,
@@ -391,20 +370,6 @@ mod tests {
     fn test_platform_suffix_current() {
         let suffix = platform_suffix().unwrap();
         assert!(["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"].contains(&suffix));
-    }
-
-    #[test]
-    fn test_is_npm_install_node_modules() {
-        assert!(is_npm_install(std::path::Path::new(
-            "/home/user/project/node_modules/consult-llm-mcp-linux-x64/consult-llm-mcp"
-        )));
-    }
-
-    #[test]
-    fn test_is_not_npm_install_local_bin() {
-        assert!(!is_npm_install(std::path::Path::new(
-            "/usr/local/bin/consult-llm-mcp"
-        )));
     }
 
     #[test]

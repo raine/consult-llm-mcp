@@ -35,14 +35,6 @@ pub fn log_to_file(content: &str) {
     }
 }
 
-pub fn log_tool_call(name: &str, args: &serde_json::Value) {
-    log_to_file(&format!(
-        "TOOL CALL: {name}\nArguments: {}\n{}",
-        serde_json::to_string_pretty(args).unwrap_or_default(),
-        "=".repeat(80)
-    ));
-}
-
 pub fn log_prompt(model: &str, prompt: &str) {
     log_to_file(&format!(
         "PROMPT (model: {model}):\n{prompt}\n{}",
@@ -53,35 +45,6 @@ pub fn log_prompt(model: &str, prompt: &str) {
 pub fn log_response(model: &str, response: &str, cost_info: &str) {
     log_to_file(&format!(
         "RESPONSE (model: {model}):\n{response}\n{cost_info}\n{}",
-        "=".repeat(80)
-    ));
-}
-
-pub fn log_server_start(version: &str) {
-    let cwd = std::env::current_dir()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "<unknown>".to_string());
-    log_to_file(&format!(
-        "MCP SERVER STARTED - consult-llm v{version}\ncwd: {cwd}\n{}",
-        "=".repeat(80)
-    ));
-}
-
-pub fn log_configuration(config: &std::collections::HashMap<String, String>) {
-    let redacted: std::collections::HashMap<&str, &str> = config
-        .iter()
-        .map(|(k, v)| {
-            let val = if k.to_lowercase().contains("key") || k.to_lowercase().contains("secret") {
-                if v.is_empty() { "" } else { "[REDACTED]" }
-            } else {
-                v.as_str()
-            };
-            (k.as_str(), val)
-        })
-        .collect();
-    log_to_file(&format!(
-        "CONFIGURATION:\n{}\n{}",
-        serde_json::to_string_pretty(&redacted).unwrap_or_default(),
         "=".repeat(80)
     ));
 }

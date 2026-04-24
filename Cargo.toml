@@ -23,7 +23,6 @@ build = "build.rs"
 
 [dependencies]
 consult-llm-core = { path = "crates/core" }
-rmcp = { version = "1.1", features = ["server", "transport-io"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -38,7 +37,6 @@ pathdiff = "0.2"
 uuid = { workspace = true }
 smallvec = "1"
 tempfile = "3"
-schemars = "1.2.1"
 clap = { version = "4", features = ["derive"] }
 
 [[bin]]

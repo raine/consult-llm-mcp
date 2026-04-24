@@ -56,6 +56,7 @@ pub struct ProviderRuntimeConfig {
 #[derive(Debug)]
 pub struct Config {
     providers: HashMap<Provider, ProviderRuntimeConfig>,
+    #[allow(dead_code)]
     pub default_model: Option<String>,
     pub codex_reasoning_effort: String,
     pub system_prompt_path: Option<String>,
@@ -78,6 +79,7 @@ impl Config {
         &self.providers[&provider].opencode_provider
     }
 
+    #[allow(dead_code)]
     /// Iterate over all provider runtime configs.
     pub fn iter_providers(&self) -> impl Iterator<Item = (&Provider, &ProviderRuntimeConfig)> {
         self.providers.iter()
@@ -457,7 +459,7 @@ pub fn config() -> &'static Config {
 }
 
 /// Initialize config and model registry from environment variables.
-/// Must be called before MCP server starts.
+/// Must be called before consult requests start.
 /// Returns the ModelRegistry for explicit dependency injection.
 pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
     let (config, registry) = parse_config(env_non_empty)?;

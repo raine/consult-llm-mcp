@@ -42,21 +42,52 @@ cleanup() {
 	rc=$?
 	if [ $rc -ne 0 ]; then
 		echo "Failure detected, rolling back version changes..." >&2
-		git restore package.json Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || true
+		git restore Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || true
 	fi
 	exit $rc
 }
 trap cleanup EXIT
 
-if [[ "$BETA" == true ]]; then
-	npm version prepatch --preid=beta --no-git-tag-version
-else
-	npm version "$bump" --no-git-tag-version
-fi
-VERSION=$(node -p "require('./package.json').version")
+current_version() {
+	grep '^version = "' Cargo.toml | head -n1 | sed -E 's/version = "([^"]+)"/\1/'
+}
+
+bump_version() {
+	local current="$1"
+	local kind="$2"
+	local base prerelease major minor patch beta_num
+
+	base="${current%%-*}"
+	prerelease="${current#${base}}"
+	IFS=. read -r major minor patch <<EOF
+$base
+EOF
+
+	case "$kind" in
+	patch)
+		echo "$major.$minor.$((patch + 1))"
+		;;
+	minor)
+		echo "$major.$((minor + 1)).0"
+		;;
+	major)
+		echo "$((major + 1)).0.0"
+		;;
+	beta)
+		if [[ "$prerelease" =~ ^-beta\.([0-9]+)$ ]]; then
+			beta_num="${BASH_REMATCH[1]}"
+			echo "$base-beta.$((beta_num + 1))"
+		else
+			echo "$major.$minor.$((patch + 1))-beta.0"
+		fi
+		;;
+	esac
+}
+
+VERSION=$(bump_version "$(current_version)" "$bump")
 
 # Sync version to Cargo.toml
-sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+VERSION="$VERSION" perl -0pi -e 's/(\[workspace\.package\]\nversion = ")[^"]+(")/$1$ENV{VERSION}$2/s' Cargo.toml
 cargo check --quiet 2>/dev/null # update Cargo.lock
 
 # Generate changelog
@@ -145,7 +176,7 @@ fi
 
 trap - EXIT
 
-git add package.json Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md
 git commit -m "$VERSION"
 git tag "v$VERSION"
 git push

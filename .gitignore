@@ -3,5 +3,5 @@
 target/
 package-lock.json
 history
-consult-llm-mcp-darwin-*
-consult-llm-mcp-linux-*
+consult-llm-darwin-*
+consult-llm-linux-*

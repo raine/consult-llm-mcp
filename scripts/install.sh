@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# consult-llm-mcp installation script
+# consult-llm installation script
 # Usage: curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
 #
 # Environment variables:
-#   CONSULT_LLM_MCP_VERSION      - Pin a specific version (e.g., v2.5.6)
-#   CONSULT_LLM_MCP_INSTALL_DIR  - Override install directory (default: /usr/local/bin or ~/.local/bin)
+#   CONSULT_LLM_VERSION          - Pin a specific version (e.g., v3.0.0)
+#   CONSULT_LLM_INSTALL_DIR      - Override install directory (default: /usr/local/bin or ~/.local/bin)
+#   CONSULT_LLM_MCP_VERSION      - Deprecated alias for CONSULT_LLM_VERSION
+#   CONSULT_LLM_MCP_INSTALL_DIR  - Deprecated alias for CONSULT_LLM_INSTALL_DIR
 #
 
 set -e
@@ -45,7 +47,7 @@ detect_platform() {
 	*)
 		log_error "Unsupported operating system: $(uname -s)"
 		echo ""
-		echo "consult-llm-mcp supports macOS and Linux."
+		echo "consult-llm supports macOS and Linux."
 		echo ""
 		exit 1
 		;;
@@ -61,7 +63,7 @@ detect_platform() {
 	*)
 		log_error "Unsupported architecture: $(uname -m)"
 		echo ""
-		echo "consult-llm-mcp prebuilt binaries are available for x64 and arm64."
+		echo "consult-llm prebuilt binaries are available for x64 and arm64."
 		echo ""
 		exit 1
 		;;
@@ -71,14 +73,14 @@ detect_platform() {
 }
 
 install_from_release() {
-	log_info "Installing consult-llm-mcp from GitHub releases..."
+	log_info "Installing consult-llm from GitHub releases..."
 
 	local platform=$1
 	local tmp_dir
 	tmp_dir=$(mktemp -d)
 	trap 'rm -rf "$tmp_dir"' EXIT
 
-	local version="${CONSULT_LLM_MCP_VERSION:-}"
+	local version="${CONSULT_LLM_VERSION:-${CONSULT_LLM_MCP_VERSION:-}}"
 
 	if [ -z "$version" ]; then
 		log_info "Fetching latest release..."
@@ -101,7 +103,7 @@ install_from_release() {
 			echo ""
 			echo "This might be due to network issues or GitHub API rate limits."
 			echo "You can specify a version manually:"
-			echo "  CONSULT_LLM_MCP_VERSION=v2.5.6 bash install.sh"
+			echo "  CONSULT_LLM_VERSION=v3.0.0 bash install.sh"
 			echo ""
 			exit 1
 		fi
@@ -109,7 +111,7 @@ install_from_release() {
 
 	log_info "Installing version: $version"
 
-	local archive_name="consult-llm-mcp-${platform}.tar.gz"
+	local archive_name="consult-llm-${platform}.tar.gz"
 	local download_url="https://github.com/raine/consult-llm-mcp/releases/download/${version}/${archive_name}"
 
 	log_info "Downloading $archive_name..."
@@ -136,7 +138,7 @@ install_from_release() {
 	fi
 
 	log_info "Verifying checksum..."
-	local checksum_file="consult-llm-mcp-${platform}.sha256"
+	local checksum_file="consult-llm-${platform}.sha256"
 	local checksum_url="https://github.com/raine/consult-llm-mcp/releases/download/${version}/${checksum_file}"
 
 	if command -v curl &>/dev/null; then
@@ -177,7 +179,7 @@ install_from_release() {
 		exit 1
 	fi
 
-	local install_dir="${CONSULT_LLM_MCP_INSTALL_DIR:-}"
+	local install_dir="${CONSULT_LLM_INSTALL_DIR:-${CONSULT_LLM_MCP_INSTALL_DIR:-}}"
 	if [ -z "$install_dir" ]; then
 		if [[ -w /usr/local/bin ]]; then
 			install_dir="/usr/local/bin"
@@ -187,16 +189,16 @@ install_from_release() {
 	fi
 	mkdir -p "$install_dir"
 
-	if [ -f "$install_dir/consult-llm-mcp" ]; then
+	if [ -f "$install_dir/consult-llm" ]; then
 		local existing_version
-		existing_version=$("$install_dir/consult-llm-mcp" --version 2>/dev/null || echo "unknown")
+		existing_version=$("$install_dir/consult-llm" --version 2>/dev/null || echo "unknown")
 		log_info "Existing installation found: $existing_version"
 		log_info "Upgrading to: $version"
 	fi
 
 	log_info "Installing to $install_dir..."
 
-	for bin in consult-llm-mcp consult-llm-monitor; do
+	for bin in consult-llm consult-llm-monitor; do
 		local tmp_binary="$install_dir/$bin.tmp.$$"
 
 		if [[ -w "$install_dir" ]]; then
@@ -236,7 +238,7 @@ install_from_release() {
 verify_installation() {
 	local install_dir="$1"
 
-	for bin in consult-llm-mcp consult-llm-monitor; do
+	for bin in consult-llm consult-llm-monitor; do
 		if [ ! -x "$install_dir/$bin" ]; then
 			log_error "$bin binary not found or not executable at $install_dir/$bin"
 			exit 1
@@ -248,19 +250,28 @@ verify_installation() {
 		fi
 	done
 
-	log_success "consult-llm-mcp and consult-llm-monitor are installed and ready!"
+	log_success "consult-llm and consult-llm-monitor are installed and ready!"
 	echo ""
-	"$install_dir/consult-llm-mcp" --version
+	"$install_dir/consult-llm" --version
 	echo ""
 
 	echo "Get started: https://github.com/raine/consult-llm-mcp#quick-start"
 	echo ""
 }
 
+show_migration_notice() {
+	if command -v consult-llm-mcp >/dev/null 2>&1 || [ -e "$HOME/.consult-llm-mcp" ]; then
+		log_warning "v3 migrates state to ~/.consult-llm on first launch; remove 'claude mcp add consult-llm ...' from your MCP config."
+		echo ""
+	fi
+}
+
 main() {
 	echo ""
-	echo "consult-llm-mcp installer"
+	echo "consult-llm installer"
 	echo ""
+
+	show_migration_notice
 
 	log_info "Detecting platform..."
 	local platform
