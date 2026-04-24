@@ -1,0 +1,115 @@
+use std::path::{Path, PathBuf};
+
+pub struct DiscoveredPaths {
+    pub user: Option<PathBuf>,
+    pub project: Option<PathBuf>,
+    pub project_local: Option<PathBuf>,
+}
+
+pub fn discover(cwd: &Path, home: Option<&Path>) -> DiscoveredPaths {
+    let user = home
+        .map(|h| h.join(".consult-llm").join("config.yaml"))
+        .filter(|p| p.exists());
+
+    let mut project = None;
+    let mut project_local = None;
+    let mut dir = Some(cwd);
+    while let Some(d) = dir {
+        let p = d.join(".consult-llm.yaml");
+        let pl = d.join(".consult-llm.local.yaml");
+        if p.exists() || pl.exists() {
+            if p.exists() {
+                project = Some(p);
+            }
+            if pl.exists() {
+                project_local = Some(pl);
+            }
+            break;
+        }
+        if d.join(".git").exists() {
+            break;
+        }
+        if home.is_some_and(|h| d == h) {
+            break;
+        }
+        dir = d.parent();
+    }
+
+    DiscoveredPaths {
+        user,
+        project,
+        project_local,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_discover_stops_at_git_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        // Create a subdirectory with a .git marker at root
+        std::fs::create_dir_all(root.join(".git")).unwrap();
+        let sub = root.join("sub").join("deep");
+        std::fs::create_dir_all(&sub).unwrap();
+        // Place config file above .git (should not be found)
+        std::fs::write(root.parent().unwrap().join(".consult-llm.yaml"), "").ok();
+
+        let paths = discover(&sub, None);
+        assert!(paths.project.is_none());
+        assert!(paths.project_local.is_none());
+    }
+
+    #[test]
+    fn test_discover_stops_at_home() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_path_buf();
+        let sub = home.join("project").join("src");
+        std::fs::create_dir_all(&sub).unwrap();
+        // No config files anywhere — should stop at home
+        let paths = discover(&sub, Some(&home));
+        assert!(paths.project.is_none());
+        assert!(paths.project_local.is_none());
+    }
+
+    #[test]
+    fn test_discover_finds_both_yaml_and_local_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path();
+        std::fs::write(project_dir.join(".consult-llm.yaml"), "").unwrap();
+        std::fs::write(project_dir.join(".consult-llm.local.yaml"), "").unwrap();
+
+        let paths = discover(project_dir, None);
+        assert!(paths.project.is_some());
+        assert!(paths.project_local.is_some());
+    }
+
+    #[test]
+    fn test_discover_walks_up_to_find_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let sub = root.join("a").join("b").join("c");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(root.join(".consult-llm.yaml"), "").unwrap();
+
+        let paths = discover(&sub, None);
+        assert!(paths.project.is_some());
+        assert_eq!(paths.project.unwrap(), root.join(".consult-llm.yaml"));
+    }
+
+    #[test]
+    fn test_discover_user_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_path_buf();
+        let user_config_dir = home.join(".consult-llm");
+        std::fs::create_dir_all(&user_config_dir).unwrap();
+        std::fs::write(user_config_dir.join("config.yaml"), "").unwrap();
+
+        let cwd = home.join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let paths = discover(&cwd, Some(&home));
+        assert!(paths.user.is_some());
+    }
+}

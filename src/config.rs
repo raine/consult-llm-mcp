@@ -1,17 +1,14 @@
 use std::collections::HashMap;
-use std::env;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
+use crate::config_discovery::discover;
+use crate::config_loader::LayeredEnv;
 use crate::logger::log_to_file;
 use crate::models::{
     ALL_PROVIDERS, PROVIDER_SPECS, Provider, SELECTOR_PRIORITIES, all_builtin_models,
 };
-
-/// Read env var, treating empty strings as unset.
-fn env_non_empty(key: &str) -> Option<String> {
-    env::var(key).ok().filter(|v| !v.is_empty())
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Backend {
@@ -156,6 +153,10 @@ pub enum ConfigError {
         allowed: Vec<String>,
     },
     InvalidCodexReasoningEffort(String),
+    ConfigFile {
+        path: PathBuf,
+        message: String,
+    },
 }
 
 impl fmt::Display for ConfigError {
@@ -196,6 +197,12 @@ impl fmt::Display for ConfigError {
             ConfigError::InvalidCodexReasoningEffort(effort) => write!(
                 f,
                 "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"
+            ),
+            ConfigError::ConfigFile { path, message } => write!(
+                f,
+                "Configuration file error:\n  {}: {}",
+                path.display(),
+                message,
             ),
         }
     }
@@ -453,18 +460,33 @@ pub fn parse_config(
 }
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
+static LAYERED_ENV: OnceLock<LayeredEnv> = OnceLock::new();
 
 pub fn config() -> &'static Config {
     CONFIG.get().expect("config not initialized")
 }
 
-/// Initialize config and model registry from environment variables.
+#[allow(dead_code)]
+pub fn layered_env() -> &'static LayeredEnv {
+    LAYERED_ENV.get().expect("config not initialized")
+}
+
+/// Initialize config and model registry from environment variables and config files.
 /// Must be called before consult requests start.
 /// Returns the ModelRegistry for explicit dependency injection.
 pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
-    let (config, registry) = parse_config(env_non_empty)?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let home = dirs::home_dir();
+    let paths = discover(&cwd, home.as_deref());
+    let layered = LayeredEnv::load(&paths).map_err(|e| ConfigError::ConfigFile {
+        path: e.path,
+        message: e.message,
+    })?;
+
+    let (config, registry) = parse_config(layered.as_env_fn())?;
 
     let _ = CONFIG.set(config);
+    let _ = LAYERED_ENV.set(layered);
 
     Ok(registry)
 }

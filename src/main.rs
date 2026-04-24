@@ -1,6 +1,9 @@
 mod cli;
 mod clipboard;
 mod config;
+mod config_discovery;
+mod config_file;
+mod config_loader;
 mod errors;
 mod executors;
 mod external_dirs;
@@ -45,6 +48,8 @@ async fn main() {
             Some(cli::Command::Doctor) => cli::commands::doctor::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::InitConfig) => cli::commands::init_config::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::Update) => cli::commands::update::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),

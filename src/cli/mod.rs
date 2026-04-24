@@ -61,6 +61,8 @@ pub enum Command {
     Doctor,
     /// Scaffold ~/.consult-llm/SYSTEM_PROMPT.md
     InitPrompt,
+    /// Scaffold ~/.consult-llm/config.yaml
+    InitConfig,
     /// Internal: background update check (self-spawned by update.rs).
     #[command(hide = true)]
     CheckUpdate,

@@ -314,8 +314,15 @@ pub fn run_background_check() -> Result<()> {
 
 /// Called on startup to check for updates in the background and log if one is available.
 /// Designed to be completely non-blocking and fail-silent.
+fn no_update_check_set() -> bool {
+    match std::env::var("CONSULT_LLM_NO_UPDATE_CHECK") {
+        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"),
+        Err(_) => false,
+    }
+}
+
 pub fn check_and_notify() {
-    if std::env::var("CONSULT_LLM_NO_UPDATE_CHECK").is_ok() {
+    if no_update_check_set() {
         return;
     }
 

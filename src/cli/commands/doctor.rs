@@ -1,5 +1,7 @@
 use consult_llm_core::monitoring::{active_dir, runs_dir, sessions_dir};
 
+use crate::models::PROVIDER_SPECS;
+
 fn path_has(bin: &str) -> bool {
     let Some(path) = std::env::var_os("PATH") else {
         return false;
@@ -11,6 +13,24 @@ fn path_has(bin: &str) -> bool {
         }
     }
     false
+}
+
+fn all_config_keys() -> Vec<&'static str> {
+    let mut keys: Vec<&'static str> = vec![
+        "CONSULT_LLM_DEFAULT_MODEL",
+        "CONSULT_LLM_ALLOWED_MODELS",
+        "CONSULT_LLM_EXTRA_MODELS",
+        "CONSULT_LLM_CODEX_REASONING_EFFORT",
+        "CONSULT_LLM_SYSTEM_PROMPT_PATH",
+        "CONSULT_LLM_NO_UPDATE_CHECK",
+        "CONSULT_LLM_OPENCODE_PROVIDER",
+    ];
+    for spec in PROVIDER_SPECS {
+        keys.push(spec.backend_env);
+        keys.push(spec.opencode_env);
+        keys.push(spec.api_key_env);
+    }
+    keys
 }
 
 pub fn run() -> anyhow::Result<()> {
@@ -40,5 +60,22 @@ pub fn run() -> anyhow::Result<()> {
         let state = if path_has(bin) { "OK" } else { "MISSING" };
         println!("  {bin:<16} {state}");
     }
+
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let home = dirs::home_dir();
+    let paths = crate::config_discovery::discover(&cwd, home.as_deref());
+    match crate::config_loader::LayeredEnv::load(&paths) {
+        Ok(env) => {
+            println!("\nResolved config:");
+            for key in all_config_keys() {
+                match env.lookup(key) {
+                    Some((v, src)) => println!("  {key:40} = {v:20} [{src}]"),
+                    None => println!("  {key:40} = (unset)              [default]"),
+                }
+            }
+        }
+        Err(e) => println!("\nConfig file error: {}: {}", e.path.display(), e.message),
+    }
+
     Ok(())
 }

@@ -206,7 +206,40 @@ Provider-prefix override env vars:
 
 ## Configuration
 
-### Environment variables
+### Config files
+
+consult-llm reads layered YAML config files. Resolution order (highest to lowest precedence):
+
+1. Environment variables
+2. `.consult-llm.local.yaml` — project-local overrides, not committed to git
+3. `.consult-llm.yaml` — committed project config
+4. `~/.consult-llm/config.yaml` — user config
+
+Project files are discovered by walking up from the current directory to the nearest `.git` root or `$HOME`.
+
+Scaffold the user config:
+
+```bash
+consult-llm init-config
+```
+
+Example `~/.consult-llm/config.yaml`:
+
+```yaml
+default_model: gemini
+
+gemini:
+  backend: gemini-cli
+
+openai:
+  backend: codex-cli
+  reasoning_effort: high
+
+opencode:
+  default_provider: copilot
+```
+
+### Environment variables (highest precedence)
 
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
@@ -232,6 +265,7 @@ Create the default prompt file:
 
 ```bash
 consult-llm init-prompt
+consult-llm init-config   # scaffold user config file
 ```
 
 Default location:
