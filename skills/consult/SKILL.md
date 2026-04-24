@@ -38,7 +38,7 @@ Strip all flags from the arguments to get the user query.
 
 **`--codex`** — single call with `-m openai`.
 
-**No flag (default)** — call Gemini then Codex sequentially, each with their respective `-m` flag and `-f <path>` for each relevant file.
+**No flag (default)** — call both Gemini (`-m gemini`) and Codex (`-m openai`), each with `-f <path>` for each relevant file.
 
 **`--browser`** — single call with `--web` (model flag is ignored in web mode).
 
