@@ -69,71 +69,23 @@ Then from inside Claude Code, OpenCode, or Codex:
 
 ## Usage
 
-### Basic ask
+The CLI is invoked by your agent via the installed skills — you don't call it directly. From inside Claude Code, OpenCode, or Codex:
+
+```
+/consult what's the best way to structure this state machine?
+/consult --gemini review this design for edge cases
+/debate should this be a separate service or stay in the monolith?
+```
+
+### CLI utilities
 
 ```bash
-cat <<'EOF' | consult-llm -m openai
-What's the best caching strategy for a read-heavy API?
-EOF
+consult-llm models       # list available models and resolved selectors
+consult-llm doctor       # diagnose backend auth and config
+consult-llm init-config  # scaffold ~/.consult-llm/config.yaml
+consult-llm init-prompt  # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+consult-llm update       # self-update the binary
 ```
-
-### With files
-
-```bash
-cat <<'EOF' | consult-llm -m gemini -f "src/lib.rs" -f "src/cache.rs"
-Review this cache invalidation design and point out correctness risks.
-EOF
-```
-
-### With git diff context
-
-```bash
-cat <<'EOF' | consult-llm -m openai --task review \
-  --diff-files src/cache.rs \
-  --diff-files src/lib.rs \
-  --diff-base main
-Review these changes for bugs and regressions.
-EOF
-```
-
-### Multi-turn conversations
-
-The first response prints a prefix like:
-
-```text
-[model:gemini-3.1-pro-preview] [thread_id:thread_abc123]
-```
-
-Pass that thread ID back with `-t`:
-
-```bash
-cat <<'EOF' | consult-llm -m gemini -t "thread_abc123"
-What if we need stronger consistency guarantees than your first suggestion assumed?
-EOF
-```
-
-### Web mode
-
-```bash
-cat <<'EOF' | consult-llm --web -f "src/cli.rs" -f "src/workflow.rs"
-What's the best way to add a --background flag here?
-EOF
-```
-
-This copies the formatted prompt to your clipboard for pasting into ChatGPT,
-Claude, Gemini, or any browser UI.
-
-### CLI help
-
-```bash
-consult-llm --help
-consult-llm models
-consult-llm doctor
-consult-llm init-prompt
-consult-llm update
-```
-
-### Diagnosing your setup
 
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
 
