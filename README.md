@@ -1,17 +1,13 @@
-# consult-llm-mcp
+# consult-llm
 
 `consult-llm` is a CLI for consulting stronger AI models from your existing
 agent workflow. It supports GPT-5.5/5.4, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
-The GitHub repo is still named `consult-llm-mcp` for now, but the installed
-user-facing binaries are:
+Installed binaries: `consult-llm`, `consult-llm-monitor` (repo: [consult-llm-mcp](https://github.com/raine/consult-llm-mcp))
 
-- `consult-llm`
-- `consult-llm-monitor`
-
-[Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [Skills](#skills) · [Monitor](#monitor) · [Why CLI](#why-cli) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [Skills](#skills) · [Monitor](#monitor) · [Why CLI](#why-cli) · [Migrating from MCP](#migrating-from-mcp) · [Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -57,18 +53,18 @@ export DEEPSEEK_API_KEY=your_deepseek_key
 export MINIMAX_API_KEY=your_minimax_key
 ```
 
-3. Run a consultation:
-
-```bash
-cat <<'EOF' | consult-llm -m gemini -f "src/main.rs" -f "src/config.rs"
-What's the best way to untangle the configuration loading flow here?
-EOF
-```
-
-4. Optionally install the skills so your agent can call `consult-llm` for you:
+3. Install the skills so your agent can call `consult-llm` for you:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+```
+
+Then from inside Claude Code, OpenCode, or Codex:
+
+```
+/consult what's the best way to model this state machine?
+/consult --gemini review this design for edge cases
+/debate should this be a separate service or stay in the monolith?
 ```
 
 ## Usage
@@ -245,23 +241,29 @@ opencode:
 
 ### Environment variables (highest precedence)
 
-- `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
-- `DEEPSEEK_API_KEY`
-- `MINIMAX_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `CONSULT_LLM_DEFAULT_MODEL`
-- `CONSULT_LLM_GEMINI_BACKEND`
-- `CONSULT_LLM_OPENAI_BACKEND`
-- `CONSULT_LLM_DEEPSEEK_BACKEND`
-- `CONSULT_LLM_MINIMAX_BACKEND`
-- `CONSULT_LLM_ANTHROPIC_BACKEND`
-- `CONSULT_LLM_ALLOWED_MODELS`
-- `CONSULT_LLM_EXTRA_MODELS`
-- `CONSULT_LLM_CODEX_REASONING_EFFORT`
-- `CONSULT_LLM_OPENCODE_PROVIDER`
-- `CONSULT_LLM_SYSTEM_PROMPT_PATH`
-- `CONSULT_LLM_NO_UPDATE_CHECK`
+| Variable                                 | Description                                                   | Allowed values                                 | Default                           |
+| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
+| `OPENAI_API_KEY`                         | OpenAI API key                                                | —                                              | —                                 |
+| `GEMINI_API_KEY`                         | Gemini API key                                                | —                                              | —                                 |
+| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             | —                                              | —                                 |
+| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              | —                                              | —                                 |
+| `MINIMAX_API_KEY`                        | MiniMax API key                                               | —                                              | —                                 |
+| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use when `-m` is omitted                 | selector or exact model ID                     | first available                   |
+| `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`     | `api`                             |
+| `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`      | `api`                             |
+| `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                               | `api`                             |
+| `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                               | `api`                             |
+| `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                          | `api`                             |
+| `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                      | all                               |
+| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      | —                                 |
+| `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh` | `high`                            |
+| `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                  | per-model default                 |
+| `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                  | `openai`                          |
+| `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                  | `google`                          |
+| `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                  | `deepseek`                        |
+| `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                  | `minimax`                         |
+| `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.consult-llm/SYSTEM_PROMPT.md` |
+| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               | —                                 |
 
 ### Custom system prompt
 
@@ -347,6 +349,37 @@ consult-llm update
 
 This downloads the latest GitHub release, verifies its SHA-256 checksum, updates
 `consult-llm`, and updates `consult-llm-monitor` if it lives alongside it.
+
+## Migrating from MCP
+
+If you previously used the MCP server version (`consult-llm-mcp` npm package):
+
+1. **Remove the MCP server registration** from your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+
+   ```json
+   // remove this block:
+   "mcpServers": {
+     "consult-llm": { ... }
+   }
+   ```
+
+2. **Uninstall the npm package** if you installed it globally:
+
+   ```bash
+   npm uninstall -g consult-llm-mcp
+   ```
+
+3. **Install the CLI binary** (see [Quick Start](#quick-start)).
+
+4. **Install skills** so your agent can call `consult-llm` for you:
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
+   ```
+
+5. **Keep your existing env vars** — `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. You can optionally migrate them to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
+
+> **Note:** Thread history from the MCP version does not carry over — the CLI uses a different storage format.
 
 ## Why CLI
 
