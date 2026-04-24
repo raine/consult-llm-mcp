@@ -15,9 +15,9 @@ fn init_log_file() -> Mutex<std::fs::File> {
             .to_string_lossy()
             .to_string()
     });
-    let dir = PathBuf::from(state_home).join("consult-llm-mcp");
+    let dir = PathBuf::from(state_home).join("consult-llm");
     let _ = create_dir_all(&dir);
-    let path = dir.join("mcp.log");
+    let path = dir.join("consult-llm.log");
     let file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -62,7 +62,7 @@ pub fn log_server_start(version: &str) {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "<unknown>".to_string());
     log_to_file(&format!(
-        "MCP SERVER STARTED - consult-llm-mcp v{version}\ncwd: {cwd}\n{}",
+        "MCP SERVER STARTED - consult-llm v{version}\ncwd: {cwd}\n{}",
         "=".repeat(80)
     ));
 }

@@ -61,6 +61,8 @@ fn main() -> io::Result<()> {
         default_hook(info);
     }));
 
+    consult_llm_core::path_migrate::migrate_if_needed();
+
     let mut guard = TerminalGuard::new()?;
     let mut state = AppState::new();
     let dir = sessions_dir();

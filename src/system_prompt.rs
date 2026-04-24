@@ -37,7 +37,7 @@ pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
     let custom_path = cfg.system_prompt_path.clone().unwrap_or_else(|| {
         dirs::home_dir()
             .unwrap_or_default()
-            .join(".consult-llm-mcp")
+            .join(".consult-llm")
             .join("SYSTEM_PROMPT.md")
             .to_string_lossy()
             .to_string()

@@ -588,7 +588,7 @@ See the "Using web mode..." example above for a concrete transcript.
   - See [OpenCode CLI](#opencode-cli) for details and per-family overrides
 - `CONSULT_LLM_SYSTEM_PROMPT_PATH` - Custom path to system prompt file
   (optional)
-  - Overrides the default `~/.consult-llm-mcp/SYSTEM_PROMPT.md` location
+  - Overrides the default `~/.consult-llm/SYSTEM_PROMPT.md` location
   - Useful for project-specific prompts
 - `CONSULT_LLM_NO_UPDATE_CHECK` - Disable automatic update checking on server
   startup (optional)
@@ -596,16 +596,10 @@ See the "Using web mode..." example above for a concrete transcript.
   - By default, the server checks for new versions in the background every 24
     hours and logs a notice when an update is available
   - Only applies to binary installs — npm installs are never checked
-- `MCP_DEBUG_STDIN` - Log raw JSON-RPC messages received on stdin (optional)
-  - Set to `1` to enable
-  - Logs every message as `RAW RECV` entries and poll timing gaps as
-    `STDIN POLL` entries in `mcp.log`
-  - Useful for debugging transport-level issues
-
 ### Custom system prompt
 
 You can customize the system prompt used when consulting LLMs by creating a
-`SYSTEM_PROMPT.md` file in `~/.consult-llm-mcp/`:
+`SYSTEM_PROMPT.md` file in `~/.consult-llm/`:
 
 ```bash
 npx consult-llm-mcp init-prompt
@@ -628,7 +622,7 @@ your repository:
 ```bash
 claude mcp add consult-llm \
   -e GEMINI_API_KEY=your_key \
-  -e CONSULT_LLM_SYSTEM_PROMPT_PATH=/path/to/project/.consult-llm-mcp/SYSTEM_PROMPT.md \
+  -e CONSULT_LLM_SYSTEM_PROMPT_PATH=/path/to/project/.consult-llm/SYSTEM_PROMPT.md \
   -- npx -y consult-llm-mcp
 ```
 
@@ -729,8 +723,8 @@ models complex questions.
 ## Logging
 
 All prompts and responses are logged to
-`$XDG_STATE_HOME/consult-llm-mcp/mcp.log` (defaults to
-`~/.local/state/consult-llm-mcp/mcp.log`) with:
+`$XDG_STATE_HOME/consult-llm/consult-llm.log` (defaults to
+`~/.local/state/consult-llm/consult-llm.log`) with:
 
 - Tool call parameters
 - Full prompts and responses

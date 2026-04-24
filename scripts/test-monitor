@@ -6,7 +6,7 @@ set -euo pipefail
 # Run this in one terminal, then launch `cargo run --bin consult-llm-monitor` in another
 
 state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
-sessions_dir="$state_home/consult-llm-mcp/sessions"
+sessions_dir="$state_home/consult-llm/sessions"
 mkdir -p "$sessions_dir"
 
 harness_pid=$$

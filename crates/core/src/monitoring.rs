@@ -88,7 +88,7 @@ pub fn sessions_dir() -> PathBuf {
         let home = dirs::home_dir().unwrap_or_default();
         home.join(".local/state").to_string_lossy().to_string()
     });
-    PathBuf::from(state_home).join("consult-llm-mcp/sessions")
+    PathBuf::from(state_home).join("consult-llm/sessions")
 }
 
 pub fn active_dir() -> PathBuf {

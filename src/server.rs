@@ -82,7 +82,7 @@ impl ServerHandler for ConsultServer {
 
 pub fn init_system_prompt() -> anyhow::Result<()> {
     let home = dirs::home_dir().expect("Could not determine home directory");
-    let config_dir = home.join(".consult-llm-mcp");
+    let config_dir = home.join(".consult-llm");
     let prompt_path = config_dir.join("SYSTEM_PROMPT.md");
 
     if prompt_path.exists() {

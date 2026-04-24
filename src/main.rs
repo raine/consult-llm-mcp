@@ -14,7 +14,6 @@ mod git_worktree;
 mod llm;
 mod llm_query;
 mod logger;
-mod logging_reader;
 mod models;
 mod prompt_builder;
 mod schema;
@@ -34,6 +33,8 @@ async fn main() {
         logger::log_to_file(&format!("PANIC: {info}"));
         default_hook(info);
     }));
+
+    consult_llm_core::path_migrate::migrate_if_needed();
 
     if std::env::var("CONSULT_LLM_MCP").is_ok() {
         run_mcp_server().await;
@@ -125,21 +126,11 @@ async fn run_mcp_server() {
     let consult_service = Arc::new(service::ConsultService::new(registry, executor_provider));
     let server = server::ConsultServer::new(consult_service);
 
-    let mcp_service = if std::env::var("MCP_DEBUG_STDIN").is_ok() {
-        logger::log_to_file("MCP_DEBUG_STDIN enabled");
-        let stdin = logging_reader::LoggingReader::new(tokio::io::stdin());
-        let stdout = tokio::io::stdout();
-        server
-            .serve((stdin, stdout))
-            .await
-            .expect("Failed to start MCP server")
-    } else {
-        let transport = rmcp::transport::io::stdio();
-        server
-            .serve(transport)
-            .await
-            .expect("Failed to start MCP server")
-    };
+    let transport = rmcp::transport::io::stdio();
+    let mcp_service = server
+        .serve(transport)
+        .await
+        .expect("Failed to start MCP server");
 
     tokio::select! {
         res = mcp_service.waiting() => {

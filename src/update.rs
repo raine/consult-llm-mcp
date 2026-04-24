@@ -243,7 +243,7 @@ struct UpdateCache {
 
 fn update_cache_path() -> Option<std::path::PathBuf> {
     let cache_dir = dirs::cache_dir()?;
-    let dir = cache_dir.join("consult-llm-mcp");
+    let dir = cache_dir.join("consult-llm");
     std::fs::create_dir_all(&dir).ok()?;
     Some(dir.join("update_check.json"))
 }

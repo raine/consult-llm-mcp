@@ -28,7 +28,7 @@ fn threads_dir() -> PathBuf {
             .to_string_lossy()
             .to_string()
     });
-    PathBuf::from(state_home).join("consult-llm-mcp/threads")
+    PathBuf::from(state_home).join("consult-llm/threads")
 }
 
 pub fn generate_thread_id() -> String {

@@ -59,7 +59,7 @@ pub enum Command {
     Update,
     /// Diagnose backend auth, paths, and env vars
     Doctor,
-    /// Scaffold ~/.consult-llm-mcp/SYSTEM_PROMPT.md
+    /// Scaffold ~/.consult-llm/SYSTEM_PROMPT.md
     InitPrompt,
     /// Internal: background update check (self-spawned by update.rs).
     #[command(hide = true)]

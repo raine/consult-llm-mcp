@@ -3,7 +3,7 @@
 set -euo pipefail
 
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
-SESSIONS_DIR="$STATE_HOME/consult-llm-mcp/sessions"
+SESSIONS_DIR="$STATE_HOME/consult-llm/sessions"
 mkdir -p "$SESSIONS_DIR"
 
 emit() {
