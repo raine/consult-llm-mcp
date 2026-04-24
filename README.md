@@ -1,7 +1,7 @@
 # consult-llm-mcp
 
 An MCP server that lets Claude Code consult stronger AI models (GPT-5.4, Gemini
-3.1 Pro, Claude Opus 4.7, DeepSeek Reasoner, MiniMax M2.7) when Sonnet has you running in circles and you need
+3.1 Pro, Claude Opus 4.7, DeepSeek V4 Pro, MiniMax M2.7) when Sonnet has you running in circles and you need
 to bring in the heavy artillery. Supports multi-turn conversations.
 
 ```
@@ -29,7 +29,7 @@ to bring in the heavy artillery. Supports multi-turn conversations.
 ## Features
 
 - Query powerful AI models (GPT-5.4, Gemini 3.1 Pro, Claude Opus 4.7, DeepSeek
-  Reasoner, MiniMax M2.7) with
+  V4 Pro, MiniMax M2.7) with
   relevant files as context
 - Include git changes for code review
 - Comprehensive logging with cost estimation (if using API)
