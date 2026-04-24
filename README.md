@@ -5,7 +5,7 @@ agent workflow. It supports GPT-5.5/5.4, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
-[Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [Skills](#skills) · [Monitor](#monitor) · [Why CLI](#why-cli) · [Migrating from MCP](#migrating-from-mcp) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Usage](#usage) · [Configuration](#configuration) · [Skills](#skills) · [Monitor](#monitor) · [Migrating from MCP](#migrating-from-mcp) · [Changelog](CHANGELOG.md)
 
 ## Features
 
@@ -341,24 +341,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    consult-llm install-skills
    ```
 
-5. **Keep your existing env vars:** `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. You can optionally migrate them to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
-
-> **Note:** Thread history from the MCP version does not carry over - the CLI uses a different storage format.
-
-## Why CLI
-
-The CLI is easier to use across tmux panes, CI jobs, editors, shell scripts, and
-agent skills. A single binary plus stdin/heredoc input works anywhere without an
-MCP registration step or per-host tool wiring.
-
-It also keeps the protocol surface small:
-
-- input comes from stdin or `--prompt-file`
-- file context uses repeated `-f` flags
-- multi-turn state uses `-t <thread_id>`
-- clipboard export uses `--web`
-
-That makes it straightforward for agents and humans to call directly.
+5. **Keep your existing env vars:** `OPENAI_API_KEY`, `GEMINI_API_KEY`, etc. are unchanged. API keys stay as env vars — they cannot go in config files. Other settings (backends, default model, etc.) can be moved to `~/.consult-llm/config.yaml` (see [Config files](#config-files)).
 
 ## Development
 
