@@ -55,20 +55,14 @@ export GEMINI_API_KEY=your_gemini_key
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
 ```
 
-Then from inside Claude Code, OpenCode, or Codex:
-
-```
-/consult what's the best way to model this state machine?
-/consult --gemini review this design for edge cases
-/debate should this be a separate service or stay in the monolith?
-```
+Then invoke skills from inside your agent — see [Usage](#usage).
 
 ## Usage
 
 The CLI is invoked by your agent via the installed skills; you don't call it directly. From inside Claude Code, OpenCode, or Codex:
 
 ```
-/consult what's the best way to structure this state machine?
+/consult what's the best way to model this state machine?
 /consult --gemini review this design for edge cases
 /debate should this be a separate service or stay in the monolith?
 ```
