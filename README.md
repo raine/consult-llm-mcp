@@ -1,5 +1,7 @@
 # consult-llm
 
+You install skills into your agent (Claude Code, Codex, OpenCode), then trigger them with slash commands — the skill tells the agent to pipe a prompt into `consult-llm`, which packages file context, calls a configured backend, and streams the response back inline.
+
 `consult-llm` is a CLI for consulting stronger AI models from your existing
 agent workflow. It supports GPT-5.5/5.4, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
