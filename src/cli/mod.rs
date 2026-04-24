@@ -58,7 +58,11 @@ pub enum Command {
     /// Self-update the binary
     Update,
     /// Diagnose backend auth, paths, and env vars
-    Doctor,
+    Doctor {
+        /// Show all config keys including unset defaults
+        #[arg(long = "verbose")]
+        verbose: bool,
+    },
     /// Scaffold ~/.consult-llm/SYSTEM_PROMPT.md
     InitPrompt,
     /// Scaffold ~/.consult-llm/config.yaml

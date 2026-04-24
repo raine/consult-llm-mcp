@@ -45,7 +45,7 @@ async fn main() {
             None => cli::run::run_ask(cli).await,
             Some(cli::Command::Models) => cli::commands::models::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::Doctor) => cli::commands::doctor::run()
+            Some(cli::Command::Doctor { verbose }) => cli::commands::doctor::run(verbose)
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),

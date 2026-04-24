@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use consult_llm_core::monitoring::{active_dir, runs_dir, sessions_dir};
 
 use crate::models::PROVIDER_SPECS;
@@ -7,15 +9,15 @@ fn path_has(bin: &str) -> bool {
         return false;
     };
     for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(bin);
-        if candidate.is_file() {
+        if dir.join(bin).is_file() {
             return true;
         }
     }
     false
 }
 
-fn all_config_keys() -> Vec<&'static str> {
+// Config keys shown in "Resolved config" — excludes API key vars (covered in "API keys" section).
+fn config_keys() -> Vec<&'static str> {
     let mut keys: Vec<&'static str> = vec![
         "CONSULT_LLM_DEFAULT_MODEL",
         "CONSULT_LLM_ALLOWED_MODELS",
@@ -28,12 +30,27 @@ fn all_config_keys() -> Vec<&'static str> {
     for spec in PROVIDER_SPECS {
         keys.push(spec.backend_env);
         keys.push(spec.opencode_env);
-        keys.push(spec.api_key_env);
     }
     keys
 }
 
-pub fn run() -> anyhow::Result<()> {
+fn use_color() -> bool {
+    std::env::var("NO_COLOR").is_err() && std::io::stdout().is_terminal()
+}
+
+fn ok_mark(color: bool) -> &'static str {
+    if color { "\x1b[32m✓\x1b[0m" } else { "✓" }
+}
+
+fn missing_mark(color: bool) -> &'static str {
+    if color { "\x1b[31m✗\x1b[0m" } else { "✗" }
+}
+
+pub fn run(verbose: bool) -> anyhow::Result<()> {
+    let color = use_color();
+    let ok = ok_mark(color);
+    let missing = missing_mark(color);
+
     println!("Paths:");
     println!("  sessions_dir : {}", sessions_dir().display());
     println!("  active_dir   : {}", active_dir().display());
@@ -47,18 +64,18 @@ pub fn run() -> anyhow::Result<()> {
         "DEEPSEEK_API_KEY",
         "MINIMAX_API_KEY",
     ] {
-        let state = if std::env::var(var).is_ok() {
-            "OK"
+        let mark = if std::env::var(var).is_ok() {
+            ok
         } else {
-            "MISSING"
+            missing
         };
-        println!("  {var:<22} {state}");
+        println!("  {var:<22} {mark}");
     }
 
     println!("\nCLI backends on PATH:");
     for bin in ["codex", "gemini", "cursor-agent", "opencode"] {
-        let state = if path_has(bin) { "OK" } else { "MISSING" };
-        println!("  {bin:<16} {state}");
+        let mark = if path_has(bin) { ok } else { missing };
+        println!("  {bin:<16} {mark}");
     }
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
@@ -67,14 +84,29 @@ pub fn run() -> anyhow::Result<()> {
     match crate::config_loader::LayeredEnv::load(&paths) {
         Ok(env) => {
             println!("\nResolved config:");
-            for key in all_config_keys() {
-                match env.lookup(key) {
-                    Some((v, src)) => println!("  {key:40} = {v:20} [{src}]"),
-                    None => println!("  {key:40} = (unset)              [default]"),
+            let keys = config_keys();
+            if verbose {
+                for key in keys {
+                    match env.lookup(key) {
+                        Some((v, src)) => println!("  {key:40} = {v:<20} [{src}]"),
+                        None => println!("  {key:40} = (unset)              [default]"),
+                    }
+                }
+            } else {
+                let set: Vec<_> = keys
+                    .into_iter()
+                    .filter_map(|key| env.lookup(key).map(|(v, src)| (key, v, src)))
+                    .collect();
+                if set.is_empty() {
+                    println!("  (all defaults)");
+                } else {
+                    for (key, v, src) in set {
+                        println!("  {key:40} = {v:<20} [{src}]");
+                    }
                 }
             }
         }
-        Err(e) => println!("\nConfig file error: {}: {}", e.path.display(), e.message),
+        Err(e) => eprintln!("config error: {}: {}", e.path.display(), e.message),
     }
 
     Ok(())
