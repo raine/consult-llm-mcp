@@ -356,7 +356,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    }
    ```
 
-   becomes `~/.consult-llm/config.yaml`:
+   becomes:
 
    ```yaml
    allowed_models: [gpt-5.4, gemini-3.1-pro-preview, MiniMax-M2.7]
@@ -372,6 +372,8 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
      backend: opencode
      opencode_provider: minimax
    ```
+
+   Put this in `~/.consult-llm/config.yaml` for user-wide settings, or in `.consult-llm.yaml` at the project root if the settings were specific to that project.
 
 ## Development
 
