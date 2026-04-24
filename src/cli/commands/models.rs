@@ -7,10 +7,10 @@ pub fn run() -> anyhow::Result<()> {
     println!("Selectors:");
     for p in ALL_PROVIDERS {
         let spec = p.spec();
+        let Ok(resolved) = registry.resolve_model(Some(spec.id)) else {
+            continue;
+        };
         let backend = cfg.backend_for(*p).as_str();
-        let resolved = registry
-            .resolve_model(Some(spec.id))
-            .unwrap_or_else(|_| "-".into());
         println!("  {:<10} -> {resolved} ({backend})", spec.id);
     }
     println!("\nAllowed models:");
