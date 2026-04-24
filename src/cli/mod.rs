@@ -67,6 +67,8 @@ pub enum Command {
     InitPrompt,
     /// Scaffold ~/.consult-llm/config.yaml
     InitConfig,
+    /// Set a config value
+    Config(commands::config::ConfigArgs),
     /// Internal: background update check (self-spawned by update.rs).
     #[command(hide = true)]
     CheckUpdate,

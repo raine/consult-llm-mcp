@@ -1,0 +1,190 @@
+use anyhow::Context;
+use serde_yaml::Value;
+use std::{fs, path::PathBuf};
+
+#[derive(clap::Args, Debug)]
+pub struct ConfigArgs {
+    #[command(subcommand)]
+    pub command: ConfigCommand,
+}
+
+#[derive(clap::Subcommand, Debug)]
+pub enum ConfigCommand {
+    /// Set a config value
+    Set {
+        /// Config key in dot notation (e.g. gemini.backend, default_model)
+        key: String,
+        /// Value to set (parsed as YAML: true/false, numbers, [a,b] lists)
+        #[arg(allow_hyphen_values = true)]
+        value: String,
+        /// Write to project config (.consult-llm.yaml)
+        #[arg(long)]
+        project: bool,
+        /// Write to local project config (.consult-llm.local.yaml)
+        #[arg(long, conflicts_with = "project")]
+        local: bool,
+    },
+}
+
+pub fn run(args: ConfigArgs) -> anyhow::Result<()> {
+    match args.command {
+        ConfigCommand::Set {
+            key,
+            value,
+            project,
+            local,
+        } => run_set(key, value, project, local),
+    }
+}
+
+fn run_set(key: String, value: String, project: bool, local: bool) -> anyhow::Result<()> {
+    validate_key_path(&key)?;
+
+    let path = target_path(project, local)?;
+    let mut doc: Value = if path.exists() {
+        let src = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let v: Value =
+            serde_yaml::from_str(&src).with_context(|| format!("parse {}", path.display()))?;
+        // An empty file deserializes as Null — treat it as an empty mapping
+        match v {
+            Value::Null => Value::Mapping(serde_yaml::Mapping::new()),
+            other => other,
+        }
+    } else {
+        Value::Mapping(serde_yaml::Mapping::new())
+    };
+
+    let parsed = serde_yaml::from_str::<Value>(&value)
+        .with_context(|| format!("parse value {:?}", value))?;
+
+    set_nested_key(&mut doc, &key, parsed)?;
+
+    // Validate the resulting document against the config schema before persisting.
+    // This catches typos like "gemini.bakcend" before they silently corrupt the file.
+    let out = serde_yaml::to_string(&doc)?;
+    crate::config_file::ConfigFile::parse(&out)
+        .with_context(|| format!("invalid config key {:?} — check spelling", key))?;
+
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, &out)?;
+    println!("set {} in {}", key, path.display());
+    Ok(())
+}
+
+fn target_path(project: bool, local: bool) -> anyhow::Result<PathBuf> {
+    if local {
+        return Ok(PathBuf::from(".consult-llm.local.yaml"));
+    }
+    if project {
+        return Ok(PathBuf::from(".consult-llm.yaml"));
+    }
+    let home =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    Ok(home.join(".consult-llm").join("config.yaml"))
+}
+
+fn validate_key_path(key: &str) -> anyhow::Result<()> {
+    for segment in key.split('.') {
+        if segment.is_empty() {
+            anyhow::bail!(
+                "invalid key {:?}: segments must be non-empty (got empty segment)",
+                key
+            );
+        }
+    }
+    Ok(())
+}
+
+fn set_nested_key(node: &mut Value, key: &str, value: Value) -> anyhow::Result<()> {
+    let (head, tail) = match key.split_once('.') {
+        Some((h, t)) => (h, Some(t)),
+        None => (key, None),
+    };
+
+    let map = match node {
+        Value::Mapping(m) => m,
+        other => anyhow::bail!("expected a mapping, got {:?}", other),
+    };
+
+    let head_key = Value::String(head.to_owned());
+
+    if let Some(rest) = tail {
+        if !map.contains_key(&head_key) {
+            map.insert(head_key.clone(), Value::Mapping(serde_yaml::Mapping::new()));
+        }
+        let child = map.get_mut(&head_key).unwrap();
+        set_nested_key(child, rest, value)
+    } else {
+        map.insert(head_key, value);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_yaml::Value;
+
+    fn mapping() -> Value {
+        Value::Mapping(serde_yaml::Mapping::new())
+    }
+
+    #[test]
+    fn test_set_top_level() {
+        let mut doc = mapping();
+        set_nested_key(&mut doc, "default_model", Value::String("gemini".into())).unwrap();
+        let m = doc.as_mapping().unwrap();
+        assert_eq!(
+            m.get("default_model").unwrap(),
+            &Value::String("gemini".into())
+        );
+    }
+
+    #[test]
+    fn test_set_nested() {
+        let mut doc = mapping();
+        set_nested_key(
+            &mut doc,
+            "gemini.backend",
+            Value::String("gemini-cli".into()),
+        )
+        .unwrap();
+        let gemini = doc.as_mapping().unwrap().get("gemini").unwrap();
+        let backend = gemini.as_mapping().unwrap().get("backend").unwrap();
+        assert_eq!(backend, &Value::String("gemini-cli".into()));
+    }
+
+    #[test]
+    fn test_set_preserves_existing_keys() {
+        let mut doc = mapping();
+        set_nested_key(&mut doc, "default_model", Value::String("gemini".into())).unwrap();
+        set_nested_key(
+            &mut doc,
+            "gemini.backend",
+            Value::String("gemini-cli".into()),
+        )
+        .unwrap();
+        // Both keys present
+        let m = doc.as_mapping().unwrap();
+        assert!(m.contains_key("default_model"));
+        assert!(m.contains_key("gemini"));
+    }
+
+    #[test]
+    fn test_validate_key_rejects_empty_segments() {
+        assert!(validate_key_path("").is_err());
+        assert!(validate_key_path("gemini..backend").is_err());
+        assert!(validate_key_path(".gemini").is_err());
+    }
+
+    #[test]
+    fn test_validate_key_accepts_valid() {
+        assert!(validate_key_path("default_model").is_ok());
+        assert!(validate_key_path("gemini.backend").is_ok());
+        assert!(validate_key_path("opencode.default_provider").is_ok());
+    }
+}

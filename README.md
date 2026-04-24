@@ -37,12 +37,9 @@ consult-llm init-config
 
 CLI backends are the easiest to start with (no API key needed):
 
-```yaml
-# ~/.consult-llm/config.yaml
-gemini:
-  backend: gemini-cli # requires: gemini login
-openai:
-  backend: codex-cli # requires: codex login
+```bash
+consult-llm config set gemini.backend gemini-cli   # requires: gemini login
+consult-llm config set openai.backend codex-cli    # requires: codex login
 ```
 
 Or set API keys as environment variables:
@@ -79,11 +76,12 @@ The CLI is invoked by your agent via the installed skills; you don't call it dir
 ### CLI utilities
 
 ```bash
-consult-llm models       # list available models and resolved selectors
-consult-llm doctor       # diagnose backend auth and config
-consult-llm init-config  # scaffold ~/.consult-llm/config.yaml
-consult-llm init-prompt  # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
-consult-llm update       # self-update the binary
+consult-llm models                    # list available models and resolved selectors
+consult-llm doctor                    # diagnose backend auth and config
+consult-llm config set <key> <value>  # set a config value (user config by default)
+consult-llm init-config               # scaffold ~/.consult-llm/config.yaml
+consult-llm init-prompt               # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+consult-llm update                    # self-update the binary
 ```
 
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
@@ -107,10 +105,8 @@ Requirements:
 1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 2. Run `gemini login`
 
-```yaml
-# ~/.consult-llm/config.yaml
-gemini:
-  backend: gemini-cli
+```bash
+consult-llm config set gemini.backend gemini-cli
 ```
 
 ### Codex CLI
@@ -120,21 +116,16 @@ Requirements:
 1. Install Codex CLI
 2. Run `codex login`
 
-```yaml
-# ~/.consult-llm/config.yaml
-openai:
-  backend: codex-cli
-  reasoning_effort: high # none | minimal | low | medium | high | xhigh
+```bash
+consult-llm config set openai.backend codex-cli
+consult-llm config set openai.reasoning_effort high  # none | minimal | low | medium | high | xhigh
 ```
 
 ### Cursor CLI
 
-```yaml
-# ~/.consult-llm/config.yaml
-openai:
-  backend: cursor-cli
-gemini:
-  backend: cursor-cli
+```bash
+consult-llm config set openai.backend cursor-cli
+consult-llm config set gemini.backend cursor-cli
 ```
 
 If your prompts need shell commands in Cursor CLI ask mode, allow them in
@@ -142,15 +133,11 @@ If your prompts need shell commands in Cursor CLI ask mode, allow them in
 
 ### OpenCode
 
-```yaml
-# ~/.consult-llm/config.yaml
-openai:
-  backend: opencode
-  opencode_provider: openai # optional: override the OpenCode provider
-gemini:
-  backend: opencode
-opencode:
-  default_provider: copilot # applies to all providers without an override
+```bash
+consult-llm config set openai.backend opencode
+consult-llm config set openai.opencode_provider openai  # optional: override the OpenCode provider
+consult-llm config set gemini.backend opencode
+consult-llm config set opencode.default_provider copilot  # applies to providers without an override
 ```
 
 ## Configuration
@@ -166,10 +153,23 @@ consult-llm reads layered YAML config files. Resolution order (highest to lowest
 
 Project files are discovered by walking up from the current directory to the nearest `.git` root or `$HOME`.
 
-Scaffold the user config:
+Scaffold the user config and set values:
 
 ```bash
 consult-llm init-config
+consult-llm config set default_model gemini
+consult-llm config set gemini.backend gemini-cli
+# Write to project config instead of user config:
+consult-llm config set --project default_model openai
+# Write to local project overrides (not committed):
+consult-llm config set --local openai.backend codex-cli
+```
+
+Values are parsed as YAML, so booleans and lists work naturally:
+
+```bash
+consult-llm config set no_update_check true
+consult-llm config set allowed_models '[gemini, openai]'
 ```
 
 Example `~/.consult-llm/config.yaml`:
