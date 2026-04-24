@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
+use consult_llm_core::monitoring::RunSpool;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use super::stream::SidecarWriter;
 use super::thread_store;
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
@@ -98,7 +99,7 @@ impl LlmExecutor for AnthropicApiExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         if let Some(fps) = file_paths
             && !fps.is_empty()
@@ -128,14 +129,15 @@ impl LlmExecutor for AnthropicApiExecutor {
             Vec::new()
         };
 
-        let mut sidecar = SidecarWriter::new(consultation_id);
-        sidecar.write(&ParsedStreamEvent::SystemPrompt {
-            text: system_prompt.to_string(),
-        });
-        sidecar.write(&ParsedStreamEvent::Prompt {
-            text: prompt.to_string(),
-        });
-        sidecar.flush();
+        {
+            let mut s = spool.lock().unwrap();
+            s.stream_event(ParsedStreamEvent::SystemPrompt {
+                text: system_prompt.to_string(),
+            });
+            s.stream_event(ParsedStreamEvent::Prompt {
+                text: prompt.to_string(),
+            });
+        }
 
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/v1/messages");
@@ -226,17 +228,20 @@ impl LlmExecutor for AnthropicApiExecutor {
             completion_tokens: u.output_tokens,
         });
 
-        if !thinking.is_empty() {
-            sidecar.write(&ParsedStreamEvent::Thinking { text: thinking });
-        }
-        sidecar.write(&ParsedStreamEvent::AssistantText {
-            text: response.clone(),
-        });
-        if let Some(ref u) = usage {
-            sidecar.write(&ParsedStreamEvent::Usage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
+        {
+            let mut s = spool.lock().unwrap();
+            if !thinking.is_empty() {
+                s.stream_event(ParsedStreamEvent::Thinking { text: thinking });
+            }
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
             });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
         }
 
         thread_store::append_turn(

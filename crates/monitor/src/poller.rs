@@ -1,58 +1,45 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 
 use consult_llm_core::jsonl::read_jsonl_from_offset;
 use consult_llm_core::monitoring::{
-    EventEnvelope, HISTORY_FILE, HistoryRecord, MonitorEvent, is_pid_alive,
+    ActiveSnapshot, HISTORY_FILE, HistoryRecord, RunEvent, RunEventKind, RunMeta, is_pid_alive,
+    runs_dir,
 };
-use consult_llm_core::stream_events::ParsedStreamEvent;
 
-// ── Messages ────────────────────────────────────────────────────────────
+use crate::meta::load_run_meta;
 
 pub(crate) enum PollUpdate {
-    /// New events parsed from server session files
-    Events(Vec<(String, EventEnvelope)>),
-    /// New history records (in file order)
+    ActiveRunAdded(ActiveSnapshot),
+    ActiveRunUpdated(ActiveSnapshot),
+    ActiveRunRemoved(String),
+    OrphanDetected(String),
     HistoryRecords(Vec<HistoryRecord>),
-    /// Server IDs whose PID is no longer alive
-    Deaths(Vec<String>),
-    /// Server IDs that were pruned (session files deleted)
-    Pruned(Vec<String>),
-    /// New events for the current detail view
+    DetailMetadata(RunMeta),
     DetailEvents {
-        consultation_id: String,
-        events: Vec<ParsedStreamEvent>,
+        run_id: String,
+        events: Vec<RunEvent>,
     },
 }
 
 pub(crate) enum PollCommand {
-    EnterDetail {
-        consultation_id: String,
-        file_offset: u64,
-    },
+    EnterDetail { run_id: String, file_offset: u64 },
     ExitDetail,
     ResetHistory,
     Shutdown,
 }
 
-// ── Internal state ──────────────────────────────────────────────────────
-
-struct ServerInfo {
-    pid: u32,
-    stopped: bool,
-    dead: bool,
-}
-
 struct DetailPollState {
-    consultation_id: String,
+    run_id: String,
     file_offset: u64,
 }
-
-// ── Spawn ───────────────────────────────────────────────────────────────
 
 pub(crate) fn spawn(
     dir: PathBuf,
@@ -73,28 +60,157 @@ pub(crate) fn spawn(
     (update_rx, cmd_tx, handle)
 }
 
-/// Apply a command, returning true if the poller should shut down.
+fn run(
+    dir: PathBuf,
+    reconcile_interval: Duration,
+    tx: mpsc::Sender<PollUpdate>,
+    cmd_rx: mpsc::Receiver<PollCommand>,
+) {
+    let active_dir = dir.join("active");
+    let (watch_tx, watch_rx) = mpsc::channel::<()>();
+    let mut watcher = RecommendedWatcher::new(
+        move |result: notify::Result<notify::Event>| {
+            if result.is_ok() {
+                let _ = watch_tx.send(());
+            }
+        },
+        Config::default(),
+    )
+    .ok();
+
+    if let Some(watcher) = watcher.as_mut() {
+        let _ = watcher.watch(&active_dir, RecursiveMode::NonRecursive);
+        let _ = watcher.watch(&dir, RecursiveMode::NonRecursive);
+    }
+
+    let mut watched_detail_path: Option<PathBuf> = None;
+    let mut active_snapshots = HashMap::new();
+    let mut reported_orphans = HashSet::new();
+    let mut history_offset = 0u64;
+    let mut detail: Option<DetailPollState> = None;
+    let mut next_reconcile = Instant::now();
+    let mut next_orphan_check = Instant::now();
+
+    loop {
+        while let Ok(cmd) = cmd_rx.try_recv() {
+            if apply_command(
+                cmd,
+                &dir,
+                &tx,
+                &mut detail,
+                &mut history_offset,
+                watcher.as_mut(),
+                &mut watched_detail_path,
+            ) {
+                return;
+            }
+        }
+
+        let mut saw_notify = false;
+        while watch_rx.try_recv().is_ok() {
+            saw_notify = true;
+        }
+
+        let now = Instant::now();
+        if saw_notify || now >= next_reconcile {
+            let next_snapshots = load_active_snapshots(&active_dir);
+            if !diff_snapshots(&active_snapshots, &next_snapshots, &tx) {
+                return;
+            }
+            active_snapshots = next_snapshots;
+            reported_orphans.retain(|run_id| active_snapshots.contains_key(run_id));
+
+            let records = poll_history(&dir, &mut history_offset);
+            if !records.is_empty() && tx.send(PollUpdate::HistoryRecords(records)).is_err() {
+                return;
+            }
+
+            if let Some(detail) = detail.as_mut() {
+                let events = poll_detail_events(&dir, &detail.run_id, &mut detail.file_offset);
+                if !events.is_empty()
+                    && tx
+                        .send(PollUpdate::DetailEvents {
+                            run_id: detail.run_id.clone(),
+                            events,
+                        })
+                        .is_err()
+                {
+                    return;
+                }
+            }
+
+            next_reconcile = Instant::now() + reconcile_interval;
+        }
+
+        if now >= next_orphan_check {
+            let orphans = collect_orphans(&active_snapshots, &reported_orphans);
+            for run_id in orphans {
+                reported_orphans.insert(run_id.clone());
+                if tx.send(PollUpdate::OrphanDetected(run_id)).is_err() {
+                    return;
+                }
+            }
+            next_orphan_check = Instant::now() + Duration::from_secs(5);
+        }
+
+        let until_reconcile = next_reconcile.saturating_duration_since(Instant::now());
+        let until_orphans = next_orphan_check.saturating_duration_since(Instant::now());
+        let wait = until_reconcile
+            .min(until_orphans)
+            .min(Duration::from_millis(100));
+        let _ = watch_rx.recv_timeout(wait);
+    }
+}
+
 fn apply_command(
     cmd: PollCommand,
+    dir: &Path,
+    tx: &mpsc::Sender<PollUpdate>,
     detail: &mut Option<DetailPollState>,
-    next_detail: &mut Option<std::time::Instant>,
     history_offset: &mut u64,
+    watcher: Option<&mut RecommendedWatcher>,
+    watched_detail_path: &mut Option<PathBuf>,
 ) -> bool {
     match cmd {
         PollCommand::Shutdown => return true,
         PollCommand::EnterDetail {
-            consultation_id,
+            run_id,
             file_offset,
         } => {
             *detail = Some(DetailPollState {
-                consultation_id,
+                run_id: run_id.clone(),
                 file_offset,
             });
-            *next_detail = Some(std::time::Instant::now());
+
+            update_detail_watch(
+                watcher,
+                watched_detail_path,
+                Some(detail_events_path(dir, &run_id)),
+            );
+
+            if let Some(meta) = load_run_meta(&run_id)
+                && tx.send(PollUpdate::DetailMetadata(meta)).is_err()
+            {
+                return true;
+            }
+
+            if let Some(detail) = detail.as_mut() {
+                let events = poll_detail_events(dir, &detail.run_id, &mut detail.file_offset);
+                if !events.is_empty()
+                    && tx
+                        .send(PollUpdate::DetailEvents {
+                            run_id: detail.run_id.clone(),
+                            events,
+                        })
+                        .is_err()
+                {
+                    return true;
+                }
+            }
         }
         PollCommand::ExitDetail => {
             *detail = None;
-            *next_detail = None;
+            update_detail_watch(watcher, watched_detail_path, None);
         }
         PollCommand::ResetHistory => {
             *history_offset = 0;
@@ -103,166 +219,89 @@ fn apply_command(
     false
 }
 
-fn run(
-    dir: PathBuf,
-    heavy_interval: Duration,
-    tx: mpsc::Sender<PollUpdate>,
-    cmd_rx: mpsc::Receiver<PollCommand>,
+fn update_detail_watch(
+    watcher: Option<&mut RecommendedWatcher>,
+    watched_detail_path: &mut Option<PathBuf>,
+    next_detail_path: Option<PathBuf>,
 ) {
-    let detail_interval = Duration::from_millis(100);
+    let Some(watcher) = watcher else {
+        *watched_detail_path = next_detail_path;
+        return;
+    };
 
-    let mut file_offsets: HashMap<String, u64> = HashMap::new();
-    let mut pruned: HashSet<String> = HashSet::new();
-    let mut history_offset: u64 = 0;
-    let mut server_info: HashMap<String, ServerInfo> = HashMap::new();
-    let mut detail: Option<DetailPollState> = None;
+    if let Some(path) = watched_detail_path.take() {
+        let _ = watcher.unwatch(&path);
+    }
 
-    // Fire heavy poll immediately on first iteration
-    let mut next_heavy = std::time::Instant::now();
-    let mut next_detail: Option<std::time::Instant> = None;
-
-    loop {
-        // Drain pending commands
-        loop {
-            match cmd_rx.try_recv() {
-                Ok(cmd) => {
-                    if apply_command(cmd, &mut detail, &mut next_detail, &mut history_offset) {
-                        return;
-                    }
-                }
-                Err(mpsc::TryRecvError::Empty) => break,
-                Err(mpsc::TryRecvError::Disconnected) => return,
-            }
-        }
-
-        let now = std::time::Instant::now();
-
-        // Detail poll (fast cadence) — run first for better perceived latency
-        if let Some(deadline) = next_detail
-            && now >= deadline
-        {
-            if let Some(ref mut d) = detail {
-                let new_events = poll_detail_events(&dir, &d.consultation_id, &mut d.file_offset);
-                if !new_events.is_empty()
-                    && tx
-                        .send(PollUpdate::DetailEvents {
-                            consultation_id: d.consultation_id.clone(),
-                            events: new_events,
-                        })
-                        .is_err()
-                {
-                    return;
-                }
-            }
-            next_detail = Some(std::time::Instant::now() + detail_interval);
-        }
-
-        // Heavy poll (slow cadence)
-        if now >= next_heavy {
-            let events = poll_files(&dir, &mut file_offsets, &pruned, &mut server_info);
-            if !events.is_empty() && tx.send(PollUpdate::Events(events)).is_err() {
-                return;
-            }
-
-            let records = poll_history(&dir, &mut history_offset);
-            if !records.is_empty() && tx.send(PollUpdate::HistoryRecords(records)).is_err() {
-                return;
-            }
-
-            let deaths = check_liveness(&mut server_info);
-            if !deaths.is_empty() && tx.send(PollUpdate::Deaths(deaths)).is_err() {
-                return;
-            }
-
-            let pruned_ids = prune_finished(&dir, &mut server_info, &mut file_offsets, &mut pruned);
-            if !pruned_ids.is_empty() && tx.send(PollUpdate::Pruned(pruned_ids)).is_err() {
-                return;
-            }
-
-            next_heavy = std::time::Instant::now() + heavy_interval;
-        }
-
-        // Sleep until the next deadline, waking early for commands
-        let next_deadline = match next_detail {
-            Some(d) => d.min(next_heavy),
-            None => next_heavy,
-        };
-        let wait = next_deadline.saturating_duration_since(std::time::Instant::now());
-        match cmd_rx.recv_timeout(wait) {
-            Ok(cmd) => {
-                if apply_command(cmd, &mut detail, &mut next_detail, &mut history_offset) {
-                    return;
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => return,
-        }
+    if let Some(path) = next_detail_path {
+        let _ = watcher.watch(&path, RecursiveMode::NonRecursive);
+        *watched_detail_path = Some(path);
     }
 }
 
-// ── Polling functions ───────────────────────────────────────────────────
+fn detail_events_path(dir: &Path, run_id: &str) -> PathBuf {
+    dir.join("runs").join(format!("{run_id}.events.jsonl"))
+}
 
-fn poll_files(
-    dir: &Path,
-    file_offsets: &mut HashMap<String, u64>,
-    pruned: &HashSet<String>,
-    server_info: &mut HashMap<String, ServerInfo>,
-) -> Vec<(String, EventEnvelope)> {
-    let mut events = Vec::new();
+fn load_active_snapshots(dir: &Path) -> HashMap<String, ActiveSnapshot> {
+    let mut out = HashMap::new();
     let Ok(entries) = fs::read_dir(dir) else {
-        return events;
+        return out;
     };
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
             continue;
         }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        if stem.ends_with(".events") || stem == "history" {
-            continue;
-        }
-        let server_id = stem.to_string();
-        if pruned.contains(&server_id) {
-            continue;
-        }
-
-        let offset = file_offsets.entry(server_id.clone()).or_insert(0);
-        let envelopes: Vec<EventEnvelope> = read_jsonl_from_offset(&path, offset);
-        for envelope in envelopes {
-            update_server_info(server_info, &server_id, &envelope);
-            events.push((server_id.clone(), envelope));
+        if let Ok(bytes) = fs::read(&path)
+            && let Ok(snapshot) = serde_json::from_slice::<ActiveSnapshot>(&bytes)
+        {
+            out.insert(snapshot.run_id.clone(), snapshot);
         }
     }
 
-    events
+    out
 }
 
-fn update_server_info(
-    server_info: &mut HashMap<String, ServerInfo>,
-    server_id: &str,
-    envelope: &EventEnvelope,
-) {
-    match &envelope.event {
-        MonitorEvent::ServerStarted { pid, .. } => {
-            server_info.insert(
-                server_id.to_string(),
-                ServerInfo {
-                    pid: *pid,
-                    stopped: false,
-                    dead: false,
-                },
-            );
-        }
-        MonitorEvent::ServerStopped => {
-            if let Some(info) = server_info.get_mut(server_id) {
-                info.stopped = true;
+fn diff_snapshots(
+    prev: &HashMap<String, ActiveSnapshot>,
+    next: &HashMap<String, ActiveSnapshot>,
+    tx: &mpsc::Sender<PollUpdate>,
+) -> bool {
+    for (run_id, snapshot) in next {
+        match prev.get(run_id) {
+            None => {
+                if tx
+                    .send(PollUpdate::ActiveRunAdded(snapshot.clone()))
+                    .is_err()
+                {
+                    return false;
+                }
             }
+            Some(previous) if previous.last_seq != snapshot.last_seq => {
+                if tx
+                    .send(PollUpdate::ActiveRunUpdated(snapshot.clone()))
+                    .is_err()
+                {
+                    return false;
+                }
+            }
+            _ => {}
         }
-        _ => {}
     }
+
+    for run_id in prev.keys() {
+        if !next.contains_key(run_id)
+            && tx
+                .send(PollUpdate::ActiveRunRemoved(run_id.clone()))
+                .is_err()
+        {
+            return false;
+        }
+    }
+
+    true
 }
 
 fn poll_history(dir: &Path, history_offset: &mut u64) -> Vec<HistoryRecord> {
@@ -276,45 +315,143 @@ fn poll_history(dir: &Path, history_offset: &mut u64) -> Vec<HistoryRecord> {
     records
 }
 
-fn check_liveness(server_info: &mut HashMap<String, ServerInfo>) -> Vec<String> {
-    let mut deaths = Vec::new();
-    for (id, info) in server_info.iter_mut() {
-        if !info.stopped && !info.dead && !is_pid_alive(info.pid) {
-            info.dead = true;
-            deaths.push(id.clone());
+fn poll_detail_events(dir: &Path, run_id: &str, file_offset: &mut u64) -> Vec<RunEvent> {
+    read_jsonl_from_offset(&detail_events_path(dir, run_id), file_offset)
+}
+
+fn collect_orphans(
+    active: &HashMap<String, ActiveSnapshot>,
+    reported_orphans: &HashSet<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for (run_id, snapshot) in active {
+        if reported_orphans.contains(run_id) || is_pid_alive(snapshot.pid) {
+            continue;
+        }
+        if events_file_has_finish(run_id) {
+            continue;
+        }
+        out.push(run_id.clone());
+    }
+    out
+}
+
+fn events_file_has_finish(run_id: &str) -> bool {
+    let path = runs_dir().join(format!("{run_id}.events.jsonl"));
+    let Ok(file) = fs::File::open(path) else {
+        return false;
+    };
+
+    BufReader::new(file)
+        .lines()
+        .map_while(Result::ok)
+        .any(|line| match serde_json::from_str::<RunEvent>(&line) {
+            Ok(event) => matches!(event.kind, RunEventKind::RunFinished { .. }),
+            Err(_) => false,
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(run_id: &str, seq: u64) -> ActiveSnapshot {
+        ActiveSnapshot {
+            v: 1,
+            run_id: run_id.into(),
+            pid: 1,
+            started_at: "2026-04-24T00:00:00.000Z".into(),
+            model: "gpt-5".into(),
+            backend: "api".into(),
+            project: "proj".into(),
+            thread_id: None,
+            task_mode: None,
+            reasoning_effort: None,
+            last_seq: seq,
+            last_event_at: "2026-04-24T00:00:00.000Z".into(),
+            stage: None,
         }
     }
-    deaths
-}
 
-fn prune_finished(
-    dir: &Path,
-    server_info: &mut HashMap<String, ServerInfo>,
-    file_offsets: &mut HashMap<String, u64>,
-    pruned: &mut HashSet<String>,
-) -> Vec<String> {
-    let to_prune: Vec<String> = server_info
-        .iter()
-        .filter(|(_, info)| info.stopped || info.dead)
-        .map(|(id, _)| id.clone())
-        .collect();
+    #[test]
+    fn diff_snapshots_emits_add_update_and_remove() {
+        let (tx, rx) = mpsc::channel();
 
-    for id in &to_prune {
-        let path = dir.join(format!("{id}.jsonl"));
-        let _ = fs::remove_file(&path);
-        server_info.remove(id);
-        file_offsets.remove(id);
-        pruned.insert(id.clone());
+        let prev = HashMap::from([
+            ("run-a".to_string(), snapshot("run-a", 1)),
+            ("run-b".to_string(), snapshot("run-b", 1)),
+        ]);
+        let next = HashMap::from([
+            ("run-a".to_string(), snapshot("run-a", 2)),
+            ("run-c".to_string(), snapshot("run-c", 1)),
+        ]);
+
+        assert!(diff_snapshots(&prev, &next, &tx));
+
+        let updates: Vec<_> = rx.try_iter().collect();
+        assert_eq!(updates.len(), 3);
+        assert!(updates.iter().any(
+            |update| matches!(update, PollUpdate::ActiveRunUpdated(s) if s.run_id == "run-a")
+        ));
+        assert!(
+            updates.iter().any(
+                |update| matches!(update, PollUpdate::ActiveRunAdded(s) if s.run_id == "run-c")
+            )
+        );
+        assert!(updates.iter().any(
+            |update| matches!(update, PollUpdate::ActiveRunRemoved(run_id) if run_id == "run-b")
+        ));
     }
 
-    to_prune
-}
+    #[cfg(unix)]
+    #[test]
+    fn collect_orphans_ignores_finished_runs() {
+        use std::io::Write;
 
-fn poll_detail_events(
-    dir: &Path,
-    consultation_id: &str,
-    file_offset: &mut u64,
-) -> Vec<ParsedStreamEvent> {
-    let path = dir.join(format!("{consultation_id}.events.jsonl"));
-    read_jsonl_from_offset(&path, file_offset)
+        let temp = tempfile::tempdir().unwrap();
+        unsafe {
+            std::env::set_var("XDG_STATE_HOME", temp.path());
+        }
+
+        let dead_pid = i32::MAX as u32;
+        let active = HashMap::from([
+            (
+                "unfinished".to_string(),
+                ActiveSnapshot {
+                    pid: dead_pid,
+                    ..snapshot("unfinished", 1)
+                },
+            ),
+            (
+                "finished".to_string(),
+                ActiveSnapshot {
+                    pid: dead_pid,
+                    ..snapshot("finished", 1)
+                },
+            ),
+        ]);
+
+        let finished_path = runs_dir().join("finished.events.jsonl");
+        let mut file = fs::File::create(finished_path).unwrap();
+        writeln!(
+            file,
+            "{}",
+            serde_json::to_string(&RunEvent {
+                v: 1,
+                run_id: "finished".into(),
+                seq: 1,
+                ts: "2026-04-24T00:00:00.000Z".into(),
+                kind: RunEventKind::RunFinished {
+                    duration_ms: 1,
+                    success: true,
+                    error: None,
+                },
+            })
+            .unwrap()
+        )
+        .unwrap();
+
+        let orphans = collect_orphans(&active, &HashSet::new());
+        assert_eq!(orphans, vec!["unfinished".to_string()]);
+    }
 }

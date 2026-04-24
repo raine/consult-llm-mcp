@@ -10,7 +10,7 @@ use crate::format::{
 };
 use crate::state::{
     AppState, BG, DIM, DIM_WHITE, Focus, GREEN, HistoryDisplayRow, RED, SELECTED_BG, SEPARATOR,
-    SPINNER_FRAMES, TEAL, WHITE, YELLOW, task_mode_color,
+    TEAL, WHITE, YELLOW, task_mode_color,
 };
 
 pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
@@ -38,16 +38,18 @@ pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &
 }
 
 fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
-    let active = state
-        .servers
+    let active_runs = state.active_runs.len();
+    let projects = state
+        .active_runs
         .values()
-        .filter(|s| !s.stopped && !s.dead)
+        .map(|run| run.project.as_str())
+        .collect::<std::collections::HashSet<_>>()
+        .len();
+    let threaded = state
+        .active_runs
+        .values()
+        .filter(|run| run.thread_id.is_some())
         .count();
-    let consulting: usize = state
-        .servers
-        .values()
-        .map(|s| s.active_consults.len())
-        .sum();
 
     let line = Line::from(vec![
         Span::styled(
@@ -55,220 +57,120 @@ fn render_header(frame: &mut ratatui::Frame, area: Rect, state: &AppState) {
             Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
         ),
         Span::styled(" · ", Style::default().fg(DIM)),
-        Span::styled(format!("{active}"), Style::default().fg(GREEN)),
-        Span::styled(" servers  ", Style::default().fg(DIM_WHITE)),
         Span::styled(
-            format!("{consulting}"),
-            Style::default().fg(if consulting > 0 { YELLOW } else { DIM }),
+            format!("{projects}"),
+            Style::default().fg(if projects > 0 { GREEN } else { DIM }),
         ),
-        Span::styled(" active", Style::default().fg(DIM_WHITE)),
+        Span::styled(" projects  ", Style::default().fg(DIM_WHITE)),
+        Span::styled(
+            format!("{active_runs}"),
+            Style::default().fg(if active_runs > 0 { YELLOW } else { DIM }),
+        ),
+        Span::styled(" active runs  ", Style::default().fg(DIM_WHITE)),
+        Span::styled(format!("{threaded}"), Style::default().fg(DIM_WHITE)),
+        Span::styled(" threaded", Style::default().fg(DIM)),
     ]);
 
     frame.render_widget(Paragraph::new(line).style(Style::default().bg(BG)), area);
 }
 
 fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
-    let elapsed_col_width: u16 = 10;
+    let started_col_width: u16 = 9;
+    let duration_col_width: u16 = 9;
     let task_col_width: u16 = 8;
-    let show_task_col = area.width >= 100;
-    let mut header_cells = vec![Line::from("Project"), Line::from("PID")];
+    let thread_col_width: u16 = 10;
+    let show_task_col = area.width >= 120;
+    let show_thread_col = area.width >= 140;
+    let mut header_cells = vec![
+        Line::from("Started"),
+        Line::from("Project"),
+        Line::from("Model"),
+        Line::from("Backend"),
+        Line::from("Stage"),
+    ];
     if show_task_col {
         header_cells.push(Line::from("Task"));
     }
-    header_cells.push(Line::from("Consultation"));
-    header_cells.push(Line::from(Span::raw("Elapsed")).alignment(Alignment::Right));
+    if show_thread_col {
+        header_cells.push(Line::from("Thread"));
+    }
+    header_cells.push(Line::from(Span::raw("Dur")).alignment(Alignment::Right));
     let header =
         Row::new(header_cells).style(Style::default().fg(TEAL).add_modifier(Modifier::BOLD));
 
     let now = Utc::now();
     let mut rows: Vec<Row> = Vec::new();
 
-    for server_id in state.display_server_ids() {
-        let Some(server) = state.servers.get(server_id) else {
+    for run_id in &state.active_order {
+        let Some(run) = state.active_runs.get(run_id) else {
             continue;
         };
 
-        let display_name = server
-            .project
-            .as_deref()
-            .unwrap_or(&server.server_id[..8.min(server.server_id.len())]);
-        let pid = server.pid.to_string();
-
-        if server.active_consults.is_empty() && server.completed_consults.is_empty() {
-            let (hist, hist_color) = if server.completed_count > 0 || server.failed_count > 0 {
-                (
-                    format!(
-                        "{} done{}",
-                        server.completed_count,
-                        if server.failed_count > 0 {
-                            format!(", {} failed", server.failed_count)
-                        } else {
-                            String::new()
-                        }
-                    ),
-                    DIM_WHITE,
-                )
-            } else {
-                ("\u{2014}".to_string(), DIM)
-            };
-            let mut cells = vec![
-                Line::from(Span::styled(
-                    truncate_project(display_name),
-                    Style::default().fg(DIM_WHITE),
-                )),
-                Line::from(Span::styled(pid.clone(), Style::default().fg(DIM_WHITE))),
-            ];
-            if show_task_col {
-                cells.push(Line::from(Span::styled("", Style::default().fg(DIM))));
-            }
-            cells.push(Line::from(Span::styled(
-                hist,
-                Style::default().fg(hist_color),
-            )));
-            cells.push(Line::from(Span::styled(
-                format!("{:>width$}", "\u{2014}", width = elapsed_col_width as usize),
-                Style::default().fg(DIM),
-            )));
-            rows.push(Row::new(cells));
+        let started = format_relative_time(Some(run.started_at), now);
+        let duration_ms = now
+            .signed_duration_since(run.started_at)
+            .num_milliseconds()
+            .max(0) as u64;
+        let duration = format_duration_friendly(duration_ms);
+        let stage = if run.orphaned {
+            "orphaned".to_string()
         } else {
-            let is_first_row = true;
-            for (i, (_, consult)) in AppState::sorted_active_consults(server)
-                .into_iter()
-                .enumerate()
-            {
-                let elapsed_ms = now
-                    .signed_duration_since(consult.started_at)
-                    .num_milliseconds()
-                    .max(0) as u64;
-                let elapsed_str = format_duration_friendly(elapsed_ms);
-                let show_server = is_first_row && i == 0;
-                let spinner = SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()];
-                let consult_text = match &consult.last_progress {
-                    Some(progress) => format!("{} ({})", consult.model, progress),
-                    None => format!("{} ({})", consult.model, consult.backend),
-                };
-                let mut consult_spans = vec![
-                    Span::styled(format!("{spinner} "), Style::default().fg(TEAL)),
-                    Span::styled(consult_text, Style::default().fg(WHITE)),
-                ];
-                if let Some(ref tid) = consult.thread_id {
-                    let turn_num = state
-                        .history
-                        .iter()
-                        .filter(|h| h.thread_id.as_deref() == Some(tid))
-                        .count()
-                        + 1;
-                    consult_spans.push(Span::styled(
-                        format!("  \u{21b3}{turn_num}"),
-                        Style::default().fg(DIM),
-                    ));
-                }
-                let consult_cell = Line::from(consult_spans);
-                let mut cells = vec![
-                    Line::from(Span::styled(
-                        if show_server {
-                            truncate_project(display_name)
-                        } else {
-                            String::new()
-                        },
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                    Line::from(Span::styled(
-                        if show_server {
-                            pid.clone()
-                        } else {
-                            String::new()
-                        },
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                ];
-                if show_task_col {
-                    let mode = consult.task_mode.as_deref();
-                    cells.push(Line::from(Span::styled(
-                        mode.unwrap_or("general"),
-                        Style::default().fg(task_mode_color(mode)),
-                    )));
-                }
-                cells.push(consult_cell);
-                cells.push(Line::from(Span::styled(
-                    format!(
-                        "{:>width$}",
-                        elapsed_str,
-                        width = elapsed_col_width as usize
-                    ),
-                    Style::default().fg(DIM_WHITE),
-                )));
-                rows.push(Row::new(cells));
-            }
+            run.last_stage.clone().unwrap_or_else(|| "starting".into())
+        };
+        let row_style = if run.orphaned {
+            Style::default().fg(DIM)
+        } else {
+            Style::default().fg(DIM_WHITE)
+        };
 
-            // Render completed consultations (last per backend only)
-            let mut seen_backends = std::collections::HashSet::new();
-            let deduped_completed: Vec<_> = server
-                .completed_consults
-                .iter()
-                .rev()
-                .filter(|cc| seen_backends.insert(&cc.backend))
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            for (i, cc) in deduped_completed.iter().enumerate() {
-                let show_server = is_first_row && server.active_consults.is_empty() && i == 0;
-                let duration_str = format_duration_friendly(cc.duration_ms);
-                let (indicator, indicator_color) = if cc.success {
-                    ("\u{2713}", GREEN) // ✓
-                } else {
-                    ("\u{2717}", RED) // ✗
-                };
-                let rest = match &cc.error {
-                    Some(err) => format!(" {} ({}) {}", cc.model, cc.backend, err),
-                    None => format!(" {} ({})", cc.model, cc.backend),
-                };
-                let mut cells = vec![
-                    Line::from(Span::styled(
-                        if show_server {
-                            truncate_project(display_name)
-                        } else {
-                            String::new()
-                        },
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                    Line::from(Span::styled(
-                        if show_server {
-                            pid.clone()
-                        } else {
-                            String::new()
-                        },
-                        Style::default().fg(DIM_WHITE),
-                    )),
-                ];
-                if show_task_col {
-                    let mode = cc.task_mode.as_deref();
-                    cells.push(Line::from(Span::styled(
-                        mode.unwrap_or("general"),
-                        Style::default().fg(task_mode_color(mode)),
-                    )));
-                }
-                cells.push(Line::from(vec![
-                    Span::styled(indicator, Style::default().fg(indicator_color)),
-                    Span::styled(rest, Style::default().fg(DIM_WHITE)),
-                ]));
-                cells.push(Line::from(Span::styled(
-                    format!(
-                        "{:>width$}",
-                        duration_str,
-                        width = elapsed_col_width as usize
-                    ),
-                    Style::default().fg(DIM_WHITE),
-                )));
-                rows.push(Row::new(cells));
-            }
+        let mut cells = vec![
+            Line::from(Span::styled(
+                format!("{:>width$}", started, width = started_col_width as usize),
+                Style::default().fg(DIM),
+            )),
+            Line::from(Span::styled(
+                truncate_project(&run.project),
+                Style::default().fg(if run.orphaned { DIM } else { DIM_WHITE }),
+            )),
+            Line::from(Span::styled(run.model.clone(), row_style.fg(WHITE))),
+            Line::from(Span::styled(
+                run.backend.clone(),
+                Style::default().fg(if run.orphaned { DIM } else { DIM_WHITE }),
+            )),
+            Line::from(vec![
+                Span::styled(
+                    if run.orphaned { "\u{26a0} " } else { "" },
+                    Style::default().fg(YELLOW),
+                ),
+                Span::styled(
+                    stage,
+                    Style::default().fg(if run.orphaned { YELLOW } else { DIM_WHITE }),
+                ),
+            ]),
+        ];
+        if show_task_col {
+            let mode = run.task_mode.as_deref();
+            cells.push(Line::from(Span::styled(
+                mode.unwrap_or("general"),
+                Style::default().fg(task_mode_color(mode)),
+            )));
         }
+        if show_thread_col {
+            cells.push(Line::from(Span::styled(
+                shorten_thread_id(run.thread_id.as_deref()),
+                Style::default().fg(if run.orphaned { DIM } else { DIM_WHITE }),
+            )));
+        }
+        cells.push(Line::from(Span::styled(
+            format!("{:>width$}", duration, width = duration_col_width as usize),
+            Style::default().fg(if run.orphaned { DIM } else { DIM_WHITE }),
+        )));
+        rows.push(Row::new(cells));
     }
 
     if rows.is_empty() {
         let msg = Paragraph::new(Line::from(vec![Span::styled(
-            "  No active servers. Waiting...",
+            "  No active runs. Waiting...",
             Style::default().fg(DIM),
         )]))
         .style(Style::default().bg(BG));
@@ -276,12 +178,20 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         return;
     }
 
-    let mut constraints = vec![Constraint::Length(PROJECT_COL_WIDTH), Constraint::Length(7)];
+    let mut constraints = vec![
+        Constraint::Length(started_col_width),
+        Constraint::Length(PROJECT_COL_WIDTH),
+        Constraint::Length(16),
+        Constraint::Length(9),
+        Constraint::Min(18),
+    ];
     if show_task_col {
         constraints.push(Constraint::Length(task_col_width));
     }
-    constraints.push(Constraint::Min(20));
-    constraints.push(Constraint::Length(elapsed_col_width));
+    if show_thread_col {
+        constraints.push(Constraint::Length(thread_col_width));
+    }
+    constraints.push(Constraint::Length(duration_col_width));
 
     let table = Table::new(rows, constraints)
         .header(header)
@@ -299,6 +209,14 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         state.table_state.select(None);
     }
     frame.render_stateful_widget(table, area, &mut state.table_state);
+}
+
+fn shorten_thread_id(thread_id: Option<&str>) -> String {
+    match thread_id {
+        Some(thread_id) if thread_id.len() > 8 => thread_id[..8].to_string(),
+        Some(thread_id) => thread_id.to_string(),
+        None => "\u{2014}".to_string(),
+    }
 }
 
 fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {

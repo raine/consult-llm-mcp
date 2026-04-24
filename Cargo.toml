@@ -39,9 +39,10 @@ uuid = { workspace = true }
 smallvec = "1"
 tempfile = "3"
 schemars = "1.2.1"
+clap = { version = "4", features = ["derive"] }
 
 [[bin]]
-name = "consult-llm-mcp"
+name = "consult-llm"
 path = "src/main.rs"
 
 [profile.release]

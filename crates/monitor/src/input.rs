@@ -52,21 +52,16 @@ fn handle_table_key(
         KeyCode::Char('K') => {
             if matches!(state.focus, Focus::Active)
                 && let Some(info) = row_infos.get(state.selected)
-                && !info.consultation_id.is_empty()
-                && let Some(server) = state.servers.get(&info.server_id)
-                && let Some(consult) = server.active_consults.get(&info.consultation_id)
-                && let Some(child_pid) = consult.child_pid
+                && let Some(run) = state.active_runs.get(&info.run_id)
             {
-                return Some(Action::PromptKillProcess(child_pid));
+                return Some(Action::PromptKillProcess(run.pid));
             }
             None
         }
         KeyCode::Enter => match state.focus {
             Focus::Active => {
-                if let Some(info) = row_infos.get(state.selected)
-                    && !info.consultation_id.is_empty()
-                {
-                    return Some(Action::EnterDetail(info.consultation_id.clone()));
+                if let Some(info) = row_infos.get(state.selected) {
+                    return Some(Action::EnterDetail(info.run_id.clone()));
                 }
                 None
             }
@@ -76,7 +71,7 @@ fn handle_table_key(
                     Some(HistoryDisplayRow::Single(idx)) => {
                         let record = &state.history[*idx];
                         if let Some(cid) = &record.consultation_id {
-                            let path = dir.join(format!("{cid}.events.jsonl"));
+                            let path = dir.join("runs").join(format!("{cid}.events.jsonl"));
                             if path.exists() {
                                 Some(Action::EnterDetail(cid.clone()))
                             } else {

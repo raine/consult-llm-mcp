@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use smallvec::SmallVec;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use consult_llm_core::monitoring::RunSpool;
 
 use super::run_cli_executor;
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
@@ -274,7 +277,7 @@ impl LlmExecutor for CursorCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         let message_with_files = append_files(prompt, file_paths);
         let message = if thread_id.is_some() {
@@ -308,7 +311,7 @@ impl LlmExecutor for CursorCliExecutor {
             &message,
             prompt,
             system_prompt,
-            consultation_id,
+            spool,
             parse_cursor_line,
         )
         .await?;

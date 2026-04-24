@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use rmcp::ServiceExt;
 
+mod cli;
 mod clipboard;
 mod config;
 mod errors;
@@ -22,8 +23,6 @@ mod service;
 mod system_prompt;
 mod update;
 
-use consult_llm_core::monitoring;
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const GIT_HASH: &str = env!("GIT_HASH");
 
@@ -36,37 +35,36 @@ async fn main() {
         default_hook(info);
     }));
 
-    let args: Vec<String> = std::env::args().collect();
-
-    if args.iter().any(|a| a == "--version" || a == "-v") {
-        println!("{VERSION}+{GIT_HASH}");
-        std::process::exit(0);
-    }
-
-    if args.iter().any(|a| a == "init-prompt") {
-        if let Err(e) = server::init_system_prompt() {
-            eprintln!("{e}");
-            std::process::exit(1);
-        }
+    if std::env::var("CONSULT_LLM_MCP").is_ok() {
+        run_mcp_server().await;
         return;
     }
 
-    if args.get(1).is_some_and(|a| a == "update") {
-        if let Err(e) = update::run() {
-            eprintln!("{e:#}");
-            std::process::exit(1);
-        }
-        return;
-    }
+    use clap::Parser;
+    let cli = cli::Cli::parse();
 
-    if args.get(1).is_some_and(|a| a == "_check-update") {
-        if let Err(e) = update::run_background_check() {
-            eprintln!("{e:#}");
-            std::process::exit(1);
-        }
-        return;
-    }
+    let result: Result<(), cli::input::CliError> =
+        match cli.cmd {
+            None => cli::run::run_ask(cli).await,
+            Some(cli::Command::Models) => cli::commands::models::run()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::Doctor) => cli::commands::doctor::run()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::Update) => cli::commands::update::run()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::CheckUpdate) => update::run_background_check()
+                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+        };
 
+    if let Err(e) = result {
+        eprintln!("error: {}", e.message());
+        std::process::exit(e.exit_code());
+    }
+}
+
+async fn run_mcp_server() {
     let registry = match config::init_config() {
         Ok(r) => r,
         Err(e) => {
@@ -77,16 +75,7 @@ async fn main() {
         }
     };
 
-    monitoring::init();
     update::check_and_notify();
-    let project = std::env::current_dir()
-        .ok()
-        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()));
-    monitoring::emit(monitoring::MonitorEvent::ServerStarted {
-        version: format!("{VERSION}+{GIT_HASH}"),
-        pid: std::process::id(),
-        project,
-    });
 
     let server_version = format!("{VERSION}+{GIT_HASH}");
     logger::log_server_start(&server_version);
@@ -162,7 +151,4 @@ async fn main() {
             logger::log_to_file("Received SIGINT, shutting down");
         }
     }
-
-    monitoring::emit(monitoring::MonitorEvent::ServerStopped);
-    monitoring::cleanup();
 }

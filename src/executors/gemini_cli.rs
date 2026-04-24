@@ -1,5 +1,8 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
@@ -159,7 +162,7 @@ impl LlmExecutor for GeminiCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         let message_with_files = append_file_refs(prompt, file_paths);
         let message = if thread_id.is_some() {
@@ -188,7 +191,7 @@ impl LlmExecutor for GeminiCliExecutor {
             &message,
             prompt,
             system_prompt,
-            consultation_id,
+            spool,
             parse_gemini_line,
         )
         .await
@@ -270,7 +273,13 @@ mod tests {
 
     #[test]
     fn test_reducer_concatenates_deltas() {
-        let mut reducer = StreamReducer::new(None, None, None);
+        let mut reducer = StreamReducer::new(
+            std::sync::Arc::new(std::sync::Mutex::new(
+                consult_llm_core::monitoring::RunSpool::disabled(),
+            )),
+            None,
+            None,
+        );
         reducer.process(parse_gemini_line(
             r#"{"type":"message","role":"assistant","content":"Hello ","delta":true}"#,
         ));
@@ -282,7 +291,13 @@ mod tests {
 
     #[test]
     fn test_reducer_tracks_tool_labels() {
-        let mut reducer = StreamReducer::new(None, None, None);
+        let mut reducer = StreamReducer::new(
+            std::sync::Arc::new(std::sync::Mutex::new(
+                consult_llm_core::monitoring::RunSpool::disabled(),
+            )),
+            None,
+            None,
+        );
         reducer.process(parse_gemini_line(
             r#"{"type":"tool_use","tool_name":"read_file","tool_id":"read_file_123"}"#,
         ));
@@ -302,7 +317,13 @@ mod tests {
 
     #[test]
     fn test_reducer_full_sequence_with_tools() {
-        let mut reducer = StreamReducer::new(None, None, None);
+        let mut reducer = StreamReducer::new(
+            std::sync::Arc::new(std::sync::Mutex::new(
+                consult_llm_core::monitoring::RunSpool::disabled(),
+            )),
+            None,
+            None,
+        );
         let lines = vec![
             r#"{"type":"init","timestamp":"...","session_id":"sess1","model":"gemini-3"}"#,
             r#"{"type":"message","timestamp":"...","role":"user","content":"analyze README.md"}"#,

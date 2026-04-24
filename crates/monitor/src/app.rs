@@ -1,24 +1,23 @@
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::path::Path;
+use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 
 use arboard::Clipboard;
 use consult_llm_core::jsonl::read_jsonl_from_offset;
-use consult_llm_core::monitoring::{EventEnvelope, MonitorEvent, ProgressStage};
+use consult_llm_core::monitoring::{
+    HistoryRecord, RunEvent, RunEventKind, RunMeta, active_dir, append_history,
+};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use crate::action::Action;
+use crate::meta::load_run_meta;
 use crate::poller::PollUpdate;
 use crate::state::{
-    ActiveConsult, AppMode, AppState, CompletedConsult, DetailMetadata, DetailState, Focus,
-    RowInfo, ServerState, ThreadDetailState,
+    ActiveRun, AppMode, AppState, DetailState, Focus, RowInfo, ThreadDetailState, parse_rfc3339_utc,
 };
 
 impl AppState {
-    pub(crate) fn apply(&mut self, action: Action, dir: &Path) {
+    pub(crate) fn apply(&mut self, action: Action) {
         match action {
             Action::Quit => unreachable!("handled in main loop"),
             Action::ToggleFocus => {
@@ -51,20 +50,17 @@ impl AppState {
                     self.history_selected = self.history_selected.saturating_sub(1);
                 }
             },
-            Action::EnterDetail(cid) => {
+            Action::EnterDetail(run_id) => {
                 let from_history = matches!(self.focus, Focus::History);
-                self.enter_detail(cid, dir);
-                if from_history {
-                    // History entries are complete — start at top
-                    if let AppMode::Detail(ref mut detail) = self.mode {
-                        detail.scroll = 0;
-                        detail.auto_scroll = false;
-                    }
+                self.enter_detail(run_id);
+                if from_history && let AppMode::Detail(ref mut detail) = self.mode {
+                    detail.scroll = 0;
+                    detail.auto_scroll = false;
                 }
                 self.populate_detail_siblings();
             }
             Action::EnterThreadDetail(thread_id) => {
-                self.enter_thread_detail(thread_id, dir);
+                self.enter_thread_detail(thread_id);
             }
             Action::PrevTurn => {
                 if let AppMode::ThreadDetail(ref mut detail) = self.mode
@@ -91,9 +87,6 @@ impl AppState {
             Action::NextSibling | Action::PrevSibling => {
                 let forward = matches!(action, Action::NextSibling);
                 if let AppMode::Detail(ref detail) = self.mode {
-                    // Reuse the sibling list computed on initial entry — don't
-                    // recompute, as the time window is relative and would shift
-                    // with each switch, producing unstable sibling sets.
                     let siblings = detail.siblings.clone();
                     let current_idx = detail.sibling_index;
                     if siblings.len() > 1 {
@@ -103,8 +96,7 @@ impl AppState {
                             (current_idx + siblings.len() - 1) % siblings.len()
                         };
                         let next_id = siblings[next_idx].clone();
-                        self.enter_detail(next_id, dir);
-                        // Preserve the original sibling list on the new detail state
+                        self.enter_detail(next_id);
                         if let AppMode::Detail(ref mut detail) = self.mode {
                             detail.siblings = siblings;
                             detail.sibling_index = next_idx;
@@ -123,12 +115,10 @@ impl AppState {
                 *auto_scroll = false;
             }),
             Action::HalfPageDown => self.mutate_scroll(|scroll, _, height| {
-                let half = height / 2;
-                *scroll = scroll.saturating_add(half.max(1));
+                *scroll = scroll.saturating_add((height / 2).max(1));
             }),
             Action::HalfPageUp => self.mutate_scroll(|scroll, auto_scroll, height| {
-                let half = height / 2;
-                *scroll = scroll.saturating_sub(half.max(1));
+                *scroll = scroll.saturating_sub((height / 2).max(1));
                 *auto_scroll = false;
             }),
             Action::PageDown => self.mutate_scroll(|scroll, _, height| {
@@ -148,8 +138,8 @@ impl AppState {
             }),
             Action::ScrollToResponse => {
                 let offset = match &self.mode {
-                    AppMode::Detail(d) => d.response_line_offset,
-                    AppMode::ThreadDetail(d) => d.response_line_offset,
+                    AppMode::Detail(detail) => detail.response_line_offset,
+                    AppMode::ThreadDetail(detail) => detail.response_line_offset,
                     _ => None,
                 };
                 if let Some(offset) = offset {
@@ -168,7 +158,6 @@ impl AppState {
                 self.invalidate_filter_cache();
                 self.mode = AppMode::Table;
                 self.flash = Some(("History cleared".into(), 20));
-                // File truncation is handled by the caller (main loop)
             }
             Action::CancelClear => {
                 self.mode = AppMode::Table;
@@ -183,7 +172,6 @@ impl AppState {
             Action::ToggleSystemPrompt => {
                 if let AppMode::Detail(ref mut detail) = self.mode {
                     detail.show_system_prompt = !detail.show_system_prompt;
-                    // Invalidate render cache since content changed
                     detail.cached_lines = None;
                 }
             }
@@ -194,25 +182,18 @@ impl AppState {
                     _ => None,
                 };
                 if let Some(events) = events {
-                    let last_text = events.iter().rev().find_map(|e| match e {
+                    let last_text = events.iter().rev().find_map(|event| match event {
                         ParsedStreamEvent::AssistantText { text } if !text.is_empty() => {
                             Some(text.clone())
                         }
                         _ => None,
                     });
-
                     match last_text {
                         Some(text) => match Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
-                            Ok(()) => {
-                                self.flash = Some(("Copied to clipboard".into(), 20));
-                            }
-                            Err(e) => {
-                                self.flash = Some((format!("Clipboard error: {e}"), 20));
-                            }
+                            Ok(()) => self.flash = Some(("Copied to clipboard".into(), 20)),
+                            Err(e) => self.flash = Some((format!("Clipboard error: {e}"), 20)),
                         },
-                        None => {
-                            self.flash = Some(("No assistant response to copy".into(), 20));
-                        }
+                        None => self.flash = Some(("No assistant response to copy".into(), 20)),
                     }
                 }
             }
@@ -232,7 +213,6 @@ impl AppState {
             }
             Action::FilterAccept => {
                 self.filter_editing = false;
-                // keep filter_text active
             }
             Action::FilterCancel => {
                 self.filter_editing = false;
@@ -263,139 +243,26 @@ impl AppState {
         }
     }
 
-    pub(crate) fn process_event(&mut self, server_id: &str, envelope: &EventEnvelope) {
-        match &envelope.event {
-            MonitorEvent::ServerStarted {
-                version,
-                pid,
-                project,
-            } => {
-                if !self.server_order.contains(&server_id.to_string()) {
-                    self.server_order.push(server_id.to_string());
-                }
-                self.servers.insert(
-                    server_id.to_string(),
-                    ServerState {
-                        server_id: server_id.to_string(),
-                        pid: *pid,
-                        _version: version.clone(),
-                        project: project.clone(),
-                        stopped: false,
-                        dead: false,
-                        active_consults: HashMap::new(),
-                        completed_consults: Vec::new(),
-                        completed_count: 0,
-                        failed_count: 0,
-                        last_consult_at: None,
-                    },
-                );
-            }
-            MonitorEvent::ConsultStarted {
-                id,
-                model,
-                backend,
-                thread_id,
-                task_mode,
-                reasoning_effort,
-            } => {
-                if let Some(server) = self.servers.get_mut(server_id) {
-                    let started_at = DateTime::parse_from_rfc3339(&envelope.ts)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now());
-                    server.active_consults.insert(
-                        id.clone(),
-                        ActiveConsult {
-                            model: model.clone(),
-                            backend: backend.clone(),
-                            started_at,
-                            last_progress: None,
-                            thread_id: thread_id.clone(),
-                            task_mode: task_mode.clone(),
-                            reasoning_effort: reasoning_effort.clone(),
-                            child_pid: None,
-                        },
-                    );
-                    server.last_consult_at = Some(started_at);
-                }
-            }
-            MonitorEvent::ConsultProgress { id, stage } => {
-                if let Some(server) = self.servers.get_mut(server_id)
-                    && let Some(consult) = server.active_consults.get_mut(id)
-                {
-                    if let ProgressStage::CliSpawned { pid } = stage {
-                        consult.child_pid = Some(*pid);
-                    }
-                    consult.last_progress = Some(stage.to_string());
-                }
-            }
-            MonitorEvent::ConsultFinished {
-                id,
-                success,
-                duration_ms,
-                error,
-            } => {
-                if let Some(server) = self.servers.get_mut(server_id) {
-                    let active = server.active_consults.remove(id);
-                    if let Some(ac) = active {
-                        server.completed_consults.push(CompletedConsult {
-                            id: id.clone(),
-                            model: ac.model,
-                            backend: ac.backend,
-                            started_at: ac.started_at,
-                            duration_ms: *duration_ms,
-                            success: *success,
-                            error: error.clone(),
-                            task_mode: ac.task_mode,
-                        });
-                        // Keep only last 5
-                        if server.completed_consults.len() > 5 {
-                            server.completed_consults.remove(0);
-                        }
-                    }
-                    let finished_at = DateTime::parse_from_rfc3339(&envelope.ts)
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|_| Utc::now());
-                    server.last_consult_at = Some(finished_at);
-                    if *success {
-                        server.completed_count += 1;
-                    } else {
-                        server.failed_count += 1;
-                    }
-                }
-            }
-            MonitorEvent::ServerStopped => {
-                if let Some(server) = self.servers.get_mut(server_id) {
-                    server.stopped = true;
-                }
-            }
-        }
-    }
+    pub(crate) fn enter_detail(&mut self, run_id: String) {
+        let (events, offset) = load_run_events(&run_id);
+        let is_active = self.is_run_active(&run_id);
 
-    pub(crate) fn enter_detail(&mut self, consultation_id: String, dir: &Path) {
-        let path = dir.join(format!("{consultation_id}.events.jsonl"));
-        let mut offset = 0u64;
-        let events: Vec<ParsedStreamEvent> = read_jsonl_from_offset(&path, &mut offset);
-
-        let is_active = self.is_consultation_active(&consultation_id);
-
-        // Look up metadata from active consults, completed consults, or history
-        let meta = self.lookup_consult_metadata(&consultation_id);
-
-        self.mode = AppMode::Detail(DetailState {
-            consultation_id,
-            events,
+        let mut detail = DetailState {
+            run_id: run_id.clone(),
+            events: Vec::new(),
             file_offset: offset,
             scroll: if is_active { usize::MAX } else { 0 },
             auto_scroll: is_active,
-            model: meta.model,
-            backend: meta.backend,
-            reasoning_effort: meta.reasoning_effort,
-            started_at: meta.started_at,
-            duration_ms: meta.duration_ms,
-            success: meta.success,
-            project: meta.project,
-            task_mode: meta.task_mode,
-            error: meta.error,
+            model: None,
+            backend: None,
+            reasoning_effort: None,
+            started_at: None,
+            duration_ms: None,
+            success: None,
+            project: None,
+            task_mode: None,
+            error: None,
+            last_stage: None,
             cached_lines: None,
             cached_event_count: 0,
             cached_width: 0,
@@ -404,17 +271,35 @@ impl AppState {
             response_line_offset: None,
             siblings: Vec::new(),
             sibling_index: 0,
-        });
+        };
+
+        if let Some(meta) = load_run_meta(&run_id) {
+            apply_run_meta_to_detail(&mut detail, &meta);
+        }
+        if let Some(active) = self.active_runs.get(&run_id) {
+            apply_active_run_to_detail(&mut detail, active);
+        }
+        if let Some(record) = self
+            .history
+            .iter()
+            .find(|record| record.consultation_id.as_deref() == Some(run_id.as_str()))
+        {
+            apply_history_record_to_detail(&mut detail, record);
+        }
+        for event in events {
+            apply_run_event_to_detail(&mut detail, event);
+        }
+
+        self.mode = AppMode::Detail(detail);
     }
 
-    /// Compute and set sibling consultation info on the current detail view.
     fn populate_detail_siblings(&mut self) {
         if let AppMode::Detail(ref detail) = self.mode {
             let project = detail.project.clone();
             let started_at = detail.started_at;
-            let cid = detail.consultation_id.clone();
+            let run_id = detail.run_id.clone();
             let siblings = self.find_siblings(project.as_deref(), started_at);
-            let idx = siblings.iter().position(|id| *id == cid).unwrap_or(0);
+            let idx = siblings.iter().position(|id| *id == run_id).unwrap_or(0);
             if let AppMode::Detail(ref mut detail) = self.mode {
                 detail.siblings = siblings;
                 detail.sibling_index = idx;
@@ -422,12 +307,12 @@ impl AppState {
         }
     }
 
-    pub(crate) fn enter_thread_detail(&mut self, thread_id: String, dir: &Path) {
-        // Collect all history records for this thread, sorted chronologically (oldest first)
+    pub(crate) fn enter_thread_detail(&mut self, thread_id: String) {
         let mut thread_records: Vec<_> = self
             .history
             .iter()
-            .filter(|h| h.thread_id.as_deref() == Some(&thread_id))
+            .filter(|record| record.thread_id.as_deref() == Some(thread_id.as_str()))
+            .filter(|record| record.consultation_id.is_some())
             .collect();
         thread_records.sort_by(|a, b| a.ts.cmp(&b.ts));
 
@@ -436,72 +321,56 @@ impl AppState {
             return;
         }
 
-        let turn_ids: Vec<String> = thread_records
-            .iter()
-            .filter_map(|r| r.consultation_id.clone())
-            .collect();
+        let active_run = self
+            .active_runs
+            .values()
+            .filter(|run| run.thread_id.as_deref() == Some(thread_id.as_str()))
+            .max_by_key(|run| run.started_at);
 
-        // Load events from all completed turns (all except the last)
-        let mut historical_turns: Vec<Vec<ParsedStreamEvent>> = Vec::new();
-        for cid in turn_ids.iter().take(turn_ids.len().saturating_sub(1)) {
-            let mut turn_events = Vec::new();
-            let path = dir.join(format!("{cid}.events.jsonl"));
-            if let Ok(file) = File::open(&path) {
-                let reader = BufReader::new(file);
-                for line in reader.lines().map_while(Result::ok) {
-                    if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(line.trim()) {
-                        turn_events.push(event);
-                    }
-                }
-            }
-            historical_turns.push(turn_events);
+        let mut turn_ids: Vec<String> = Vec::new();
+        let mut turn_events: Vec<Vec<ParsedStreamEvent>> = Vec::new();
+        let mut turn_offsets: Vec<u64> = Vec::new();
+        let mut models: Vec<String> = Vec::new();
+        let mut backends: Vec<String> = Vec::new();
+
+        for record in &thread_records {
+            let Some(run_id) = record.consultation_id.clone() else {
+                continue;
+            };
+            let (events, offset) = load_stream_events(&run_id);
+            turn_ids.push(run_id);
+            turn_events.push(events);
+            turn_offsets.push(offset);
+            models.push(record.model.clone());
+            backends.push(record.backend.clone());
         }
 
-        // Load the latest turn's events with offset tracking
-        let mut active_events = Vec::new();
-        let mut active_file_offset = 0u64;
-        if let Some(last_cid) = turn_ids.last() {
-            let path = dir.join(format!("{last_cid}.events.jsonl"));
-            if let Ok(file) = File::open(&path) {
-                let mut reader = BufReader::new(file);
-                let mut buf = String::new();
-                loop {
-                    buf.clear();
-                    match reader.read_line(&mut buf) {
-                        Ok(0) => break,
-                        Ok(bytes_read) => {
-                            if !buf.ends_with('\n') {
-                                break;
-                            }
-                            active_file_offset += bytes_read as u64;
-                            if let Ok(event) = serde_json::from_str::<ParsedStreamEvent>(buf.trim())
-                            {
-                                active_events.push(event);
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-            }
+        if let Some(active_run) = active_run {
+            let (events, offset) = load_stream_events(&active_run.run_id);
+            turn_ids.push(active_run.run_id.clone());
+            turn_events.push(events);
+            turn_offsets.push(offset);
+            models.push(active_run.model.clone());
+            backends.push(active_run.backend.clone());
         }
 
+        let Some(active_events) = turn_events.pop() else {
+            self.flash = Some(("No run events for thread".into(), 20));
+            return;
+        };
+        let active_file_offset = turn_offsets.pop().unwrap_or(0);
+        let historical_turns = turn_events;
         let turn_count = turn_ids.len();
-        let total_duration_ms: u64 = thread_records.iter().map(|r| r.duration_ms).sum();
-        let models: Vec<String> = thread_records
-            .iter()
-            .map(|r| r.model.clone())
-            .collect::<Vec<_>>();
-        let backends: Vec<String> = thread_records
-            .iter()
-            .map(|r| r.backend.clone())
-            .collect::<Vec<_>>();
-        let success = thread_records.last().map(|r| r.success);
-        let project = Some(thread_records[0].project.clone());
-
-        // Check if the latest turn is still active
-        let is_active = turn_ids
-            .last()
-            .is_some_and(|cid| self.is_consultation_active(cid));
+        let total_duration_ms: u64 = thread_records.iter().map(|record| record.duration_ms).sum();
+        let success = if active_run.is_some() {
+            None
+        } else {
+            thread_records.last().map(|record| record.success)
+        };
+        let project = thread_records
+            .first()
+            .map(|record| record.project.clone())
+            .or_else(|| active_run.map(|run| run.project.clone()));
 
         self.mode = AppMode::ThreadDetail(ThreadDetailState {
             thread_id,
@@ -509,103 +378,24 @@ impl AppState {
             historical_turns,
             active_events,
             active_file_offset,
-            turn_line_offsets: Vec::new(), // computed during rendering
+            turn_line_offsets: Vec::new(),
             selected_turn: turn_count.saturating_sub(1),
-            scroll: if is_active { usize::MAX } else { 0 },
-            auto_scroll: is_active,
+            scroll: if active_run.is_some() { usize::MAX } else { 0 },
+            auto_scroll: active_run.is_some(),
             models,
             backends,
             project,
             total_duration_ms,
             turn_count,
             success,
-            response_line_offset: None, // computed during rendering
+            response_line_offset: None,
         });
     }
 
-    fn lookup_consult_metadata(&self, consultation_id: &str) -> DetailMetadata {
-        // Check active consults
-        for server in self.servers.values() {
-            if let Some(ac) = server.active_consults.get(consultation_id) {
-                return DetailMetadata {
-                    model: Some(ac.model.clone()),
-                    backend: Some(ac.backend.clone()),
-                    started_at: Some(ac.started_at),
-                    duration_ms: None,
-                    success: None,
-                    project: server.project.clone(),
-                    task_mode: ac.task_mode.clone(),
-                    reasoning_effort: ac.reasoning_effort.clone(),
-                    error: None,
-                };
-            }
-        }
-        // Check completed consults
-        for server in self.servers.values() {
-            if let Some(cc) = server
-                .completed_consults
-                .iter()
-                .find(|c| c.id == consultation_id)
-            {
-                return DetailMetadata {
-                    model: Some(cc.model.clone()),
-                    backend: Some(cc.backend.clone()),
-                    started_at: Some(cc.started_at),
-                    duration_ms: Some(cc.duration_ms),
-                    success: Some(cc.success),
-                    project: server.project.clone(),
-                    task_mode: cc.task_mode.clone(),
-                    reasoning_effort: None,
-                    error: cc.error.clone(),
-                };
-            }
-        }
-        // Check history
-        if let Some(hr) = self
-            .history
-            .iter()
-            .find(|h| h.consultation_id.as_deref() == Some(consultation_id))
-        {
-            // hr.ts is the *finish* time; derive start time by subtracting duration
-            let started_at = DateTime::parse_from_rfc3339(&hr.ts)
-                .map(|dt| {
-                    dt.with_timezone(&Utc) - chrono::Duration::milliseconds(hr.duration_ms as i64)
-                })
-                .ok();
-            return DetailMetadata {
-                model: Some(hr.model.clone()),
-                backend: Some(hr.backend.clone()),
-                started_at,
-                duration_ms: Some(hr.duration_ms),
-                success: Some(hr.success),
-                project: Some(hr.project.clone()),
-                task_mode: None,
-                reasoning_effort: hr.reasoning_effort.clone(),
-                error: hr.error.clone(),
-            };
-        }
-        DetailMetadata {
-            model: None,
-            backend: None,
-            started_at: None,
-            duration_ms: None,
-            success: None,
-            project: None,
-            task_mode: None,
-            reasoning_effort: None,
-            error: None,
-        }
+    pub(crate) fn is_run_active(&self, run_id: &str) -> bool {
+        self.active_runs.contains_key(run_id)
     }
 
-    /// Check if a consultation is still active (running) in any server.
-    pub(crate) fn is_consultation_active(&self, consultation_id: &str) -> bool {
-        self.servers
-            .values()
-            .any(|s| s.active_consults.contains_key(consultation_id))
-    }
-
-    /// Find sibling consultations: same project, started within 5 minutes of each other.
-    /// Returns consultation IDs sorted with active ones first, then by start time.
     fn find_siblings(
         &self,
         project: Option<&str>,
@@ -615,75 +405,58 @@ impl AppState {
             return Vec::new();
         };
 
-        let window_secs = 60; // 1 minute
-
-        // Collect candidates: (consultation_id, started_at, is_active)
+        let window_secs = 60;
+        let mut seen = HashSet::new();
         let mut candidates: Vec<(String, DateTime<Utc>, bool)> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-        // Active consultations from servers with matching project
-        for server in self.servers.values() {
-            if server.project.as_deref() != Some(project) {
-                continue;
-            }
-            for (cid, ac) in &server.active_consults {
-                if seen.insert(cid.clone()) {
-                    candidates.push((cid.clone(), ac.started_at, true));
-                }
+        for run in self.active_runs.values() {
+            if run.project == project && seen.insert(run.run_id.clone()) {
+                candidates.push((run.run_id.clone(), run.started_at, true));
             }
         }
 
-        // History records with matching project
-        // Note: record.ts / parsed_ts is the *finish* time; derive start time
         for record in &self.history {
             if record.project != project {
                 continue;
             }
-            if let Some(cid) = &record.consultation_id
-                && seen.insert(cid.clone())
-            {
-                let duration = chrono::Duration::milliseconds(record.duration_ms as i64);
-                if let Some(ts) = record.parsed_ts {
-                    candidates.push((cid.clone(), ts - duration, false));
-                } else if let Ok(dt) = DateTime::parse_from_rfc3339(&record.ts) {
-                    candidates.push((cid.clone(), dt.with_timezone(&Utc) - duration, false));
-                }
+            let Some(run_id) = record.consultation_id.clone() else {
+                continue;
+            };
+            if !seen.insert(run_id.clone()) {
+                continue;
+            }
+            if let Some(started_at) = history_started_at(record) {
+                candidates.push((run_id, started_at, false));
             }
         }
 
-        // Filter by time window relative to reference time
-        if let Some(ref_time) = reference_time {
+        if let Some(reference_time) = reference_time {
             candidates.retain(|(_, started_at, is_active)| {
-                // Always keep active consultations
                 *is_active
-                    || (ref_time
+                    || reference_time
                         .signed_duration_since(*started_at)
                         .num_seconds()
                         .unsigned_abs()
-                        <= window_secs)
+                        <= window_secs
             });
         }
 
-        // Sort: active first, then by start time (newest first)
-        candidates.sort_by(|a, b| {
-            b.2.cmp(&a.2) // active first
-                .then_with(|| b.1.cmp(&a.1)) // newest first
-        });
-
-        candidates.into_iter().map(|(cid, _, _)| cid).collect()
+        candidates.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| b.1.cmp(&a.1)));
+        candidates
+            .into_iter()
+            .map(|(run_id, _, _)| run_id)
+            .collect()
     }
 
-    /// Apply a scroll mutation to whichever detail mode is active.
     fn mutate_scroll(&mut self, f: impl Fn(&mut usize, &mut bool, usize)) {
         let height = self.detail_inner_height;
         match &mut self.mode {
-            AppMode::Detail(d) => f(&mut d.scroll, &mut d.auto_scroll, height),
-            AppMode::ThreadDetail(d) => f(&mut d.scroll, &mut d.auto_scroll, height),
+            AppMode::Detail(detail) => f(&mut detail.scroll, &mut detail.auto_scroll, height),
+            AppMode::ThreadDetail(detail) => f(&mut detail.scroll, &mut detail.auto_scroll, height),
             _ => {}
         }
     }
 
-    /// Clamp history_selected to the filtered list length.
     fn clamp_history_selection(&mut self) {
         let count = self.build_history_display_rows().len();
         if count == 0 {
@@ -693,53 +466,30 @@ impl AppState {
         }
     }
 
-    /// Return server IDs sorted by status: active first, then idle, then stopped/dead.
-    /// Within each bucket, sort by most recent consultation activity (newest first).
-    pub(crate) fn display_server_ids(&self) -> Vec<&str> {
-        let mut entries: Vec<(&String, &ServerState)> = self
-            .server_order
-            .iter()
-            .filter_map(|id| self.servers.get(id).map(|s| (id, s)))
-            .collect();
-
-        entries.sort_by(|(_, sa), (_, sb)| {
-            let bucket = |s: &ServerState| -> u8 {
-                if !s.active_consults.is_empty() {
-                    0
-                } else if !s.completed_consults.is_empty() {
-                    1
-                } else if !s.stopped && !s.dead {
-                    2
-                } else {
-                    3
-                }
-            };
-
-            let ba = bucket(sa);
-            let bb = bucket(sb);
-            ba.cmp(&bb).then_with(|| {
-                // Within same bucket, most recent activity first (reverse chronological)
-                sb.last_consult_at.cmp(&sa.last_consult_at)
-            })
-        });
-
-        entries.into_iter().map(|(id, _)| id.as_str()).collect()
-    }
-
-    /// Return active consult entries sorted by start time (oldest first).
-    pub(crate) fn sorted_active_consults(server: &ServerState) -> Vec<(&String, &ActiveConsult)> {
-        let mut entries: Vec<_> = server.active_consults.iter().collect();
-        entries.sort_by_key(|(_, c)| c.started_at);
-        entries
-    }
-
-    /// Apply a state update received from the background poller.
     pub(crate) fn apply_poll_update(&mut self, update: PollUpdate) {
         match update {
-            PollUpdate::Events(events) => {
-                for (server_id, envelope) in &events {
-                    self.process_event(server_id, envelope);
+            PollUpdate::ActiveRunAdded(snapshot) | PollUpdate::ActiveRunUpdated(snapshot) => {
+                let run = ActiveRun::from(snapshot);
+                self.active_runs.insert(run.run_id.clone(), run);
+                self.sort_active_order();
+            }
+            PollUpdate::ActiveRunRemoved(run_id) => {
+                self.active_runs.remove(&run_id);
+                self.active_order.retain(|id| id != &run_id);
+            }
+            PollUpdate::OrphanDetected(run_id) => {
+                if let Some(run) = self.active_runs.get_mut(&run_id) {
+                    run.orphaned = true;
+                    run.last_stage = Some("orphaned".into());
                 }
+                if let AppMode::Detail(ref mut detail) = self.mode
+                    && detail.run_id == run_id
+                {
+                    detail.last_stage = Some("orphaned".into());
+                    detail.success = Some(false);
+                    detail.error = Some("process died without completing".into());
+                }
+                self.persist_orphan(&run_id);
             }
             PollUpdate::HistoryRecords(records) => {
                 if !records.is_empty() {
@@ -759,90 +509,217 @@ impl AppState {
                     }
                 }
             }
-            PollUpdate::Deaths(deaths) => {
-                for server_id in &deaths {
-                    if let Some(server) = self.servers.get_mut(server_id) {
-                        server.dead = true;
-                        server.active_consults.clear();
-                    }
+            PollUpdate::DetailMetadata(meta) => {
+                if let AppMode::Detail(ref mut detail) = self.mode
+                    && detail.run_id == meta.run_id
+                {
+                    apply_run_meta_to_detail(detail, &meta);
                 }
             }
-            PollUpdate::Pruned(pruned_ids) => {
-                for id in &pruned_ids {
-                    self.servers.remove(id);
-                }
-                self.server_order.retain(|id| self.servers.contains_key(id));
-            }
-            PollUpdate::DetailEvents {
-                consultation_id,
-                events,
-            } => {
-                match &mut self.mode {
-                    AppMode::Detail(detail)
-                        if detail.consultation_id == consultation_id && !events.is_empty() =>
-                    {
-                        detail.events.extend(events);
+            PollUpdate::DetailEvents { run_id, events } => match &mut self.mode {
+                AppMode::Detail(detail) if detail.run_id == run_id => {
+                    if !events.is_empty() {
+                        for event in events {
+                            apply_run_event_to_detail(detail, event);
+                        }
+                        detail.cached_lines = None;
                         if detail.auto_scroll {
                             detail.scroll = usize::MAX;
                         }
                     }
-                    AppMode::ThreadDetail(detail) if !events.is_empty() => {
-                        // Only accept events for the latest turn
-                        if let Some(last_turn) = detail.turn_ids.last()
-                            && *last_turn == consultation_id
-                        {
-                            detail.active_events.extend(events);
-                            if detail.auto_scroll {
-                                detail.scroll = usize::MAX;
-                            }
+                }
+                AppMode::ThreadDetail(detail)
+                    if detail.turn_ids.last().is_some_and(|last| *last == run_id) =>
+                {
+                    if !events.is_empty() {
+                        for event in events {
+                            apply_run_event_to_thread_detail(detail, event);
+                        }
+                        if detail.auto_scroll {
+                            detail.scroll = usize::MAX;
                         }
                     }
-                    _ => {}
                 }
-            }
+                _ => {}
+            },
         }
     }
 
-    /// Build a list of RowInfo for the current table rows.
     pub(crate) fn build_row_infos(&self) -> Vec<RowInfo> {
-        let mut infos = Vec::new();
-        for server_id in self.display_server_ids() {
-            let Some(server) = self.servers.get(server_id) else {
-                continue;
-            };
+        self.active_order
+            .iter()
+            .cloned()
+            .map(|run_id| RowInfo { run_id })
+            .collect()
+    }
 
-            if server.active_consults.is_empty() && server.completed_consults.is_empty() {
-                infos.push(RowInfo {
-                    server_id: server_id.to_string(),
-                    consultation_id: String::new(),
-                });
-            } else {
-                for (cid, _) in Self::sorted_active_consults(server) {
-                    infos.push(RowInfo {
-                        server_id: server_id.to_string(),
-                        consultation_id: cid.clone(),
-                    });
-                }
-                // Deduplicate completed consults by backend (last per backend),
-                // matching the table renderer's display logic
-                let mut seen_backends = std::collections::HashSet::new();
-                let deduped: Vec<_> = server
-                    .completed_consults
-                    .iter()
-                    .rev()
-                    .filter(|cc| seen_backends.insert(&cc.backend))
-                    .collect::<Vec<_>>()
-                    .into_iter()
-                    .rev()
-                    .collect();
-                for cc in deduped {
-                    infos.push(RowInfo {
-                        server_id: server_id.to_string(),
-                        consultation_id: cc.id.clone(),
-                    });
-                }
-            }
+    fn persist_orphan(&mut self, run_id: &str) {
+        if self
+            .history
+            .iter()
+            .any(|record| record.consultation_id.as_deref() == Some(run_id))
+        {
+            let _ = std::fs::remove_file(active_dir().join(format!("{run_id}.json")));
+            return;
         }
-        infos
+
+        let meta = load_run_meta(run_id).or_else(|| {
+            self.active_runs.get(run_id).map(|run| RunMeta {
+                v: 1,
+                run_id: run.run_id.clone(),
+                pid: run.pid,
+                started_at: run
+                    .started_at
+                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                project: run.project.clone(),
+                cwd: String::new(),
+                model: run.model.clone(),
+                backend: run.backend.clone(),
+                thread_id: run.thread_id.clone(),
+                task_mode: run.task_mode.clone(),
+                reasoning_effort: run.reasoning_effort.clone(),
+            })
+        });
+
+        let Some(meta) = meta else {
+            return;
+        };
+
+        let finished_at = Utc::now();
+        let duration_ms = parse_rfc3339_utc(&meta.started_at)
+            .map(|started_at| {
+                finished_at
+                    .signed_duration_since(started_at)
+                    .num_milliseconds()
+                    .max(0) as u64
+            })
+            .unwrap_or(0);
+
+        let record = HistoryRecord {
+            ts: finished_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            consultation_id: Some(run_id.to_string()),
+            project: meta.project,
+            model: meta.model,
+            backend: meta.backend,
+            duration_ms,
+            success: false,
+            error: Some("process died without completing".into()),
+            tokens_in: None,
+            tokens_out: None,
+            parsed_ts: Some(finished_at),
+            thread_id: meta.thread_id,
+            reasoning_effort: meta.reasoning_effort,
+            task_mode: meta.task_mode,
+        };
+        append_history(&record);
+        let _ = std::fs::remove_file(active_dir().join(format!("{run_id}.json")));
+    }
+}
+
+fn load_run_events(run_id: &str) -> (Vec<RunEvent>, u64) {
+    let mut offset = 0u64;
+    let path = consult_llm_core::monitoring::runs_dir().join(format!("{run_id}.events.jsonl"));
+    let events = read_jsonl_from_offset(&path, &mut offset);
+    (events, offset)
+}
+
+fn load_stream_events(run_id: &str) -> (Vec<ParsedStreamEvent>, u64) {
+    let (events, offset) = load_run_events(run_id);
+    (
+        events
+            .into_iter()
+            .filter_map(|event| match event.kind {
+                RunEventKind::Stream { event } => Some(event),
+                _ => None,
+            })
+            .collect(),
+        offset,
+    )
+}
+
+fn history_started_at(record: &HistoryRecord) -> Option<DateTime<Utc>> {
+    let finished_at = record.parsed_ts.or_else(|| parse_rfc3339_utc(&record.ts))?;
+    Some(finished_at - chrono::Duration::milliseconds(record.duration_ms as i64))
+}
+
+fn apply_active_run_to_detail(detail: &mut DetailState, run: &ActiveRun) {
+    detail.model.get_or_insert(run.model.clone());
+    detail.backend.get_or_insert(run.backend.clone());
+    detail.reasoning_effort = detail
+        .reasoning_effort
+        .clone()
+        .or_else(|| run.reasoning_effort.clone());
+    detail.started_at.get_or_insert(run.started_at);
+    detail.project.get_or_insert(run.project.clone());
+    detail.task_mode = detail.task_mode.clone().or_else(|| run.task_mode.clone());
+    detail.last_stage = detail.last_stage.clone().or_else(|| run.last_stage.clone());
+    if run.orphaned {
+        detail.last_stage = Some("orphaned".into());
+        detail.error = Some("process died without completing".into());
+    }
+}
+
+fn apply_run_meta_to_detail(detail: &mut DetailState, meta: &RunMeta) {
+    detail.model = Some(meta.model.clone());
+    detail.backend = Some(meta.backend.clone());
+    detail.reasoning_effort = meta.reasoning_effort.clone();
+    detail.project = Some(meta.project.clone());
+    detail.task_mode = meta.task_mode.clone();
+    detail.started_at = parse_rfc3339_utc(&meta.started_at);
+}
+
+fn apply_history_record_to_detail(detail: &mut DetailState, record: &HistoryRecord) {
+    detail.model.get_or_insert(record.model.clone());
+    detail.backend.get_or_insert(record.backend.clone());
+    detail.reasoning_effort = detail
+        .reasoning_effort
+        .clone()
+        .or_else(|| record.reasoning_effort.clone());
+    detail.project.get_or_insert(record.project.clone());
+    detail.task_mode = detail
+        .task_mode
+        .clone()
+        .or_else(|| record.task_mode.clone());
+    detail.started_at = detail.started_at.or_else(|| history_started_at(record));
+    detail.duration_ms = detail.duration_ms.or(Some(record.duration_ms));
+    detail.success = detail.success.or(Some(record.success));
+    detail.error = detail.error.clone().or_else(|| record.error.clone());
+}
+
+fn apply_run_event_to_detail(detail: &mut DetailState, event: RunEvent) {
+    match event.kind {
+        RunEventKind::RunStarted => {
+            detail.started_at = detail.started_at.or_else(|| parse_rfc3339_utc(&event.ts));
+        }
+        RunEventKind::Progress { stage } => {
+            detail.last_stage = Some(stage.to_string());
+        }
+        RunEventKind::Stream { event } => {
+            detail.events.push(event);
+        }
+        RunEventKind::RunFinished {
+            duration_ms,
+            success,
+            error,
+        } => {
+            detail.duration_ms = Some(duration_ms);
+            detail.success = Some(success);
+            detail.error = error;
+        }
+    }
+}
+
+fn apply_run_event_to_thread_detail(detail: &mut ThreadDetailState, event: RunEvent) {
+    match event.kind {
+        RunEventKind::Stream { event } => detail.active_events.push(event),
+        RunEventKind::RunFinished {
+            duration_ms,
+            success,
+            ..
+        } => {
+            detail.total_duration_ms = detail.total_duration_ms.saturating_add(duration_ms);
+            detail.success = Some(success);
+        }
+        RunEventKind::RunStarted | RunEventKind::Progress { .. } => {}
     }
 }

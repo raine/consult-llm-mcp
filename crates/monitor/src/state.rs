@@ -2,15 +2,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
 use ratatui::style::Color;
+use ratatui::text::Line as RatatuiLine;
 use ratatui::widgets::TableState;
 
-use ratatui::text::Line as RatatuiLine;
-
 use consult_llm_core::llm_cost::calculate_cost;
-use consult_llm_core::monitoring::HistoryRecord;
+use consult_llm_core::monitoring::{ActiveSnapshot, HistoryRecord};
 use consult_llm_core::stream_events::ParsedStreamEvent;
-
-// ── Colors ───────────────────────────────────────────────────────────────
 
 pub(crate) const TEAL: Color = Color::Rgb(78, 201, 176);
 pub(crate) const WHITE: Color = Color::Rgb(255, 255, 255);
@@ -23,20 +20,17 @@ pub(crate) const YELLOW: Color = Color::Rgb(220, 200, 100);
 pub(crate) const DIM: Color = Color::Rgb(100, 100, 110);
 pub(crate) const SELECTED_BG: Color = Color::Rgb(40, 40, 50);
 
-/// Per-task-mode colors for visual distinction in tables and detail views.
 pub(crate) fn task_mode_color(mode: Option<&str>) -> Color {
     match mode {
-        Some("review") => Color::Rgb(130, 180, 230), // soft blue
-        Some("debug") => Color::Rgb(220, 150, 120),  // warm orange
-        Some("plan") => Color::Rgb(170, 140, 210),   // muted purple
-        Some("create") => Color::Rgb(120, 200, 160), // soft green
+        Some("review") => Color::Rgb(130, 180, 230),
+        Some("debug") => Color::Rgb(220, 150, 120),
+        Some("plan") => Color::Rgb(170, 140, 210),
+        Some("create") => Color::Rgb(120, 200, 160),
         _ => DIM_WHITE,
     }
 }
 
 pub(crate) const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-// ── Types ────────────────────────────────────────────────────────────────
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum AppMode {
@@ -49,33 +43,25 @@ pub(crate) enum AppMode {
 
 pub(crate) struct ThreadDetailState {
     pub(crate) thread_id: String,
-    /// Consultation IDs in chronological order
     pub(crate) turn_ids: Vec<String>,
-    /// Events per completed turn (immutable), one Vec per turn
     pub(crate) historical_turns: Vec<Vec<ParsedStreamEvent>>,
-    /// Events from the latest/active turn (may still be streaming)
     pub(crate) active_events: Vec<ParsedStreamEvent>,
-    /// Byte offset for polling the active turn's .events.jsonl
     pub(crate) active_file_offset: u64,
-    /// Line index where each turn starts (for jump-to-turn navigation)
     pub(crate) turn_line_offsets: Vec<usize>,
-    /// Index of the currently focused turn
     pub(crate) selected_turn: usize,
     pub(crate) scroll: usize,
     pub(crate) auto_scroll: bool,
-    // Metadata for header
     pub(crate) models: Vec<String>,
     pub(crate) backends: Vec<String>,
     pub(crate) project: Option<String>,
     pub(crate) total_duration_ms: u64,
     pub(crate) turn_count: usize,
     pub(crate) success: Option<bool>,
-    /// Line index where the last "Response:" header starts (for jump-to-response).
     pub(crate) response_line_offset: Option<usize>,
 }
 
 pub(crate) struct DetailState {
-    pub(crate) consultation_id: String,
+    pub(crate) run_id: String,
     pub(crate) events: Vec<ParsedStreamEvent>,
     pub(crate) file_offset: u64,
     pub(crate) scroll: usize,
@@ -89,34 +75,15 @@ pub(crate) struct DetailState {
     pub(crate) project: Option<String>,
     pub(crate) task_mode: Option<String>,
     pub(crate) error: Option<String>,
-    /// Cached rendered lines from normalize_events + render_blocks.
+    pub(crate) last_stage: Option<String>,
     pub(crate) cached_lines: Option<Vec<RatatuiLine<'static>>>,
-    /// Event count when cache was built (invalidate when events arrive).
     pub(crate) cached_event_count: usize,
-    /// Inner width when cache was built (invalidate on resize).
     pub(crate) cached_width: usize,
-    /// Whether any in-progress tools existed at cache time (spinners need re-render).
     pub(crate) cached_has_active_tools: bool,
-    /// Whether the system prompt overlay is visible.
     pub(crate) show_system_prompt: bool,
-    /// Line index where the "Response:" header starts (for jump-to-response).
     pub(crate) response_line_offset: Option<usize>,
-    /// Sibling consultation IDs (same project, similar start time) including self.
     pub(crate) siblings: Vec<String>,
-    /// Index of the current consultation within `siblings`.
     pub(crate) sibling_index: usize,
-}
-
-pub(crate) struct DetailMetadata {
-    pub(crate) model: Option<String>,
-    pub(crate) backend: Option<String>,
-    pub(crate) started_at: Option<DateTime<Utc>>,
-    pub(crate) duration_ms: Option<u64>,
-    pub(crate) success: Option<bool>,
-    pub(crate) project: Option<String>,
-    pub(crate) task_mode: Option<String>,
-    pub(crate) reasoning_effort: Option<String>,
-    pub(crate) error: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -125,9 +92,45 @@ pub(crate) enum Focus {
     History,
 }
 
+pub(crate) struct ActiveRun {
+    pub(crate) run_id: String,
+    pub(crate) pid: u32,
+    pub(crate) project: String,
+    pub(crate) model: String,
+    pub(crate) backend: String,
+    pub(crate) started_at: DateTime<Utc>,
+    pub(crate) last_stage: Option<String>,
+    pub(crate) thread_id: Option<String>,
+    pub(crate) task_mode: Option<String>,
+    pub(crate) reasoning_effort: Option<String>,
+    pub(crate) last_seq: u64,
+    pub(crate) last_event_at: DateTime<Utc>,
+    pub(crate) orphaned: bool,
+}
+
+impl From<ActiveSnapshot> for ActiveRun {
+    fn from(snapshot: ActiveSnapshot) -> Self {
+        Self {
+            run_id: snapshot.run_id,
+            pid: snapshot.pid,
+            project: snapshot.project,
+            model: snapshot.model,
+            backend: snapshot.backend,
+            started_at: parse_rfc3339_utc(&snapshot.started_at).unwrap_or_else(Utc::now),
+            last_stage: snapshot.stage.map(|stage| stage.to_string()),
+            thread_id: snapshot.thread_id,
+            task_mode: snapshot.task_mode,
+            reasoning_effort: snapshot.reasoning_effort,
+            last_seq: snapshot.last_seq,
+            last_event_at: parse_rfc3339_utc(&snapshot.last_event_at).unwrap_or_else(Utc::now),
+            orphaned: false,
+        }
+    }
+}
+
 pub(crate) struct AppState {
-    pub(crate) servers: HashMap<String, ServerState>,
-    pub(crate) server_order: Vec<String>,
+    pub(crate) active_runs: HashMap<String, ActiveRun>,
+    pub(crate) active_order: Vec<String>,
     pub(crate) selected: usize,
     pub(crate) row_count: usize,
     pub(crate) tick: usize,
@@ -137,74 +140,21 @@ pub(crate) struct AppState {
     pub(crate) history_table_state: TableState,
     pub(crate) mode: AppMode,
     pub(crate) history: VecDeque<HistoryRecord>,
-    /// Transient message shown in status bar, cleared after a few renders
     pub(crate) flash: Option<(String, u8)>,
-    /// Last known inner height of the detail view (for half-page scroll)
     pub(crate) detail_inner_height: usize,
-    /// Whether the help/shortcuts overlay is visible
     pub(crate) show_help: bool,
-    /// Current filter text (always present, empty = no filter)
     pub(crate) filter_text: String,
-    /// Whether the filter input is currently being edited
     pub(crate) filter_editing: bool,
-    /// Cached filtered history indices, invalidated by filter/history changes
     pub(crate) cached_filter_indices: Option<Vec<usize>>,
-}
-
-pub(crate) struct ServerState {
-    pub(crate) server_id: String,
-    pub(crate) pid: u32,
-    pub(crate) _version: String,
-    pub(crate) project: Option<String>,
-    pub(crate) stopped: bool,
-    pub(crate) dead: bool,
-    pub(crate) active_consults: HashMap<String, ActiveConsult>,
-    pub(crate) completed_consults: Vec<CompletedConsult>,
-    pub(crate) completed_count: u32,
-    pub(crate) failed_count: u32,
-    /// Timestamp of the most recent consultation activity (start or finish)
-    pub(crate) last_consult_at: Option<DateTime<Utc>>,
-}
-
-pub(crate) struct ActiveConsult {
-    pub(crate) model: String,
-    pub(crate) backend: String,
-    /// Real start time from the event timestamp (survives TUI restart)
-    pub(crate) started_at: DateTime<Utc>,
-    /// Latest progress stage from ConsultProgress events
-    pub(crate) last_progress: Option<String>,
-    /// Thread ID if this is a resumed thread consultation
-    pub(crate) thread_id: Option<String>,
-    /// Task mode (review, debug, plan, create) — None means general
-    pub(crate) task_mode: Option<String>,
-    /// Reasoning effort level (e.g. for Codex models)
-    pub(crate) reasoning_effort: Option<String>,
-    /// PID of the spawned CLI backend process (if any)
-    pub(crate) child_pid: Option<u32>,
-}
-
-pub(crate) struct CompletedConsult {
-    pub(crate) id: String,
-    pub(crate) model: String,
-    pub(crate) backend: String,
-    pub(crate) started_at: DateTime<Utc>,
-    pub(crate) duration_ms: u64,
-    pub(crate) success: bool,
-    pub(crate) error: Option<String>,
-    pub(crate) task_mode: Option<String>,
 }
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct RowInfo {
-    pub(crate) server_id: String,
-    pub(crate) consultation_id: String,
+    pub(crate) run_id: String,
 }
 
-/// A display row in the history table — either a single consultation or a thread summary.
 pub(crate) enum HistoryDisplayRow {
-    /// Non-threaded consultation — index into `self.history`
     Single(usize),
-    /// Thread summary row (collapsed)
     ThreadSummary {
         thread_id: String,
         latest_parsed_ts: Option<DateTime<Utc>>,
@@ -216,7 +166,6 @@ pub(crate) enum HistoryDisplayRow {
         total_cost: Option<f64>,
         turn_count: usize,
         success: bool,
-        /// True if models differ across turns
         mixed_model: bool,
         project: String,
     },
@@ -225,8 +174,8 @@ pub(crate) enum HistoryDisplayRow {
 impl AppState {
     pub(crate) fn new() -> Self {
         Self {
-            servers: HashMap::new(),
-            server_order: Vec::new(),
+            active_runs: HashMap::new(),
+            active_order: Vec::new(),
             selected: 0,
             row_count: 0,
             tick: 0,
@@ -245,18 +194,15 @@ impl AppState {
         }
     }
 
-    /// Return indices of history rows matching the current filter.
-    /// Uses a cache that is invalidated by `invalidate_filter_cache()`.
     pub(crate) fn filtered_history_indices(&self) -> &[usize] {
-        // Cache is always populated before read via ensure_filter_cache()
         self.cached_filter_indices.as_deref().unwrap_or(&[])
     }
 
-    /// Recompute filter cache if invalidated.
     pub(crate) fn ensure_filter_cache(&mut self) {
         if self.cached_filter_indices.is_some() {
             return;
         }
+
         let indices = if self.filter_text.is_empty() {
             (0..self.history.len()).collect()
         } else {
@@ -264,72 +210,89 @@ impl AppState {
             self.history
                 .iter()
                 .enumerate()
-                .filter(|(_, r)| {
-                    r.project.to_lowercase().contains(&needle)
-                        || r.model.to_lowercase().contains(&needle)
-                        || r.backend.to_lowercase().contains(&needle)
-                        || (r.success && "success".contains(&needle))
-                        || (!r.success && "failed".contains(&needle))
+                .filter(|(_, record)| {
+                    record.project.to_lowercase().contains(&needle)
+                        || record.model.to_lowercase().contains(&needle)
+                        || record.backend.to_lowercase().contains(&needle)
+                        || record
+                            .thread_id
+                            .as_deref()
+                            .is_some_and(|thread| thread.to_lowercase().contains(&needle))
+                        || record
+                            .consultation_id
+                            .as_deref()
+                            .is_some_and(|run_id| run_id.to_lowercase().contains(&needle))
+                        || (record.success && "success".contains(&needle))
+                        || (!record.success && "failed".contains(&needle))
                 })
-                .map(|(i, _)| i)
+                .map(|(index, _)| index)
                 .collect()
         };
+
         self.cached_filter_indices = Some(indices);
     }
 
-    /// Invalidate the cached filter indices.
     pub(crate) fn invalidate_filter_cache(&mut self) {
         self.cached_filter_indices = None;
     }
 
-    /// Build display rows for the history table, grouping threaded consultations.
-    /// Returns rows in newest-first order (matching history VecDeque order).
+    pub(crate) fn sort_active_order(&mut self) {
+        let mut ids: Vec<_> = self.active_runs.keys().cloned().collect();
+        ids.sort_by(|a, b| {
+            let left = self.active_runs.get(a).unwrap();
+            let right = self.active_runs.get(b).unwrap();
+            right
+                .started_at
+                .cmp(&left.started_at)
+                .then_with(|| right.last_event_at.cmp(&left.last_event_at))
+                .then_with(|| right.last_seq.cmp(&left.last_seq))
+                .then_with(|| a.cmp(b))
+        });
+        self.active_order = ids;
+    }
+
     pub(crate) fn build_history_display_rows(&self) -> Vec<HistoryDisplayRow> {
         let filtered = self.filtered_history_indices();
 
-        // Group filtered indices by thread_id
-        // Key: thread_id, Value: indices into self.history (in VecDeque order = newest first)
         let mut thread_groups: HashMap<String, Vec<usize>> = HashMap::new();
-        let mut seen_threads: Vec<String> = Vec::new(); // preserve first-seen order
-        let mut single_rows: Vec<(usize, usize)> = Vec::new(); // (position, history_index)
+        let mut seen_threads: Vec<String> = Vec::new();
+        let mut single_rows: Vec<(usize, usize)> = Vec::new();
 
         for (position, &idx) in filtered.iter().enumerate() {
             let record = &self.history[idx];
-            if let Some(ref tid) = record.thread_id {
-                if !thread_groups.contains_key(tid) {
-                    seen_threads.push(tid.clone());
+            if let Some(ref thread_id) = record.thread_id {
+                if !thread_groups.contains_key(thread_id) {
+                    seen_threads.push(thread_id.clone());
                 }
-                thread_groups.entry(tid.clone()).or_default().push(idx);
+                thread_groups
+                    .entry(thread_id.clone())
+                    .or_default()
+                    .push(idx);
             } else {
                 single_rows.push((position, idx));
             }
         }
 
-        // Build display rows, maintaining position order
-        // We'll collect all rows with their "sort position" (position of latest entry)
         let mut rows_with_pos: Vec<(usize, HistoryDisplayRow)> = Vec::new();
 
         for (position, idx) in single_rows {
             rows_with_pos.push((position, HistoryDisplayRow::Single(idx)));
         }
 
-        for tid in &seen_threads {
-            let indices = &thread_groups[tid];
+        for thread_id in &seen_threads {
+            let indices = &thread_groups[thread_id];
             if indices.len() == 1 {
-                // Single-turn thread — show as regular row
                 let pos = filtered.iter().position(|&i| i == indices[0]).unwrap_or(0);
                 rows_with_pos.push((pos, HistoryDisplayRow::Single(indices[0])));
                 continue;
             }
 
-            // Position = earliest position in filtered list (= newest entry, since newest-first)
             let position = indices
                 .iter()
-                .filter_map(|&i| filtered.iter().position(|&fi| fi == i))
+                .filter_map(|&i| filtered.iter().position(|&filtered_idx| filtered_idx == i))
                 .min()
                 .unwrap_or(0);
 
-            // Sort indices chronologically (oldest first) by timestamp for aggregation
             let mut sorted_indices = indices.clone();
             sorted_indices.sort_by(|&a, &b| self.history[a].ts.cmp(&self.history[b].ts));
 
@@ -349,18 +312,18 @@ impl AppState {
                 .filter_map(|&i| self.history[i].tokens_out)
                 .reduce(|a, b| a + b);
 
-            // Compute per-turn cost and sum (each turn may use a different model)
             let total_cost = {
                 let mut sum = 0.0;
                 let mut any = false;
                 for &i in &sorted_indices {
-                    let r = &self.history[i];
-                    if r.backend == "api"
-                        && let (Some(ti), Some(to)) = (r.tokens_in, r.tokens_out)
+                    let record = &self.history[i];
+                    if record.backend == "api"
+                        && let (Some(tokens_in), Some(tokens_out)) =
+                            (record.tokens_in, record.tokens_out)
                     {
-                        let c = calculate_cost(ti, to, &r.model);
-                        if c.total_cost > 0.0 {
-                            sum += c.total_cost;
+                        let cost = calculate_cost(tokens_in, tokens_out, &record.model);
+                        if cost.total_cost > 0.0 {
+                            sum += cost.total_cost;
                             any = true;
                         }
                     }
@@ -371,7 +334,7 @@ impl AppState {
             rows_with_pos.push((
                 position,
                 HistoryDisplayRow::ThreadSummary {
-                    thread_id: tid.clone(),
+                    thread_id: thread_id.clone(),
                     latest_parsed_ts: latest.parsed_ts,
                     model: latest.model.clone(),
                     backend: latest.backend.clone(),
@@ -387,8 +350,46 @@ impl AppState {
             ));
         }
 
-        // Sort by position (preserves original order)
-        rows_with_pos.sort_by_key(|(pos, _)| *pos);
+        rows_with_pos.sort_by_key(|(position, _)| *position);
         rows_with_pos.into_iter().map(|(_, row)| row).collect()
+    }
+}
+
+pub(crate) fn parse_rfc3339_utc(ts: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(ts)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn active_snapshot_converts_to_active_run() {
+        let run = ActiveRun::from(ActiveSnapshot {
+            v: 1,
+            run_id: "run-1".into(),
+            pid: 42,
+            started_at: "2026-04-24T01:02:03.000Z".into(),
+            model: "gpt-5".into(),
+            backend: "api".into(),
+            project: "proj".into(),
+            thread_id: Some("thread-1".into()),
+            task_mode: Some("review".into()),
+            reasoning_effort: Some("high".into()),
+            last_seq: 7,
+            last_event_at: "2026-04-24T01:02:04.000Z".into(),
+            stage: None,
+        });
+
+        assert_eq!(run.run_id, "run-1");
+        assert_eq!(run.pid, 42);
+        assert_eq!(run.project, "proj");
+        assert_eq!(run.thread_id.as_deref(), Some("thread-1"));
+        assert_eq!(run.task_mode.as_deref(), Some("review"));
+        assert_eq!(run.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(run.last_seq, 7);
+        assert!(!run.orphaned);
     }
 }

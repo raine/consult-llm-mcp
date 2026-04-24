@@ -46,8 +46,19 @@ impl ConsultServer {
             .map_err(|e| format!("LLM query failed: {e:#}"))?;
 
         match outcome {
-            ConsultOutcome::Response { body, .. } => Ok(body),
-            ConsultOutcome::WebPrompt { clipboard_text } => {
+            ConsultOutcome::Response {
+                body,
+                model,
+                thread_id,
+                ..
+            } => {
+                let prefix = match thread_id {
+                    Some(id) => format!("[model:{model}] [thread_id:{id}]"),
+                    None => format!("[model:{model}]"),
+                };
+                Ok(format!("{prefix}\n\n{body}"))
+            }
+            ConsultOutcome::WebPrompt { clipboard_text, .. } => {
                 copy_to_clipboard(&clipboard_text)
                     .map_err(|e| format!("LLM query failed: {e:#}"))?;
 

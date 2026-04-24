@@ -10,8 +10,10 @@ pub mod thread_store;
 pub mod types;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use cli_runner::run_cli_streaming;
+use consult_llm_core::monitoring::{ProgressStage, RunSpool};
 use stream::{StreamEvents, StreamReducer};
 use types::ExecuteResult;
 
@@ -62,22 +64,16 @@ pub async fn run_cli_executor(
     stdin_prompt: &str,
     prompt: &str,
     system_prompt: &str,
-    consultation_id: Option<&str>,
+    spool: Arc<Mutex<RunSpool>>,
     parse_line: fn(&str) -> StreamEvents,
 ) -> anyhow::Result<ExecuteResult> {
-    let mut reducer = StreamReducer::new(consultation_id, Some(prompt), Some(system_prompt));
-    let on_spawn: Option<Box<dyn FnOnce(u32) + Send>> =
-        consultation_id.map(|cid| -> Box<dyn FnOnce(u32) + Send> {
-            let cid = cid.to_string();
-            Box::new(move |pid| {
-                consult_llm_core::monitoring::emit(
-                    consult_llm_core::monitoring::MonitorEvent::ConsultProgress {
-                        id: cid,
-                        stage: consult_llm_core::monitoring::ProgressStage::CliSpawned { pid },
-                    },
-                );
-            })
-        });
+    let mut reducer = StreamReducer::new(Arc::clone(&spool), Some(prompt), Some(system_prompt));
+    let spawn_spool = Arc::clone(&spool);
+    let on_spawn: Option<Box<dyn FnOnce(u32) + Send>> = Some(Box::new(move |pid| {
+        if let Ok(mut s) = spawn_spool.lock() {
+            s.set_stage(ProgressStage::CliSpawned { pid });
+        }
+    }));
     let result = run_cli_streaming(command, args, Some(stdin_prompt), on_spawn, |line| {
         reducer.process(parse_line(line));
     })

@@ -1,5 +1,8 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
@@ -111,7 +114,7 @@ impl LlmExecutor for OpenCodeCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         let message = append_file_refs(prompt, file_paths);
         let full_prompt = if thread_id.is_some() {
@@ -150,7 +153,7 @@ impl LlmExecutor for OpenCodeCliExecutor {
             &full_prompt,
             prompt,
             system_prompt,
-            consultation_id,
+            spool,
             parse_opencode_line,
         )
         .await
@@ -220,7 +223,13 @@ mod tests {
 
     #[test]
     fn test_reducer_full_sequence() {
-        let mut reducer = StreamReducer::new(None, None, None);
+        let mut reducer = StreamReducer::new(
+            std::sync::Arc::new(std::sync::Mutex::new(
+                consult_llm_core::monitoring::RunSpool::disabled(),
+            )),
+            None,
+            None,
+        );
         let lines = vec![
             r#"{"type":"step_start","sessionID":"ses_abc","part":{"type":"step-start"}}"#,
             r#"{"type":"text","sessionID":"ses_abc","part":{"type":"text","text":"4"}}"#,

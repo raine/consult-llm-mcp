@@ -181,11 +181,11 @@ fn do_update(artifact_name: &str, current_exe: &std::path::Path) -> Result<Strin
     extract_tar(&tar_path, &extract_dir)?;
 
     // Update main binary
-    let new_binary = extract_dir.join("consult-llm-mcp");
+    let new_binary = extract_dir.join("consult-llm");
     if !new_binary.exists() {
-        bail!("Extracted archive does not contain 'consult-llm-mcp' binary");
+        bail!("Extracted archive does not contain 'consult-llm' binary");
     }
-    replace_binary(&new_binary, current_exe, "consult-llm-mcp")?;
+    replace_binary(&new_binary, current_exe, "consult-llm")?;
 
     // Try to update monitor binary if it exists alongside the main binary
     let exe_dir = current_exe.parent();
@@ -201,7 +201,7 @@ fn do_update(artifact_name: &str, current_exe: &std::path::Path) -> Result<Strin
     }
 
     Ok(format!(
-        "Updated consult-llm-mcp v{CURRENT_VERSION} -> v{latest_version}"
+        "Updated consult-llm v{CURRENT_VERSION} -> v{latest_version}"
     ))
 }
 
@@ -212,11 +212,11 @@ pub fn run() -> Result<()> {
     let canonical_exe = std::fs::canonicalize(&current_exe).unwrap_or(current_exe.clone());
 
     if is_npm_install(&canonical_exe) {
-        bail!("consult-llm-mcp is managed by npm. Run `npm update consult-llm-mcp` instead.");
+        bail!("consult-llm is managed by npm. Run `npm update consult-llm-mcp` instead.");
     }
 
     let platform = platform_suffix()?;
-    let artifact_name = format!("consult-llm-mcp-{platform}");
+    let artifact_name = format!("consult-llm-{platform}");
 
     eprintln!("Checking for updates...");
 
@@ -352,7 +352,7 @@ pub fn check_and_notify() {
     if now.saturating_sub(cache.last_checked.unwrap_or(0)) > CHECK_INTERVAL_SECS {
         let spawned = std::env::current_exe().ok().and_then(|exe| {
             Command::new(exe)
-                .arg("_check-update")
+                .arg("check-update")
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
@@ -375,7 +375,7 @@ pub fn check_and_notify() {
         && now.saturating_sub(cache.last_notified.unwrap_or(0)) > NOTIFY_INTERVAL_SECS
     {
         crate::logger::log_to_file(&format!(
-            "Update available: consult-llm-mcp v{CURRENT_VERSION} -> v{latest} (run `consult-llm-mcp update`)"
+            "Update available: consult-llm v{CURRENT_VERSION} -> v{latest} (run `consult-llm update`)"
         ));
 
         cache.last_notified = Some(now);

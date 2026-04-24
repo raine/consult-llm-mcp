@@ -1,5 +1,8 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
+use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
@@ -156,7 +159,7 @@ impl LlmExecutor for CodexCliExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         let message = append_file_refs(prompt, file_paths);
         let full_prompt = if thread_id.is_some() {
@@ -193,7 +196,7 @@ impl LlmExecutor for CodexCliExecutor {
             &full_prompt,
             prompt,
             system_prompt,
-            consultation_id,
+            spool,
             parse_codex_line,
         )
         .await
@@ -249,7 +252,13 @@ mod tests {
 
     #[test]
     fn test_reducer_joins_messages() {
-        let mut reducer = StreamReducer::new(None, None, None);
+        let mut reducer = StreamReducer::new(
+            std::sync::Arc::new(std::sync::Mutex::new(
+                consult_llm_core::monitoring::RunSpool::disabled(),
+            )),
+            None,
+            None,
+        );
         reducer.process(parse_codex_line(
             r#"{"type":"item.completed","item":{"type":"agent_message","text":"Hello"}}"#,
         ));

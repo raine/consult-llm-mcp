@@ -1,5 +1,7 @@
 use async_trait::async_trait;
+use consult_llm_core::monitoring::RunSpool;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub struct LlmExecutorCapabilities {
@@ -31,6 +33,6 @@ pub trait LlmExecutor: Send + Sync {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult>;
 }

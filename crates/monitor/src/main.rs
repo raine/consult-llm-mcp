@@ -2,6 +2,7 @@ mod action;
 mod app;
 mod format;
 mod input;
+mod meta;
 mod poller;
 mod state;
 mod ui;
@@ -15,7 +16,7 @@ use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use consult_llm_core::monitoring::sessions_dir;
+use consult_llm_core::monitoring::{active_dir, runs_dir, sessions_dir};
 
 use crate::action::Action;
 use crate::poller::PollCommand;
@@ -64,6 +65,8 @@ fn main() -> io::Result<()> {
     let mut state = AppState::new();
     let dir = sessions_dir();
     let _ = fs::create_dir_all(&dir);
+    let _ = active_dir();
+    let _ = runs_dir();
 
     let poll_interval = Duration::from_millis(500);
     let render_interval = Duration::from_millis(100);
@@ -132,24 +135,23 @@ fn main() -> io::Result<()> {
             let exiting_detail = matches!(&action, Action::ExitDetail);
             let clearing_history = matches!(&action, Action::ClearHistory);
 
-            state.apply(action, &dir);
+            state.apply(action);
 
             if entering_detail {
                 if let AppMode::Detail(ref detail) = state.mode {
                     let _ = cmd_tx.send(PollCommand::EnterDetail {
-                        consultation_id: detail.consultation_id.clone(),
+                        run_id: detail.run_id.clone(),
                         file_offset: detail.file_offset,
                     });
                 }
             } else if entering_thread_detail {
-                if let AppMode::ThreadDetail(ref detail) = state.mode {
-                    // Poll the latest turn's event file
-                    if let Some(last_cid) = detail.turn_ids.last() {
-                        let _ = cmd_tx.send(PollCommand::EnterDetail {
-                            consultation_id: last_cid.clone(),
-                            file_offset: detail.active_file_offset,
-                        });
-                    }
+                if let AppMode::ThreadDetail(ref detail) = state.mode
+                    && let Some(last_run_id) = detail.turn_ids.last()
+                {
+                    let _ = cmd_tx.send(PollCommand::EnterDetail {
+                        run_id: last_run_id.clone(),
+                        file_offset: detail.active_file_offset,
+                    });
                 }
             } else if exiting_detail {
                 let _ = cmd_tx.send(PollCommand::ExitDetail);

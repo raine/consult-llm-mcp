@@ -1,8 +1,9 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::executors::types::{LlmExecutor, Usage};
 use consult_llm_core::llm_cost::calculate_cost;
+use consult_llm_core::monitoring::RunSpool;
 
 pub struct QueryResult {
     pub response: String,
@@ -18,17 +19,10 @@ pub async fn query_llm(
     file_paths: Option<&[PathBuf]>,
     thread_id: Option<&str>,
     system_prompt: &str,
-    consultation_id: Option<&str>,
+    spool: Arc<Mutex<RunSpool>>,
 ) -> anyhow::Result<QueryResult> {
     let result = executor
-        .execute(
-            prompt,
-            model,
-            system_prompt,
-            file_paths,
-            thread_id,
-            consultation_id,
-        )
+        .execute(prompt, model, system_prompt, file_paths, thread_id, spool)
         .await?;
 
     if result.response.is_empty() {

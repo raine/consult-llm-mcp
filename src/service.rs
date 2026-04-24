@@ -1,8 +1,7 @@
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::config::ModelRegistry;
-use crate::executors::stream::SidecarWriter;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
@@ -12,6 +11,7 @@ use crate::logger::{log_prompt, log_response};
 use crate::prompt_builder::build_prompt;
 use crate::schema::{ConsultLlmArgs, GitDiffArgs};
 use crate::system_prompt::get_system_prompt;
+use consult_llm_core::monitoring::RunSpool;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 fn resolve_git_diff(git_diff: Option<&GitDiffArgs>) -> Option<String> {
@@ -30,9 +30,12 @@ pub enum ConsultOutcome {
         body: String,
         #[allow(dead_code)]
         usage: Option<Usage>,
+        model: String,
+        thread_id: Option<String>,
     },
     WebPrompt {
         clipboard_text: String,
+        file_count: usize,
     },
 }
 
@@ -74,25 +77,33 @@ impl ConsultService {
         };
 
         let reasoning_effort = executor.reasoning_effort(&model).map(|s| s.to_string());
-        consult_llm_core::monitoring::emit(
-            consult_llm_core::monitoring::MonitorEvent::ConsultStarted {
-                id: consultation_id.clone(),
-                model: model.clone(),
-                backend: backend_name.clone(),
-                thread_id: args.thread_id.clone(),
-                task_mode: task_mode_str.clone(),
-                reasoning_effort: reasoning_effort.clone(),
-            },
-        );
 
         let project = std::env::current_dir()
             .ok()
             .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
             .unwrap_or_else(|| "unknown".to_string());
+        let cwd = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        let meta = consult_llm_core::monitoring::RunMeta {
+            v: 1,
+            run_id: consultation_id.clone(),
+            pid: std::process::id(),
+            started_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            project: project.clone(),
+            cwd,
+            model: model.clone(),
+            backend: backend_name.clone(),
+            thread_id: args.thread_id.clone(),
+            task_mode: task_mode_str.clone(),
+            reasoning_effort: reasoning_effort.clone(),
+        };
+        let spool = Arc::new(Mutex::new(RunSpool::new(meta)));
 
         let start_time = std::time::Instant::now();
         let result = self
-            .run_consult(args, &model, executor, &consultation_id)
+            .run_consult(args, &model, executor, &consultation_id, Arc::clone(&spool))
             .await;
         let duration_ms = start_time.elapsed().as_millis() as u64;
 
@@ -107,34 +118,33 @@ impl ConsultService {
             Err(e) => (false, Some(e.to_string()), None, None, None),
         };
 
-        consult_llm_core::monitoring::emit(
-            consult_llm_core::monitoring::MonitorEvent::ConsultFinished {
-                id: consultation_id.clone(),
-                duration_ms,
-                success,
-                error: error.clone(),
-            },
-        );
-        consult_llm_core::monitoring::append_history(
-            &consult_llm_core::monitoring::HistoryRecord {
-                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                consultation_id: Some(consultation_id),
-                project,
-                model,
-                backend: backend_name,
-                duration_ms,
-                success,
-                error,
-                tokens_in,
-                tokens_out,
-                parsed_ts: None,
-                thread_id,
-                reasoning_effort,
-                task_mode: task_mode_str,
-            },
-        );
+        let history = consult_llm_core::monitoring::HistoryRecord {
+            ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            consultation_id: Some(consultation_id),
+            project,
+            model: model.clone(),
+            backend: backend_name,
+            duration_ms,
+            success,
+            error: error.clone(),
+            tokens_in,
+            tokens_out,
+            parsed_ts: None,
+            thread_id: thread_id.clone(),
+            reasoning_effort,
+            task_mode: task_mode_str,
+        };
+        spool
+            .lock()
+            .unwrap()
+            .finish(duration_ms, success, error, &history);
 
-        result.map(|(body, usage, _)| ConsultOutcome::Response { body, usage })
+        result.map(|(body, usage, tid)| ConsultOutcome::Response {
+            body,
+            usage,
+            model: model.clone(),
+            thread_id: tid,
+        })
     }
 
     async fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
@@ -151,8 +161,12 @@ impl ConsultService {
         let system_prompt = get_system_prompt(false, args.task_mode);
         let clipboard_text =
             format!("# System Prompt\n\n{system_prompt}\n\n# User Prompt\n\n{prompt}");
+        let file_count = context_files.len();
 
-        Ok(ConsultOutcome::WebPrompt { clipboard_text })
+        Ok(ConsultOutcome::WebPrompt {
+            clipboard_text,
+            file_count,
+        })
     }
 
     async fn run_consult(
@@ -160,7 +174,8 @@ impl ConsultService {
         args: ConsultLlmArgs,
         model: &str,
         executor: Arc<dyn LlmExecutor>,
-        consultation_id: &str,
+        _consultation_id: &str,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<(String, Option<Usage>, Option<String>)> {
         let git_diff = resolve_git_diff(args.git_diff.as_ref());
 
@@ -206,11 +221,12 @@ impl ConsultService {
         if let Some(ref files) = args.files
             && !files.is_empty()
         {
-            let mut sidecar = SidecarWriter::new(Some(consultation_id));
-            sidecar.write(&ParsedStreamEvent::FilesContext {
-                files: files.clone(),
-            });
-            sidecar.flush();
+            spool
+                .lock()
+                .unwrap()
+                .stream_event(ParsedStreamEvent::FilesContext {
+                    files: files.clone(),
+                });
         }
 
         let system_prompt = get_system_prompt(executor.capabilities().is_cli, args.task_mode);
@@ -222,18 +238,13 @@ impl ConsultService {
             file_paths.as_deref(),
             args.thread_id.as_deref(),
             &system_prompt,
-            Some(consultation_id),
+            Arc::clone(&spool),
         )
         .await?;
 
         log_response(model, &result.response, &result.cost_info);
 
         let thread_id = result.thread_id.or_else(|| args.thread_id.clone());
-        let mut prefix = format!("[model:{model}]");
-        if let Some(ref tid) = thread_id {
-            prefix.push_str(&format!(" [thread_id:{tid}]"));
-        }
-        let body = format!("{prefix}\n\n{}", result.response);
-        Ok((body, result.usage, thread_id))
+        Ok((result.response, result.usage, thread_id))
     }
 }

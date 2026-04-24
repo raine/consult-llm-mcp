@@ -1,10 +1,11 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
+use consult_llm_core::monitoring::RunSpool;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use super::stream::SidecarWriter;
 use super::thread_store;
 use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
@@ -86,7 +87,7 @@ impl LlmExecutor for ApiExecutor {
         system_prompt: &str,
         file_paths: Option<&[PathBuf]>,
         thread_id: Option<&str>,
-        consultation_id: Option<&str>,
+        spool: Arc<Mutex<RunSpool>>,
     ) -> anyhow::Result<ExecuteResult> {
         if let Some(fps) = file_paths
             && !fps.is_empty()
@@ -118,14 +119,15 @@ impl LlmExecutor for ApiExecutor {
             Vec::new()
         };
 
-        let mut sidecar = SidecarWriter::new(consultation_id);
-        sidecar.write(&ParsedStreamEvent::SystemPrompt {
-            text: system_prompt.to_string(),
-        });
-        sidecar.write(&ParsedStreamEvent::Prompt {
-            text: prompt.to_string(),
-        });
-        sidecar.flush();
+        {
+            let mut s = spool.lock().unwrap();
+            s.stream_event(ParsedStreamEvent::SystemPrompt {
+                text: system_prompt.to_string(),
+            });
+            s.stream_event(ParsedStreamEvent::Prompt {
+                text: prompt.to_string(),
+            });
+        }
 
         let base = if self.base_url.ends_with('/') {
             self.base_url.clone()
@@ -199,19 +201,22 @@ impl LlmExecutor for ApiExecutor {
             }
         });
 
-        if let Some(ref thinking) = thinking {
-            sidecar.write(&ParsedStreamEvent::Thinking {
-                text: thinking.clone(),
+        {
+            let mut s = spool.lock().unwrap();
+            if let Some(ref thinking) = thinking {
+                s.stream_event(ParsedStreamEvent::Thinking {
+                    text: thinking.clone(),
+                });
+            }
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
             });
-        }
-        sidecar.write(&ParsedStreamEvent::AssistantText {
-            text: response.clone(),
-        });
-        if let Some(ref u) = usage {
-            sidecar.write(&ParsedStreamEvent::Usage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: u.completion_tokens,
-            });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
         }
 
         // Persist turn to disk

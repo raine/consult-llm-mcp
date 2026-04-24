@@ -63,7 +63,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         return;
     };
 
-    let consultation_id = detail.consultation_id.clone();
+    let run_id = detail.run_id.clone();
     let tick = state.tick;
 
     // ── Layout: header / content / status bar ───────────────────────
@@ -79,7 +79,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     // ── Header ──────────────────────────────────────────────────────
     let block = Block::default()
         .title(Line::from(vec![Span::styled(
-            format!(" {consultation_id} "),
+            format!(" {run_id} "),
             Style::default().fg(TEAL).add_modifier(Modifier::BOLD),
         )]))
         .borders(Borders::ALL)
@@ -103,6 +103,12 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         header_spans.push(Span::styled(
             format!("  {}", mode.unwrap_or("general")),
             Style::default().fg(task_mode_color(mode)),
+        ));
+    }
+    if let Some(ref stage) = detail.last_stage {
+        header_spans.push(Span::styled(
+            format!("  {stage}"),
+            Style::default().fg(DIM_WHITE),
         ));
     }
     if let Some(ref effort) = detail.reasoning_effort {
@@ -145,7 +151,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     }
 
     // Duration or live elapsed
-    let is_live = state.is_consultation_active(&consultation_id);
+    let is_live = state.is_run_active(&run_id);
     if is_live {
         if let Some(started_at) = detail.started_at {
             let elapsed_ms = Utc::now()
@@ -336,7 +342,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
     frame.render_widget(content, chunks[1]);
 
     // ── Status bar ──────────────────────────────────────────────────
-    let is_live = state.is_consultation_active(&consultation_id);
+    let is_live = state.is_run_active(&run_id);
     let follow_on = matches!(state.mode, AppMode::Detail(ref d) if d.auto_scroll);
 
     let mut bar_spans = vec![
@@ -985,7 +991,7 @@ pub(super) fn render_thread_detail_view(
     let is_live = detail
         .turn_ids
         .last()
-        .is_some_and(|cid| state.is_consultation_active(cid));
+        .is_some_and(|run_id| state.is_run_active(run_id));
     if is_live {
         let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
         let label = live_spinner_label(&detail.active_events);
