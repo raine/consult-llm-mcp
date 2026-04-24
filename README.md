@@ -65,37 +65,49 @@ Then invoke skills from inside your agent (see [Usage](#usage) right below).
 Some real-world examples. Click to expand.
 
 <details>
-<summary>Explain the problem, ask a smarter LLM for help</summary>
+<summary>Explain the problem, and tell CC to consult a smarter LLM</summary>
 
 ```
   <Some long explanation of the issue here>
 
   Consult LLM for assistance, use gemini
 
-⏺ I see the issue! The frontend is trying to use the hint for "isn't" but the
-  server generated a hint for "isn't it" (the full phrase). Let me consult
-  Gemini about this segmentation mismatch.
+⏺ I see the issue! The problem is that the frontend is trying to use the hint
+  for "isn't" but the server generated a hint for "isn't it" (the full phrase).
+  This is a mismatch between how the frontend segments text and how the server
+  generates hints.
+
+  Let me consult the LLM to get assistance on this segmentation mismatch issue.
 
 ⏺ Write(hint-segmentation-issue.md)
   ⎿  Wrote 53 lines to hint-segmentation-issue.md
      # Hint Segmentation Mismatch Issue
-     ...
+     ## Problem Description
+     There's a mismatch between how the frontend segments text for clickable
+     words and how the backend generates hints. This causes hint unlocking to
+     fail when the segments don't match exactly.
+     ## Example Case
+     **Original Text**: "Hello! Nice weather, isn't it?"
+     … +43 lines (ctrl+r to expand)
 
-⏺ Bash(cat <<'EOF' | consult-llm -m gemini hint-segmentation-issue.md web/src/components/HintsText.tsx web/src/utils/hints.ts server/src/routes/public/hints.ts
-  What's the best fix for this hint segmentation mismatch?
-  EOF)
+⏺ Bash(cat hint-segmentation-issue.md | consult-llm -m gemini -f hint-segmentation-issue.md -f web/src/components/HintsText.tsx -f web/src/utils/hints.ts -f server/src/routes/public/hints.ts -f server/src/llm/hints.ts)
   ⎿  [model:gemini-3.1-pro-preview] [thread_id:a3f7c...]
 
      An excellent analysis of the problem. The root cause has been correctly
-     identified: a race condition within `handleConfirmGenerateHints`. The
-     component state updates in the background after `await generateHints()`,
-     but the function continues executing with a stale `activeSegment` variable,
-     causing it to request a hint for a smaller text segment ("isn't") instead
-     of the full, newly-available hint phrase ("isn't it").
+     identified: a race condition within the `handleConfirmGenerateHints`
+     function in `HintsText.tsx`. The component state updates in the background
+     after `await generateHints()`, but the function continues executing with a
+     stale `activeSegment` variable, causing it to request a hint for a smaller
+     text segment ( e.g., "isn't") instead of the full, newly-available hint
+     phrase (e.g., "isn't it").
      … +607 lines (ctrl+r to expand)
 
-⏺ The LLM identified the core issue — stale state after an async operation.
-  I'll re-target the hint key after generation to find the correct match.
+⏺ Perfect! The LLM identified the core issue - there's a race condition in
+  handleConfirmGenerateHints where the function uses stale state after async
+  operations. The solution is to re-target the hint key after generation to
+  find the correct matching hint.
+
+  Let me implement this solution:
 
 ⏺ Update Todos
   ⎿  ☐ Fix hint segmentation mismatch by implementing smarter hint key
@@ -108,15 +120,26 @@ Some real-world examples. Click to expand.
 <summary>Using web mode to copy prompts to clipboard for browser-based LLMs</summary>
 
 ```
-> I need help implementing a -b/--background flag for my Rust CLI.
-  Use consult LLM with web mode
+> I need help implementing a -b/--background flag for my Rust CLI. Use consult LLM with web mode
 
 ⏺ I'll use web mode to copy the formatted prompt to your clipboard so you can
   paste it into any browser-based LLM service.
 
-⏺ Bash(cat <<'EOF' | consult-llm -m gemini --browser src/cli.rs src/workflow.rs src/tmux.rs
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini --web -f src/cli.rs -f src/workflow.rs -f src/tmux.rs
   What is the best approach to implement a -b/--background flag for the
-  "workmux add" command that creates a tmux window without switching to it?
+  "workmux add" command that creates a tmux window in the background without
+  switching to it?
+
+  The current implementation automatically switches to the newly created window
+  via `tmux::select_window()` in the `setup_environment()` function. I need to
+  make this behavior conditional based on a flag passed from the CLI.
+
+  Consider:
+  1. Where should the background flag be threaded through the call chain?
+  2. Should I modify the existing SetupOptions struct or add a parameter?
+  3. What's the most maintainable approach given the codebase structure?
+  4. Are there any edge cases to consider (e.g., should select_pane also be
+     conditional)?
   EOF)
   ⎿  ✓ Prompt copied to clipboard!
 
@@ -142,82 +165,167 @@ This is useful when:
 </details>
 
 <details>
-<summary>Debugging a broken Neovim plugin</summary>
+<summary>Debugging Neovim plugin treesitter API breakage</summary>
 
 ````
-⏺ Fixed! Added nil checks and updated the iter_matches call.
+⏺ Fixed! Added nil checks for both node and child and updated the iter_matches call to handle the newer API properly.
 
 > Still not working:
 
-  E5108: Error executing lua /Users/raine/code/testonly.nvim/lua/testonly.lua:92:
-  attempt to call method 'child' (a nil value)
+  E5108: Error executing lua /Users/raine/code/testonly.nvim/lua/testonly.lua:92: attempt to call method 'child' (a nil value)
+  stack traceback:
+          /Users/raine/code/testonly.nvim/lua/testonly.lua:92: in function 'reset_all_exclusive'
+          /Users/raine/code/testonly.nvim/lua/testonly.lua:110: in function 'reset_all_exclusive'
+          [string ":lua"]:1: in main chunk
 
   Ask gemini
 
-⏺ Let me consult Gemini to understand the current Neovim treesitter API:
+⏺ Let me consult with a more powerful AI to understand the current Neovim treesitter API changes:
 
-⏺ Bash(cat <<'EOF' | consult-llm -m gemini lua/testonly.lua
-  I'm debugging a Neovim plugin broken by treesitter API changes. Error:
-  "attempt to call method 'child' (a nil value)" on line 92. The code uses
-  iter_matches() to access child nodes but the API seems to have changed in
-  newer Neovim versions. What's the correct approach?
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini -f lua/testonly.lua
+  I'm debugging a Neovim plugin that's broken due to treesitter API changes.
+  The error is "attempt to call method 'child' (a nil value)" on line 92. The
+  code is trying to access child nodes from treesitter matches but the API
+  seems to have changed in newer Neovim versions.
+
+  Here's the problematic code:
+  ```lua
+  for _, match, _ in parsed_query:iter_matches(root, bufnr, start_row, end_row) do
+      for id, node in pairs(match) do
+          local name = parsed_query.captures[id]
+          if name == "call" and node then
+              local child = node:child(0)  -- ERROR HERE
+              if child then
+                  local text = vim.treesitter.get_node_text(child, bufnr)
+                  -- ... rest of logic
+              end
+          end
+      end
+  end
+  ```
+
+  What's the correct way to iterate over treesitter query matches and access
+  child nodes in current Neovim versions? What API changes should I be aware of?
   EOF)
   ⎿  [model:gemini-3.1-pro-preview] [thread_id:b9e2a...]
 
-     The root cause: iter_matches() can return nil nodes in newer Neovim
-     versions. Switch to iter_captures() which never returns nil nodes, and
-     use named_child(0) instead of child(0) to skip punctuation nodes.
+     Problem
+     -------
+
      … +93 lines (ctrl+r to expand)
+
+⏺ Perfect! The issue is that iter_matches() can return nil nodes in the match table. Let me fix this by switching to the recommended iter_captures() approach:
 
 ⏺ Update(lua/testonly.lua)
   ⎿  Updated lua/testonly.lua with 7 additions and 10 removals
-     - for _, match, _ in parsed_query:iter_matches(root, bufnr, ...) do
-     -   for id, node in pairs(match) do
-     -     local child = node:child(0)
-     + for id, node, _ in parsed_query:iter_captures(root, bufnr, ...) do
-     +   local first_child = node:named_child(0)
+       85      local root = parser:parse()[1]:root()
+       86      local start_row, _, end_row, _ = root:range()
+       87
+       88 -    for _, match, _ in parsed_query:iter_matches(root, bufnr, start_row, end_row) do
+       89 -      for id, node in pairs(match) do
+       90 -        local name = parsed_query.captures[id]
+       91 -        if name == "call" and node then
+       92 -          local child = node:child(0)
+       93 -          if child then
+       94 -            local text = vim.treesitter.get_node_text(child, bufnr)
+       88 +    for id, node, _ in parsed_query:iter_captures(root, bufnr, start_row, end_row) do
+       89 +      if parsed_query.captures[id] == "call" then
+       90 +        local first_child = node:named_child(0)
+       91 +        if first_child then
+       92 +          local text = vim.treesitter.get_node_text(first_child, bufnr)
+       93
+       94 -            if text == "it.only" or text == "describe.only" then
+       95 -              toggle_test_exclusive(child)
+       96 -            end
+       94 +          if text == "it.only" or text == "describe.only" then
+       95 +            toggle_test_exclusive(first_child)
+       96            end
+       97          end
+       98        end
 ````
 
 </details>
 
 <details>
-<summary>Consulting multiple LLMs for comparison</summary>
+<summary>Using slash command to consult multiple LLMs for comparison</summary>
 
 ```
-> /consult The branch completions should be dynamic — git should only be
-  called when using tab to autocomplete. Ask gemini and codex
+> /consult The branch completions should dynamic. Git should be called only when
+using tab to autocomplete. Ask gemini and codex
 
-⏺ I'll consult both Gemini and Codex about making branch completions dynamic.
+⏺ I'll consult both Gemini and Codex about making the branch completions dynamic
+  (only calling git when tab-completing). Let me gather the relevant context first.
 
-⏺ Bash(cat <<'EOF' | consult-llm -m gemini src/cli.rs src/git.rs
-  I have a Rust CLI using clap that needs dynamic shell completions. Currently,
-  branch completions are generated at script generation time via
-  possible_values(), which calls git. Instead, git should only run when the
-  user presses TAB. Running `workmux completions zsh` takes ~210ms because it
-  runs git during generation. How can I implement truly dynamic completions?
+⏺ Bash(cat <<'EOF' | consult-llm -m gemini -f src/cli.rs -f src/git.rs
+  I have a Rust CLI tool using clap that needs dynamic shell completions.
+  Currently, the branch completions are generated at completion script generation
+  time via `possible_values()`. Instead, I need the git operations to only run
+  when the user presses TAB to autocomplete.
+
+  Current setup:
+  1. `WorktreeBranchParser` implements `TypedValueParser` with `possible_values()`
+     that calls git
+  2. Shell completions are generated via clap_complete's `generate()` function
+  3. The completions are sourced at shell startup: `source <(workmux completions zsh)`
+
+  The problem: Running `workmux completions zsh` takes ~210ms because it runs git
+  operations during completion generation, not during actual tab completion.
+
+  How can I implement truly dynamic completions where git is only called when the
+  user presses TAB? What's the best approach with clap and clap_complete for zsh?
   EOF)
   ⎿  [model:gemini-3.1-pro-preview] [thread_id:c1d4e...]
 
-     The root cause: clap_complete::generate() calls possible_values() during
-     script generation, baking current branches into the static script. This
-     is both slow (happens every shell startup) and stale (branches change).
-     … +116 lines (ctrl+r to expand)
+     The root cause of the slow startup (~210ms) is that `clap_complete::generate()`
+     executes your `possible_values()` logic (git operations) *while generating the
+     script*. This bakes the *current* branches into the static script, which is both
+     slow (happens every time you `source` it) and incorrect (branches become stale).
+     … +116 lines (ctrl+o to expand)
 
-⏺ Bash(cat <<'EOF' | consult-llm -m codex src/cli.rs src/git.rs
-  [same prompt]
+
+⏺ Bash(cat <<'EOF' | consult-llm -m codex -f src/cli.rs -f src/git.rs
+  I have a Rust CLI tool using clap that needs dynamic shell completions.
+  Currently, the branch completions are generated at completion script generation
+  time via `possible_values()`. Instead, I need the git operations to only run
+  when the user presses TAB to autocomplete.
+
+  Current setup:
+  1. `WorktreeBranchParser` implements `TypedValueParser` with `possible_values()`
+     that calls git
+  2. Shell completions are generated via clap_complete's `generate()` function
+  3. The completions are sourced at shell startup: `source <(workmux completions zsh)`
+
+  The problem: Running `workmux completions zsh` takes ~210ms because it runs git
+  operations during completion generation, not during actual tab completion.
+
+  How can I implement truly dynamic completions where git is only called when the
+  user presses TAB? What's the best approach with clap and clap_complete for zsh?
   EOF)
-  ⎿  [model:gpt-5.5] [thread_id:d2f5b...]
+  ⎿  [model:gpt-5.1-codex-max] [thread_id:d2f5b...]
 
-     WorktreeBranchParser::possible_values runs git during script generation,
-     so workmux completions zsh always pays the git cost even though the result
-     is only needed at tab time.
-     … +77 lines (ctrl+r to expand)
+     **Findings**
+     - `WorktreeBranchParser::possible_values` (`cli.rs:41-72`) runs git during script
+       generation, so `workmux completions zsh` always pays the git cost (~210ms) even
+       though the result is only needed at tab time.
+     … +77 lines (ctrl+o to expand)
 
-⏺ Both Gemini and Codex independently arrived at the same root cause and
-  solution. I'll implement the dynamic completion approach now.
+
+⏺ Summary from Gemini and Codex
+
+  Both agree on the same solution:
+
+  Root Cause
+
+  clap_complete::generate() calls possible_values() during script generation, not
+  at tab-completion time. This means git runs every shell startup.
+
+...
 ```
 
-This shows using `/consult` to ask multiple LLMs about the same problem in parallel and compare their responses.
+This example shows using the `/consult` slash command to ask multiple LLMs
+(Gemini and Codex) about the same problem **in parallel** and compare their
+responses. Both LLMs independently arrived at the same solution, providing
+confidence in the approach.
 
 </details>
 
@@ -453,30 +561,27 @@ and token usage with cost estimates.
 <summary>Example log entry</summary>
 
 ```
-[2025-06-22T20:16:04.673Z] RUN: consult-llm
-Arguments: {
-  "model": "deepseek-v4-pro",
-  "files": [
-    "refactor-analysis.md",
-    "src/main.ts",
-    "src/schema.ts",
-    "src/config.ts"
-  ]
-}
-================================================================================
 [2025-06-22T20:16:04.675Z] PROMPT (model: deepseek-v4-pro):
 ## Relevant Files
 
 ### File: src/main.ts
+
 ...
 
 Please provide specific suggestions for refactoring with example code structure
 where helpful.
 ================================================================================
 [2025-06-22T20:19:20.632Z] RESPONSE (model: deepseek-v4-pro):
-Based on the analysis, here are the key refactoring suggestions...
+Based on the analysis, here are the key refactoring suggestions to improve
+separation of concerns and maintainability:
+
+...
+
+This refactoring maintains all existing functionality while significantly
+improving maintainability and separation of concerns.
 
 Tokens: 3440 input, 5880 output | Cost: $0.014769 (input: $0.001892, output: $0.012877)
+================================================================================
 ```
 
 </details>
