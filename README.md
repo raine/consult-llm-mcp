@@ -665,6 +665,17 @@ claude mcp add consult-llm \
 # "openai" selector → gpt-5.3-codex (gpt-5.4 filtered out)
 ```
 
+### Parallel models
+
+Pass an array to `model` (e.g. `["gemini", "openai"]`) to consult multiple
+models in parallel within a single tool call. The response concatenates
+per-model sections, each with a `## Model: <name>` header and its own
+`[model:...] [thread_id:...]` line. A group thread_id is returned on the top
+line; pass it back as `thread_id` to resume all the same models together.
+
+`web_mode` requires a single model. A group thread_id cannot be resumed with a
+model list that includes models outside the group. Max 5 models per call.
+
 ## MCP tool: consult_llm
 
 The server provides a single tool called `consult_llm` for asking powerful AI
@@ -682,6 +693,9 @@ models complex questions.
     to the best available model for each family
   - Exact model IDs (`gpt-5.4`, `gemini-3.1-pro-preview`, `claude-opus-4-7`,
     etc.) are also accepted as an advanced override
+  - Accepts either a single string or an array of identifiers
+    (e.g. `["gemini", "openai"]`) to consult multiple models in parallel in one
+    call. Max 5 models per call.
   - When omitted, the server uses the configured default
 
 - **task_mode** (optional): Controls the system prompt persona. The calling LLM

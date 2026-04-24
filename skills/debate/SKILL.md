@@ -5,6 +5,11 @@ description: LLMs propose and critique approaches, agent moderates the debate an
 
 Have Gemini and Codex debate the best approach, then synthesize and implement.
 
+**No subagents.** Every round is a single `mcp__consult-llm__consult_llm` call
+with `model: ["gemini", "openai"]`. Extract `[thread_id:group_xxx]` from the
+first line of the response and pass it back as `thread_id` on the next round to
+advance both models' conversation state together.
+
 ## Configuration
 
 **Arguments:** `$ARGUMENTS`
@@ -38,7 +43,7 @@ Strip all flags from arguments to get the task description.
 
 ## Phase 2: Opening Arguments
 
-Have both LLMs propose their approach independently (in parallel).
+Have both LLMs propose their approach independently in one multi-model call.
 
 **Opening prompt:**
 ```
@@ -59,61 +64,62 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full opening prompt text and file list so it can make the MCP call independently.
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: `["gemini", "openai"]`
+- `prompt`: the opening prompt
+- `files`: [array of relevant source files]
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the opening prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
+**Extract `group_thread_id`:** Save the `[thread_id:group_xxx]` from the top
+line of the response. Use it as `thread_id` on every subsequent round.
 
 ## Phase 3: Debate Rounds
 
 For each round (default 2, configurable with `--rounds N`, max 3):
 
-Have each LLM critique the other's latest argument (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponent's latest response.
+Each round is a single multi-model call. Both models see each other's prior
+proposals and may update their positions. Pass `thread_id: group_thread_id` to
+continue both conversations together.
 
-**Round 1 rebuttal prompt (same for both, swap the opponent's argument):**
+**Round 1 critique prompt:**
 ```
-Your opponent proposed this alternative approach:
-[Opponent's opening argument]
+## Proposals from the opening round
+### Gemini's proposal
+[extracted from previous response's ## Model: gemini section]
 
-Provide a rebuttal:
-1. **Critique**: What are the weaknesses in your opponent's approach?
-2. **Defense**: Address any weaknesses in your own approach
-3. **Concessions**: Are there any good ideas from your opponent worth adopting?
-4. **Updated position**: State your refined recommendation
+### Codex's proposal
+[extracted from previous response's ## Model: openai section]
 
-Be constructive but thorough in your critique.
+Critique both proposals. For each:
+1. **Strongest objection**: What is the biggest weakness?
+2. **Best defense**: What holds up well under scrutiny?
+3. **Concessions**: Which ideas from the other are worth adopting?
+
+Then state which proposal you now favor and why — you may change your position
+if the other's argument is stronger. Focus on unresolved disagreements.
 ```
 
-**Subsequent round prompt (same for both, swap the opponent's latest rebuttal):**
+**Subsequent round prompt (same shape, swap in latest responses):**
 ```
-Your opponent has responded to your critique:
-[Opponent's latest rebuttal]
+## Last round's responses
+### Gemini's last response
+[...]
+
+### Codex's last response
+[...]
 
 Continue the debate:
-1. **Critique**: What weaknesses remain in your opponent's updated position?
-2. **Defense**: Address any new points raised against your approach
-3. **Concessions**: Any new ideas worth adopting?
-4. **Updated position**: State your refined recommendation
+1. **Remaining weaknesses**: What still doesn't hold up in either position?
+2. **New points to address**: Anything new the other raised?
+3. **Updated position**: State your refined recommendation, and say which
+   direction you now favor.
 
-Focus on unresolved disagreements. Don't repeat settled points.
+Don't repeat settled points. Focus on what's still in contention.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full rebuttal prompt text and thread_id.
-
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: rebuttal prompt with Codex's latest response as the opponent, `thread_id`: `gemini_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: rebuttal prompt with Gemini's latest response as the opponent, `thread_id`: `codex_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: `["gemini", "openai"]`
+- `prompt`: the round's critique prompt (with both prior responses filled in)
+- `thread_id`: `group_thread_id`
 
 Present both responses to the user after each round.
 
@@ -205,7 +211,9 @@ Implementation rules:
 
 **If `--skip-final`:** Skip to Phase 7 (Summary).
 
-After implementation, have both LLMs review the result (in parallel). Use `thread_id` to continue each LLM's conversation — they already have full context of the task and the debate, so you only need to send the review prompt and the diff.
+After implementation, have both LLMs review the result in one multi-model call.
+Pass `thread_id: group_thread_id` so both reviewers have full context of the
+task and debate.
 
 **Final review prompt:**
 ```
@@ -218,15 +226,12 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full review prompt, thread_id, and git_diff details.
-
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `gemini_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `task_mode: "review"`, `prompt`: the final review prompt, `thread_id`: `codex_thread_id` from Phase 2, `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: `["gemini", "openai"]`
+- `task_mode`: `"review"`
+- `prompt`: the final review prompt
+- `thread_id`: `group_thread_id` from Phase 2
+- `git_diff`: `{ "files": [list of changed files], "base_ref": "HEAD~N" }`
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

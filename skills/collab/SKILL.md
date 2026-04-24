@@ -7,6 +7,11 @@ Have Gemini and Codex collaboratively brainstorm solutions, then synthesize the 
 
 **Arguments:** `$ARGUMENTS`
 
+**No subagents.** Every round is a single `mcp__consult-llm__consult_llm` call
+with `model: ["gemini", "openai"]`. Extract `[thread_id:group_xxx]` from the
+first line of the response and pass it back as `thread_id` on the next round to
+advance both models' conversation state together.
+
 ## Phase 1: Understand the Task (No Questions)
 
 1. **Explore the codebase** - use Glob, Grep, Read to understand:
@@ -27,7 +32,7 @@ Have Gemini and Codex collaboratively brainstorm solutions, then synthesize the 
 
 ## Phase 2: Initial Ideas
 
-Have both LLMs independently brainstorm approaches (in parallel).
+Have both LLMs independently brainstorm approaches in one multi-model call.
 
 **Seed prompt:**
 ```
@@ -47,49 +52,50 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full seed prompt text and file list so it can make the MCP call independently.
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: `["gemini", "openai"]`
+- `prompt`: the seed prompt
+- `files`: [array of relevant source files]
 
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: the seed prompt, `files`: [array of relevant source files]
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Extract thread IDs:** Save `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` prefixes in the subagent responses.
+**Extract `group_thread_id`:** Save the `[thread_id:group_xxx]` from the top
+line of the response. Use it as `thread_id` on every subsequent round.
 
 Present both sets of ideas to the user.
 
 ## Phase 3: Build On Each Other
 
-Each round, share both LLMs' ideas with each other and ask them to build on them (in parallel). Use `thread_id` to continue each LLM's conversation. Continue until the ideas converge into a clear approach — typically 2-3 rounds, but use as many as needed.
+Each round, show both LLMs' prior responses to both models and ask each to
+build on the combined picture. Pass `thread_id: group_thread_id` to continue
+both conversations together. Continue until the ideas converge into a clear
+approach — typically 2-3 rounds, but use as many as needed.
 
-**Build-on prompt (same for both, include the other's ideas):**
+The build-on prompt is **symmetric**: both models see the same combined view
+each round. This loses some "defend your own turf" asymmetry, but gains
+simpler control flow and full peer visibility.
+
+**Build-on prompt template (include both prior responses):**
 ```
-A collaborator shared these ideas:
+Here is how the brainstorm evolved in the last round.
 
-[Other LLM's response from the previous round]
+## Gemini's last response
+[extracted from previous response's ## Model: gemini section]
 
-Build on their thinking:
-1. **What resonates**: Which ideas are strong? Why?
-2. **Combinations**: Can any ideas be combined into something better?
-3. **New ideas**: Did their thinking spark any new approaches?
-4. **Refinements**: How would you improve the most promising ideas so far?
-5. **Concerns resolved**: Did their ideas address any open questions?
+## Codex's last response
+[extracted from previous response's ## Model: openai section]
 
-Keep building — don't tear down. Refine toward the best solution.
+Build on this combined picture:
+1. **What resonates across both**: Where did you agree? Which ideas are strongest?
+2. **Stronger from the other**: Which of the other's ideas are stronger than what you proposed?
+3. **Combinations and new ideas**: Can ideas be merged into something better? Did their thinking spark new approaches?
+4. **Refinements**: Refine toward the best combined approach.
+
+Keep building — don't tear down.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread_id.
-
-**Gemini subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "gemini"`, `prompt`: build-on prompt with Codex's ideas, `thread_id`: `gemini_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
-
-**Codex subagent** — prompt must include:
-- Call `mcp__consult-llm__consult_llm` with `model: "openai"`, `prompt`: build-on prompt with Gemini's ideas, `thread_id`: `codex_thread_id`
-- Return the COMPLETE response including any `[thread_id:xxx]` prefix
+Call `mcp__consult-llm__consult_llm` with:
+- `model`: `["gemini", "openai"]`
+- `prompt`: the build-on prompt above (with both sections filled in)
+- `thread_id`: `group_thread_id`
 
 Present both responses to the user after each round.
 

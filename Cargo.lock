@@ -320,6 +320,7 @@ dependencies = [
  "chrono",
  "consult-llm-core",
  "dirs",
+ "futures",
  "pathdiff",
  "reqwest",
  "rmcp",
