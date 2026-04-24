@@ -55,7 +55,7 @@ export GEMINI_API_KEY=your_gemini_key
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
 ```
 
-Then invoke skills from inside your agent — see [Usage](#usage).
+Then invoke skills from inside your agent (see [Usage](#usage) right below).
 
 ## Usage
 
@@ -273,7 +273,6 @@ The skill system has two layers:
 **`consult-llm` (base CLI)** handles the mechanics: reading stdin, attaching file context, calling the right backend, streaming the response, and managing thread IDs for multi-turn conversations. A dedicated `consult-llm` reference skill documents this contract and is loaded by other skills before they invoke the CLI.
 
 **Workflow skills** compose on top. They gather context from the codebase, decide which models to call and how, and synthesize the results for you. When you run `/consult` or `/debate`, the agent reads a skill file that tells it how to orchestrate one or more `consult-llm` calls and what to do with the responses.
-
 
 ### Install
 
