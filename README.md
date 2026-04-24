@@ -35,7 +35,7 @@ curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/
 consult-llm init-config
 ```
 
-CLI backends are the easiest to start with (no API key needed):
+CLI backends are the easiest to start with if you have an existing subscription (no API key needed):
 
 ```bash
 consult-llm config set gemini.backend gemini-cli   # requires: gemini login
