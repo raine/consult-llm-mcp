@@ -1,197 +1,12 @@
 use std::collections::HashMap;
-use std::fmt;
-use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
-use crate::catalog::{build_model_catalog, resolve_selector};
-use crate::config_discovery::discover;
-use crate::config_loader::LayeredEnv;
+use crate::catalog::{ModelRegistry, build_model_catalog, resolve_selector};
 use crate::logger::log_to_file;
-use crate::models::{
-    ALL_PROVIDERS, PROVIDER_SPECS, Provider, SELECTOR_PRIORITIES, all_builtin_models,
-};
+use crate::models::{PROVIDER_SPECS, Provider, all_builtin_models};
 
-pub use crate::catalog::ModelRegistry;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Backend {
-    Api,
-    CodexCli,
-    GeminiCli,
-    CursorCli,
-    OpenCodeCli,
-}
-
-impl Backend {
-    fn from_str(s: &str) -> Option<Backend> {
-        match s {
-            "api" => Some(Backend::Api),
-            "codex-cli" => Some(Backend::CodexCli),
-            "gemini-cli" => Some(Backend::GeminiCli),
-            "cursor-cli" => Some(Backend::CursorCli),
-            "opencode" => Some(Backend::OpenCodeCli),
-            _ => None,
-        }
-    }
-
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Backend::Api => "api",
-            Backend::CodexCli => "codex-cli",
-            Backend::GeminiCli => "gemini-cli",
-            Backend::CursorCli => "cursor-cli",
-            Backend::OpenCodeCli => "opencode",
-        }
-    }
-}
-
-/// Per-provider runtime configuration parsed from environment variables.
-#[derive(Debug, Clone)]
-pub struct ProviderRuntimeConfig {
-    pub api_key: Option<String>,
-    pub backend: Backend,
-    pub opencode_provider: String,
-}
-
-#[derive(Debug)]
-pub struct Config {
-    providers: HashMap<Provider, ProviderRuntimeConfig>,
-    #[allow(dead_code)]
-    pub default_model: Option<String>,
-    pub codex_reasoning_effort: String,
-    pub system_prompt_path: Option<String>,
-    pub allowed_models: Vec<String>,
-}
-
-impl Config {
-    /// Get the configured backend for a provider.
-    pub fn backend_for(&self, provider: Provider) -> &Backend {
-        &self.providers[&provider].backend
-    }
-
-    /// Get the API key for a provider (when using API backend).
-    pub fn api_key_for(&self, provider: Provider) -> Option<&str> {
-        self.providers[&provider].api_key.as_deref()
-    }
-
-    /// Get the OpenCode provider prefix for a provider family.
-    pub fn opencode_provider_for(&self, provider: Provider) -> &str {
-        &self.providers[&provider].opencode_provider
-    }
-
-    #[allow(dead_code)]
-    /// Iterate over all provider runtime configs.
-    pub fn iter_providers(&self) -> impl Iterator<Item = (&Provider, &ProviderRuntimeConfig)> {
-        self.providers.iter()
-    }
-}
-
-#[derive(Debug)]
-pub enum ConfigError {
-    NoModelsAvailable,
-    InvalidBackend {
-        env_var: String,
-        raw: String,
-        allowed: Vec<String>,
-    },
-    InvalidDefaultModel {
-        model: String,
-        allowed: Vec<String>,
-    },
-    InvalidCodexReasoningEffort(String),
-    ConfigFile {
-        path: PathBuf,
-        message: String,
-    },
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ConfigError::NoModelsAvailable => write!(
-                f,
-                "Invalid environment variables:\n  No models available. Set API keys or configure CLI backends."
-            ),
-            ConfigError::InvalidBackend {
-                env_var,
-                raw,
-                allowed,
-            } => {
-                let opts = allowed
-                    .iter()
-                    .map(|v| format!("'{v}'"))
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                write!(
-                    f,
-                    "Invalid environment variables:\n  {env_var}: Invalid enum value. Expected {opts}, received '{raw}'"
-                )
-            }
-            ConfigError::InvalidDefaultModel { model, allowed } => {
-                let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
-                let opts = allowed
-                    .iter()
-                    .map(|m| format!("'{m}'"))
-                    .collect::<Vec<_>>()
-                    .join(" | ");
-                write!(
-                    f,
-                    "Invalid environment variables:\n  defaultModel: Invalid value '{model}'. Expected a selector ({}) or exact model ({opts})",
-                    selectors.join(", ")
-                )
-            }
-            ConfigError::InvalidCodexReasoningEffort(effort) => write!(
-                f,
-                "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"
-            ),
-            ConfigError::ConfigFile { path, message } => write!(
-                f,
-                "Configuration file error:\n  {}: {}",
-                path.display(),
-                message,
-            ),
-        }
-    }
-}
-
-/// Prefer CONSULT_LLM_-prefixed env var, fall back to unprefixed with deprecation warning.
-pub fn migrate_prefixed_env(
-    prefixed: Option<&str>,
-    unprefixed: Option<&str>,
-    unprefixed_name: &str,
-    prefixed_name: &str,
-) -> Option<String> {
-    if let Some(v) = prefixed {
-        return Some(v.to_string());
-    }
-    if let Some(v) = unprefixed {
-        log_to_file(&format!(
-            "DEPRECATED: {unprefixed_name}={v} → use {prefixed_name}={v} instead"
-        ));
-        return Some(v.to_string());
-    }
-    None
-}
-
-pub fn migrate_backend_env(
-    new_var: Option<&str>,
-    old_var: Option<&str>,
-    provider_cli_value: &str,
-    legacy_name: &str,
-    new_name: &str,
-) -> Option<String> {
-    if let Some(v) = new_var {
-        return Some(v.to_string());
-    }
-    if let Some(v) = old_var {
-        let mapped = if v == "cli" { provider_cli_value } else { v };
-        log_to_file(&format!(
-            "DEPRECATED: {legacy_name}={v} → use {new_name}={mapped} instead"
-        ));
-        return Some(mapped.to_string());
-    }
-    None
-}
+use super::migrate::{migrate_backend_env, migrate_prefixed_env};
+use super::types::{Backend, Config, ConfigError, ProviderRuntimeConfig};
 
 pub fn filter_by_availability(
     models: &[String],
@@ -298,7 +113,7 @@ pub fn parse_config(
     }
     debug_assert_eq!(
         providers.len(),
-        ALL_PROVIDERS.len(),
+        crate::models::ALL_PROVIDERS.len(),
         "PROVIDER_SPECS is out of sync with ALL_PROVIDERS"
     );
 
@@ -368,41 +183,10 @@ pub fn parse_config(
     Ok((config, registry))
 }
 
-static CONFIG: OnceLock<Config> = OnceLock::new();
-static LAYERED_ENV: OnceLock<LayeredEnv> = OnceLock::new();
-
-pub fn config() -> &'static Config {
-    CONFIG.get().expect("config not initialized")
-}
-
-#[allow(dead_code)]
-pub fn layered_env() -> &'static LayeredEnv {
-    LAYERED_ENV.get().expect("config not initialized")
-}
-
-/// Initialize config and model registry from environment variables and config files.
-/// Must be called before consult requests start.
-/// Returns the ModelRegistry for explicit dependency injection.
-pub fn init_config() -> Result<Arc<ModelRegistry>, ConfigError> {
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let home = dirs::home_dir();
-    let paths = discover(&cwd, home.as_deref());
-    let layered = LayeredEnv::load(&paths).map_err(|e| ConfigError::ConfigFile {
-        path: e.path,
-        message: e.message,
-    })?;
-
-    let (config, registry) = parse_config(layered.as_env_fn())?;
-
-    let _ = CONFIG.set(config);
-    let _ = LAYERED_ENV.set(layered);
-
-    Ok(registry)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::Provider;
 
     fn env_from(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
         let map: std::collections::HashMap<String, String> = pairs
@@ -489,50 +273,6 @@ mod tests {
         let result = filter_by_availability(&models, &providers);
         assert!(result.is_empty());
     }
-
-    #[test]
-    fn test_migrate_prefixed_env_prefixed_value() {
-        let result = migrate_prefixed_env(Some("codex-cli"), Some("api"), "OLD", "NEW");
-        assert_eq!(result, Some("codex-cli".into()));
-    }
-
-    #[test]
-    fn test_migrate_prefixed_env_fallback_unprefixed() {
-        let result = migrate_prefixed_env(None, Some("gemini-cli"), "OLD", "NEW");
-        assert_eq!(result, Some("gemini-cli".into()));
-    }
-
-    #[test]
-    fn test_migrate_prefixed_env_both_missing() {
-        let result = migrate_prefixed_env(None, None, "OLD", "NEW");
-        assert_eq!(result, None);
-    }
-
-    #[test]
-    fn test_migrate_backend_env_new_var() {
-        let result = migrate_backend_env(Some("codex-cli"), Some("cli"), "codex-cli", "OLD", "NEW");
-        assert_eq!(result, Some("codex-cli".into()));
-    }
-
-    #[test]
-    fn test_migrate_backend_env_old_var_cli() {
-        let result = migrate_backend_env(None, Some("cli"), "codex-cli", "OLD", "NEW");
-        assert_eq!(result, Some("codex-cli".into()));
-    }
-
-    #[test]
-    fn test_migrate_backend_env_old_var_other() {
-        let result = migrate_backend_env(None, Some("api"), "codex-cli", "OLD", "NEW");
-        assert_eq!(result, Some("api".into()));
-    }
-
-    #[test]
-    fn test_migrate_backend_env_none() {
-        let result = migrate_backend_env(None, None, "codex-cli", "OLD", "NEW");
-        assert_eq!(result, None);
-    }
-
-    // --- parse_config tests ---
 
     #[test]
     fn test_parse_config_with_api_keys() {
@@ -682,6 +422,32 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_config_with_anthropic_key() {
+        let env = env_from(&[("ANTHROPIC_API_KEY", "sk-ant-test")]);
+        let (config, registry) = parse_config(env).unwrap();
+        assert!(
+            config
+                .allowed_models
+                .contains(&"claude-opus-4-7".to_string())
+        );
+        assert_eq!(config.providers[&Provider::Anthropic].backend, Backend::Api);
+        assert_eq!(
+            registry.resolve_model(Some("anthropic")).unwrap(),
+            "claude-opus-4-7"
+        );
+    }
+
+    #[test]
+    fn test_parse_config_invalid_anthropic_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_ANTHROPIC_BACKEND", "codex-cli"),
+            ("ANTHROPIC_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
+    }
+
+    #[test]
     fn test_provider_registry_completeness() {
         use crate::models::ALL_PROVIDERS;
 
@@ -729,32 +495,6 @@ mod tests {
                 "claude-opus-4-7",
             ]
         );
-    }
-
-    #[test]
-    fn test_parse_config_with_anthropic_key() {
-        let env = env_from(&[("ANTHROPIC_API_KEY", "sk-ant-test")]);
-        let (config, registry) = parse_config(env).unwrap();
-        assert!(
-            config
-                .allowed_models
-                .contains(&"claude-opus-4-7".to_string())
-        );
-        assert_eq!(config.providers[&Provider::Anthropic].backend, Backend::Api);
-        assert_eq!(
-            registry.resolve_model(Some("anthropic")).unwrap(),
-            "claude-opus-4-7"
-        );
-    }
-
-    #[test]
-    fn test_parse_config_invalid_anthropic_backend() {
-        let env = env_from(&[
-            ("CONSULT_LLM_ANTHROPIC_BACKEND", "codex-cli"),
-            ("ANTHROPIC_API_KEY", "key"),
-        ]);
-        let err = parse_config(env).unwrap_err();
-        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
     }
 
     #[test]
