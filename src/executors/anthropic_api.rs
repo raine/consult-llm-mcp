@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use consult_llm_core::stream_events::ParsedStreamEvent;
-
-use super::thread_store;
+use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
 
@@ -99,49 +97,19 @@ impl LlmExecutor for AnthropicApiExecutor {
             spool,
         } = req;
 
-        if let Some(ref fps) = file_paths
-            && !fps.is_empty()
-        {
-            let msg = format!(
-                "File paths were provided but are not supported by the Anthropic API executor for model {model}. They will be ignored."
-            );
-            log_to_file(&format!("WARNING: {msg}"));
-            eprintln!("Warning: {msg}");
+        warn_unsupported_file_paths(&model, file_paths.as_ref());
+
+        let mut session = ApiChatSession::new(thread_id);
+        if !session.is_new_thread {
+            session.load_history()?;
         }
-
-        let is_new_thread = thread_id.is_none();
-        let active_thread_id = match thread_id.as_deref() {
-            Some(id) => id.to_string(),
-            None => thread_store::generate_thread_id(),
-        };
-
-        let history = if thread_id.is_some() {
-            match thread_store::load(&active_thread_id)? {
-                Some(t) => t.turns,
-                None => anyhow::bail!(
-                    "Thread '{}' not found. It may have expired or never existed.",
-                    active_thread_id
-                ),
-            }
-        } else {
-            Vec::new()
-        };
-
-        {
-            let mut s = spool.lock().unwrap();
-            s.stream_event(ParsedStreamEvent::SystemPrompt {
-                text: system_prompt.clone(),
-            });
-            s.stream_event(ParsedStreamEvent::Prompt {
-                text: prompt.clone(),
-            });
-        }
+        session.init(&spool, &system_prompt, &prompt);
 
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/v1/messages");
 
         let mut messages = Vec::new();
-        for turn in &history {
+        for turn in &session.history {
             messages.push(Message {
                 role: "user".to_string(),
                 content: turn.user_prompt.clone(),
@@ -226,38 +194,13 @@ impl LlmExecutor for AnthropicApiExecutor {
             completion_tokens: u.output_tokens,
         });
 
-        {
-            let mut s = spool.lock().unwrap();
-            if !thinking.is_empty() {
-                s.stream_event(ParsedStreamEvent::Thinking { text: thinking });
-            }
-            s.stream_event(ParsedStreamEvent::AssistantText {
-                text: response.clone(),
-            });
-            if let Some(ref u) = usage {
-                s.stream_event(ParsedStreamEvent::Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                });
-            }
-        }
+        let thinking = if thinking.is_empty() {
+            None
+        } else {
+            Some(thinking)
+        };
 
-        thread_store::append_turn(
-            &active_thread_id,
-            thread_store::StoredTurn {
-                user_prompt: prompt,
-                assistant_response: response.clone(),
-                model,
-                usage: usage.clone(),
-            },
-            is_new_thread,
-        )?;
-
-        Ok(ExecuteResult {
-            response,
-            usage,
-            thread_id: Some(active_thread_id),
-        })
+        session.finish(&spool, prompt, model, response, thinking, usage)
     }
 }
 

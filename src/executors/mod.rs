@@ -1,5 +1,6 @@
 pub mod anthropic_api;
 pub mod api;
+pub mod api_common;
 pub mod cli_runner;
 pub mod codex_cli;
 pub mod cursor_cli;
