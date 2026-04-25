@@ -1,5 +1,10 @@
 # consult-llm
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
+  <img src="meta/logo-light.svg" alt="consult-llm" height="48">
+</picture>
+
 `consult-llm` is a tool for consulting stronger AI models from your existing
 agent workflow. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
