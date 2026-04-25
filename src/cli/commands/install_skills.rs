@@ -56,13 +56,12 @@ impl Platform {
 }
 
 fn all_platforms(home: &Path) -> Vec<Platform> {
-    let config_dir = dirs::config_dir().unwrap_or_else(|| home.join(".config"));
     vec![
         Platform::new("Claude Code", PlatformArg::Claude, home.join(".claude")),
         Platform::new(
             "OpenCode",
             PlatformArg::Opencode,
-            config_dir.join("opencode"),
+            home.join(".config").join("opencode"),
         ),
         Platform::new("Codex", PlatformArg::Codex, home.join(".codex")),
     ]
