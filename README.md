@@ -355,6 +355,8 @@ consult-llm install-skills            # install bundled skills to platform skill
 consult-llm update                    # self-update the binary
 ```
 
+`consult-llm models` shows which models are active based on the configuration loaded for the current directory — useful for verifying that project-level config overrides and `allowed_models` restrictions are taking effect as expected.
+
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
 
 ## Backends
