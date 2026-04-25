@@ -17,7 +17,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io
 anyhow = "1"
 
 [package]
-name = "consult-llm-mcp"
+name = "consult-llm"
 version.workspace = true
 edition.workspace = true
 build = "build.rs"

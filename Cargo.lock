@@ -391,21 +391,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "consult-llm-core"
-version = "2.13.4"
-dependencies = [
- "chrono",
- "dirs",
- "fs2",
- "libc",
- "serde",
- "serde_json",
- "tempfile",
- "uuid",
-]
-
-[[package]]
-name = "consult-llm-mcp"
+name = "consult-llm"
 version = "2.13.4"
 dependencies = [
  "anyhow",
@@ -425,6 +411,20 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "consult-llm-core"
+version = "2.13.4"
+dependencies = [
+ "chrono",
+ "dirs",
+ "fs2",
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
  "uuid",
 ]
 
