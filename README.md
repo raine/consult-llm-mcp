@@ -1,7 +1,7 @@
 <div align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
-    <img src="meta/logo-light.svg" alt="consult-llm" height="72">
+    <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark-2.svg">
+    <img src="meta/logo-light-2.svg" alt="consult-llm" height="72">
   </picture>
 </div>
 <br>
