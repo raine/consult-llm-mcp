@@ -7,10 +7,6 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
 ## How it works
 
-```
-Agent skill → consult-llm CLI → backend → stronger model → response inline
-```
-
 1. Install skills into your agent (Claude Code, Codex, OpenCode)
 2. Trigger with a slash command — `/consult`, `/debate`, `/collab`
 3. The skill pipes your prompt into `consult-llm`, which calls the backend and streams the response back inline
