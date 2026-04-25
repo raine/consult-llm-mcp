@@ -99,17 +99,13 @@ impl LlmExecutor for AnthropicApiExecutor {
 
         warn_unsupported_file_paths(&model, file_paths.as_ref());
 
-        let mut session = ApiChatSession::new(thread_id);
-        if !session.is_new_thread {
-            session.load_history()?;
-        }
-        session.init(&spool, &system_prompt, &prompt);
+        let session = ApiChatSession::start(thread_id, &spool, &system_prompt, &prompt)?;
 
         let base = self.base_url.trim_end_matches('/');
         let url = format!("{base}/v1/messages");
 
         let mut messages = Vec::new();
-        for turn in &session.history {
+        for turn in session.history() {
             messages.push(Message {
                 role: "user".to_string(),
                 content: turn.user_prompt.clone(),

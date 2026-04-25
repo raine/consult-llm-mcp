@@ -86,11 +86,7 @@ impl LlmExecutor for ApiExecutor {
 
         warn_unsupported_file_paths(&model, file_paths.as_ref());
 
-        let mut session = ApiChatSession::new(thread_id);
-        if !session.is_new_thread {
-            session.load_history()?;
-        }
-        session.init(&spool, &system_prompt, &prompt);
+        let session = ApiChatSession::start(thread_id, &spool, &system_prompt, &prompt)?;
 
         let base = if self.base_url.ends_with('/') {
             self.base_url.clone()
@@ -103,7 +99,7 @@ impl LlmExecutor for ApiExecutor {
             role: "system".to_string(),
             content: system_prompt.clone(),
         }];
-        for turn in &session.history {
+        for turn in session.history() {
             messages.push(ChatMessage {
                 role: "user".to_string(),
                 content: turn.user_prompt.clone(),

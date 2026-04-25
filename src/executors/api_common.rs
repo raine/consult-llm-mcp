@@ -8,13 +8,13 @@ use super::types::{ExecuteResult, Usage};
 use crate::logger::log_to_file;
 
 pub struct ApiChatSession {
-    pub thread_id: String,
-    pub is_new_thread: bool,
-    pub history: Vec<thread_store::StoredTurn>,
+    thread_id: String,
+    is_new_thread: bool,
+    history: Vec<thread_store::StoredTurn>,
 }
 
 impl ApiChatSession {
-    pub fn new(thread_id: Option<String>) -> Self {
+    fn new(thread_id: Option<String>) -> Self {
         let is_new_thread = thread_id.is_none();
         let active_thread_id = match thread_id.as_deref() {
             Some(id) => id.to_string(),
@@ -27,7 +27,7 @@ impl ApiChatSession {
         }
     }
 
-    pub fn load_history(&mut self) -> anyhow::Result<()> {
+    fn load_history(&mut self) -> anyhow::Result<()> {
         match thread_store::load(&self.thread_id)? {
             Some(t) => {
                 self.history = t.turns;
@@ -40,7 +40,19 @@ impl ApiChatSession {
         }
     }
 
-    pub fn init(&mut self, spool: &Mutex<RunSpool>, system_prompt: &str, prompt: &str) {
+    /// Create a session, load history if resuming, and emit initial spool events.
+    /// This is the single entry-point for starting an API chat lifecycle.
+    pub fn start(
+        thread_id: Option<String>,
+        spool: &Mutex<RunSpool>,
+        system_prompt: &str,
+        prompt: &str,
+    ) -> anyhow::Result<Self> {
+        let mut session = Self::new(thread_id);
+        if !session.is_new_thread {
+            session.load_history()?;
+        }
+
         let mut s = spool.lock().unwrap();
         s.stream_event(ParsedStreamEvent::SystemPrompt {
             text: system_prompt.to_string(),
@@ -48,6 +60,12 @@ impl ApiChatSession {
         s.stream_event(ParsedStreamEvent::Prompt {
             text: prompt.to_string(),
         });
+
+        Ok(session)
+    }
+
+    pub fn history(&self) -> &[thread_store::StoredTurn] {
+        &self.history
     }
 
     pub fn finish(
