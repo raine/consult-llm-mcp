@@ -28,22 +28,12 @@ fn collect_pairs() -> Vec<(PathBuf, PathBuf)> {
 
 fn collect_pairs_from(
     state_home: &std::path::Path,
-    home: &std::path::Path,
+    _home: &std::path::Path,
 ) -> Vec<(PathBuf, PathBuf)> {
-    vec![
-        (
-            state_home.join(LEGACY_ROOT_NAME),
-            state_home.join(CURRENT_ROOT_NAME),
-        ),
-        (
-            home.join(config_dir_name(LEGACY_ROOT_NAME)),
-            home.join(config_dir_name(CURRENT_ROOT_NAME)),
-        ),
-    ]
-}
-
-fn config_dir_name(root_name: &str) -> String {
-    format!(".{root_name}")
+    vec![(
+        state_home.join(LEGACY_ROOT_NAME),
+        state_home.join(CURRENT_ROOT_NAME),
+    )]
 }
 
 fn path_exists(path: &std::path::Path) -> bool {
@@ -116,7 +106,7 @@ mod tests {
     }
 
     #[test]
-    fn collects_new_state_and_config_roots() {
+    fn collects_state_pair_only() {
         let state_home = PathBuf::from("/tmp/state");
         let home = PathBuf::from("/tmp/home");
 
@@ -124,16 +114,10 @@ mod tests {
 
         assert_eq!(
             pairs,
-            vec![
-                (
-                    PathBuf::from(format!("/tmp/state/{LEGACY_ROOT_NAME}")),
-                    PathBuf::from(format!("/tmp/state/{CURRENT_ROOT_NAME}")),
-                ),
-                (
-                    PathBuf::from(format!("/tmp/home/.{LEGACY_ROOT_NAME}")),
-                    PathBuf::from(format!("/tmp/home/.{CURRENT_ROOT_NAME}")),
-                ),
-            ]
+            vec![(
+                PathBuf::from(format!("/tmp/state/{LEGACY_ROOT_NAME}")),
+                PathBuf::from(format!("/tmp/state/{CURRENT_ROOT_NAME}")),
+            )]
         );
     }
 }

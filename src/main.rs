@@ -33,6 +33,7 @@ async fn main() {
     }));
 
     consult_llm_core::path_migrate::migrate_if_needed();
+    paths::migrate_to_xdg_if_needed();
 
     use clap::Parser;
     let cli = cli::Cli::parse();
