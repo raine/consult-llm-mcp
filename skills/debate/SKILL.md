@@ -63,11 +63,7 @@ Be specific and opinionated. Defend your choices.
 
 Invoke `consult-llm` with `-m gemini -m openai` and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc. Both models are queried in parallel in a single call.
 
-The response is in group format:
-- Line 1: `[thread_id:group_xxx]`
-- Each model section: `## Model: <id>` header, then `[model:<id>] [thread_id:<per-model-id>]`, then the response body
-
-**Extract thread IDs:** Parse `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` values in each model's section header line. These are needed for Phase 3 since each model receives the other's rebuttal.
+**Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives the other's rebuttal.
 
 ## Phase 3: Debate Rounds
 
@@ -109,7 +105,7 @@ Each model receives the other's latest response. Write each rebuttal prompt to a
 GEMINI_PROMPT=$(mktemp)
 CODEX_PROMPT=$(mktemp)
 
-cat <<'__CONSULT_LLM_END__' > "$GEMINI_PROMPT"
+cat <<'__CONSULT_LLM_END__' >| "$GEMINI_PROMPT"
 Your opponent proposed this alternative approach:
 [Codex's latest response]
 
@@ -117,7 +113,7 @@ Provide a rebuttal:
 ...
 __CONSULT_LLM_END__
 
-cat <<'__CONSULT_LLM_END__' > "$CODEX_PROMPT"
+cat <<'__CONSULT_LLM_END__' >| "$CODEX_PROMPT"
 Your opponent proposed this alternative approach:
 [Gemini's latest response]
 
@@ -129,8 +125,6 @@ consult-llm \
   --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
   --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
 ```
-
-Always use `__CONSULT_LLM_END__` as the heredoc terminator. Output is in the same group format as Phase 2 — extract updated thread IDs from each model's `[thread_id:xxx]` tag.
 
 Present both responses to the user after each round.
 
@@ -240,7 +234,7 @@ Write the review prompt to a temp file and invoke `consult-llm` once with two `-
 ```bash
 REVIEW_PROMPT=$(mktemp)
 
-cat <<'__CONSULT_LLM_END__' > "$REVIEW_PROMPT"
+cat <<'__CONSULT_LLM_END__' >| "$REVIEW_PROMPT"
 Forget which side you argued during the debate. Review the implementation purely on its merits:
 - Any obvious bugs or edge cases missed?
 - Code quality issues (error handling, naming, structure)?
@@ -255,8 +249,6 @@ consult-llm --task review \
   --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$REVIEW_PROMPT" \
   --run "model=openai,thread=$CODEX_THREAD,prompt-file=$REVIEW_PROMPT"
 ```
-
-Always use `__CONSULT_LLM_END__` as the heredoc terminator. Both models receive the same review prompt but continue their own threads.
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

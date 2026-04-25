@@ -51,11 +51,7 @@ Think creatively. Share rough ideas — we're exploring, not committing.
 
 Invoke `consult-llm` with `-m gemini -m openai` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc. Both models are queried in parallel in a single call.
 
-The response is in group format:
-- Line 1: `[thread_id:group_xxx]`
-- Each model section: `## Model: <id>` header, then `[model:<id>] [thread_id:<per-model-id>]`, then the response body
-
-**Extract thread IDs:** Parse `gemini_thread_id` and `codex_thread_id` from the `[thread_id:xxx]` values in each model's section header line. These are needed for Phase 3 since each model receives a different prompt.
+**Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives a different prompt.
 
 Present both sets of ideas to the user.
 
@@ -85,7 +81,7 @@ Each model receives a different prompt (the other model's response embedded). Wr
 GEMINI_PROMPT=$(mktemp)
 CODEX_PROMPT=$(mktemp)
 
-cat <<'__CONSULT_LLM_END__' > "$GEMINI_PROMPT"
+cat <<'__CONSULT_LLM_END__' >| "$GEMINI_PROMPT"
 A collaborator shared these ideas:
 
 [Codex's response from the previous round]
@@ -94,7 +90,7 @@ Build on their thinking:
 ...
 __CONSULT_LLM_END__
 
-cat <<'__CONSULT_LLM_END__' > "$CODEX_PROMPT"
+cat <<'__CONSULT_LLM_END__' >| "$CODEX_PROMPT"
 A collaborator shared these ideas:
 
 [Gemini's response from the previous round]
@@ -107,8 +103,6 @@ consult-llm \
   --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
   --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
 ```
-
-Always use `__CONSULT_LLM_END__` as the heredoc terminator. Output is in the same group format as Phase 2 — extract updated thread IDs from each model's `[thread_id:xxx]` tag.
 
 Present both responses to the user after each round.
 
