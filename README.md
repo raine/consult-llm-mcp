@@ -14,7 +14,7 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 ## How it works
 
 1. Install skills into your agent (Claude Code, Codex, OpenCode)
-2. Trigger with a slash command — `/consult`, `/debate`, `/collab`
+2. Trigger with a slash command: `/consult`, `/debate`, `/collab`
 3. The skill pipes your prompt into `consult-llm`, which calls the backend and streams the response back inline
 
 ```
@@ -31,9 +31,9 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
      The root cause is a race condition in `handleConfirmGenerateHints`.
      After `await generateHints()`, the component state updates in the
      background, but the function continues with a stale `activeSegment`
-     variable — requesting a hint for "isn't" instead of "isn't it".
+     variable, requesting a hint for "isn't" instead of "isn't it".
 
-⏺ Gemini identified the real issue — a race condition with stale state
+⏺ Gemini identified the real issue: a race condition with stale state
   after async operations. I was looking at the wrong thing entirely.
 ```
 
@@ -394,7 +394,7 @@ consult-llm install-skills            # install bundled skills to platform skill
 consult-llm update                    # self-update the binary
 ```
 
-`consult-llm models` shows which models are active based on the configuration loaded for the current directory — useful for verifying that project-level config overrides and `allowed_models` restrictions are taking effect as expected.
+`consult-llm models` shows which models are active based on the configuration loaded for the current directory, useful for verifying that project-level config overrides and `allowed_models` restrictions are taking effect as expected.
 
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
 
@@ -402,12 +402,12 @@ consult-llm update                    # self-update the binary
 
 `consult-llm` separates **model families** from **backends**.
 
-A **model family** is what you ask for — `gemini`, `openai`, `deepseek`, `minimax`, or `anthropic`.
+A **model family** is what you ask for: `gemini`, `openai`, `deepseek`, `minimax`, or `anthropic`.
 
 A **backend** is how `consult-llm` reaches that model family:
 
-- **`api`** — direct HTTP calls using an API key
-- **CLI backends** — shell out to a local CLI tool already installed and logged in
+- **`api`**: direct HTTP calls using an API key
+- **CLI backends**: shell out to a local CLI tool already installed and logged in
 
 | Model family | `api` backend | CLI backends available | API key env var |
 | ------------ | ------------- | ---------------------- | --------------- |
@@ -440,24 +440,24 @@ consult-llm config set openai.backend api
 
 ### CLI backends
 
-Shell out to an already-installed local CLI. No API keys needed in `consult-llm` — authentication is handled by the CLI tool.
+Shell out to an already-installed local CLI. No API keys needed in `consult-llm`; authentication is handled by the CLI tool.
 
 A key advantage over the API backend: CLI agents can browse your codebase, run commands, and do their own research before responding. The API backend receives only the prompt and files you explicitly include.
 
-**Gemini CLI** — requires the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and `gemini login`:
+**Gemini CLI**: requires the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and `gemini login`:
 
 ```bash
 consult-llm config set gemini.backend gemini-cli
 ```
 
-**Codex CLI** — requires Codex CLI and `codex login`:
+**Codex CLI**: requires Codex CLI and `codex login`:
 
 ```bash
 consult-llm config set openai.backend codex-cli
 consult-llm config set openai.reasoning_effort high  # none | minimal | low | medium | high | xhigh
 ```
 
-**Cursor CLI** — routes through `cursor-agent`:
+**Cursor CLI**: routes through `cursor-agent`:
 
 ```bash
 consult-llm config set openai.backend cursor-cli
@@ -466,7 +466,7 @@ consult-llm config set gemini.backend cursor-cli
 
 If your prompts need shell commands in Cursor CLI ask mode, allow them in `~/.cursor/cli-config.json`.
 
-**OpenCode** — routes through `opencode` to Copilot, OpenRouter, or other providers:
+**OpenCode**: routes through `opencode` to Copilot, OpenRouter, or other providers:
 
 ```bash
 consult-llm config set openai.backend opencode
@@ -482,7 +482,7 @@ consult-llm config set openai.opencode_provider openai
 ## Multi-turn conversations
 
 CLI backends support multi-turn conversations. The first response includes a
-`[thread_id:xxx]` prefix — pass that ID back with `--thread-id` to continue
+`[thread_id:xxx]` prefix; pass that ID back with `--thread-id` to continue
 the conversation with full context from prior turns.
 
 ```
@@ -495,7 +495,7 @@ the conversation with full context from prior turns.
 
      Redis with TTL-based invalidation. Set short TTLs for volatile data ...
 
-⏺ Codex recommends Redis with TTL-based invalidation — but our payment
+⏺ Codex recommends Redis with TTL-based invalidation, but our payment
   endpoints need strong consistency. Let me push back on that.
 
 ⏺ Bash(cat <<'EOF' | consult-llm -m codex --thread-id thread_b1ff711...
@@ -504,7 +504,7 @@ the conversation with full context from prior turns.
   EOF)
   ⎿  [model:gpt-5.5] [thread_id:thread_b1ff711...]
 
-     Yes — with strong consistency, the TTL approach breaks down. Consider
+     Yes. With strong consistency, the TTL approach breaks down. Consider
      write-through caching or cache invalidation on writes instead ...
 
 ⏺ Codex revised its recommendation based on the consistency constraint. I'll
@@ -599,13 +599,21 @@ openai:
 
 API keys are **not** allowed in `.consult-llm.yaml` (the committed project config). The tool will refuse to load it and tell you to move the key to `.consult-llm.local.yaml`.
 
-**Environment variables** — highest precedence, useful for CI:
+**Environment variables** (highest precedence, useful for CI):
 
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `MINIMAX_API_KEY`
+
+**[direnv](https://direnv.net/)** is an alternative to `.consult-llm.local.yaml` for project-specific keys via environment variables. Add a `.envrc` in the repo root (gitignored) and `direnv allow` it:
+
+```bash
+export OPENAI_API_KEY=your_project_specific_key
+```
+
+direnv loads the variables automatically when you enter the directory and unloads them when you leave.
 
 ### Custom system prompt
 
@@ -727,7 +735,7 @@ Your question here.
 __CONSULT_LLM_END__
 ```
 
-The response streams back to stdout and the agent sees it inline. If the response exceeds the shell tool's output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it — it can use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
+The response streams back to stdout and the agent sees it inline. If the response exceeds the shell tool's output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it; it can use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
 
 ### Install
 
