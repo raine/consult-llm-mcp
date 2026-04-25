@@ -438,13 +438,14 @@ impl ConsultService {
         };
         let reasoning_effort = executor.reasoning_effort(&model).map(|s| s.to_string());
 
-        let project = std::env::current_dir()
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
-            .unwrap_or_else(|| "unknown".to_string());
         let cwd = std::env::current_dir()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
+        let project = std::env::current_dir()
+            .ok()
+            .as_deref()
+            .map(crate::git_worktree::resolve_project_name)
+            .unwrap_or_else(|| "unknown".to_string());
 
         let meta = consult_llm_core::monitoring::RunMeta {
             v: 1,
