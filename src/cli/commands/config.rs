@@ -78,8 +78,14 @@ fn run_set(key: String, value: String, project: bool, local: bool) -> anyhow::Re
     // Validate the resulting document against the config schema before persisting.
     // This catches typos like "gemini.bakcend" before they silently corrupt the file.
     let out = serde_yaml::to_string(&doc)?;
-    crate::config_file::ConfigFile::parse(&out)
+    let cfg = crate::config_file::ConfigFile::parse(&out)
         .with_context(|| format!("invalid config key {:?} — check spelling", key))?;
+
+    // Reject API keys in the committed project config.
+    if project {
+        cfg.to_env_map(crate::config_file::ApiKeyPolicy::Forbid)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
+    }
 
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()

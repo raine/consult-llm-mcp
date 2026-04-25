@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use crate::models::PROVIDER_SPECS;
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigFile {
@@ -25,12 +27,39 @@ pub struct ProviderBlock {
     pub backend: Option<String>,
     pub opencode_provider: Option<String>,
     pub reasoning_effort: Option<String>,
+    pub api_key: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OpencodeBlock {
     pub default_provider: Option<String>,
+}
+
+/// Whether API keys are permitted in this config file layer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ApiKeyPolicy {
+    /// Keys are allowed (user config, project-local config).
+    Allow,
+    /// Keys are forbidden (committed project config).
+    Forbid,
+}
+
+/// Error returned when a committed project config contains API keys.
+#[derive(Debug)]
+pub struct ApiKeyInProjectConfig {
+    pub provider: &'static str,
+}
+
+impl std::fmt::Display for ApiKeyInProjectConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "API keys are not allowed in the shared project config (.consult-llm.yaml). \
+             Move `{}.api_key` to .consult-llm.local.yaml or ~/.config/consult-llm/config.yaml.",
+            self.provider
+        )
+    }
 }
 
 impl ConfigFile {
@@ -41,7 +70,19 @@ impl ConfigFile {
         serde_yaml::from_str(yaml)
     }
 
-    pub fn to_env_map(&self) -> HashMap<String, String> {
+    /// Convert the config file to an env-var map.
+    ///
+    /// `policy` controls whether `api_key` fields are permitted. Pass
+    /// `ApiKeyPolicy::Forbid` for `.consult-llm.yaml` (committed project
+    /// config) and `ApiKeyPolicy::Allow` for `.consult-llm.local.yaml` and
+    /// user config.
+    ///
+    /// Empty `api_key` values are silently skipped (consistent with how the
+    /// env-var layer treats empty environment variables).
+    pub fn to_env_map(
+        &self,
+        policy: ApiKeyPolicy,
+    ) -> Result<HashMap<String, String>, ApiKeyInProjectConfig> {
         let mut m = HashMap::new();
         if let Some(v) = &self.default_model {
             m.insert("CONSULT_LLM_DEFAULT_MODEL".into(), v.clone());
@@ -55,7 +96,6 @@ impl ConfigFile {
         if let Some(v) = &self.system_prompt_path {
             m.insert("CONSULT_LLM_SYSTEM_PROMPT_PATH".into(), v.clone());
         }
-        // Emit both true and false so higher-precedence `false` can override lower-precedence `true`.
         if let Some(v) = self.no_update_check {
             m.insert(
                 "CONSULT_LLM_NO_UPDATE_CHECK".into(),
@@ -63,20 +103,37 @@ impl ConfigFile {
             );
         }
 
-        let providers: [(&str, Option<&ProviderBlock>); 5] = [
-            ("GEMINI", self.gemini.as_ref()),
-            ("OPENAI", self.openai.as_ref()),
-            ("ANTHROPIC", self.anthropic.as_ref()),
-            ("DEEPSEEK", self.deepseek.as_ref()),
-            ("MINIMAX", self.minimax.as_ref()),
+        let blocks: [(&str, Option<&ProviderBlock>); 5] = [
+            ("gemini", self.gemini.as_ref()),
+            ("openai", self.openai.as_ref()),
+            ("anthropic", self.anthropic.as_ref()),
+            ("deepseek", self.deepseek.as_ref()),
+            ("minimax", self.minimax.as_ref()),
         ];
-        for (name, block) in providers {
+
+        for (id, block) in blocks {
             let Some(b) = block else { continue };
+            let spec = PROVIDER_SPECS
+                .iter()
+                .find(|s| s.id == id)
+                .expect("every provider block id must have a ProviderSpec");
+
+            if let Some(v) = &b.api_key {
+                let trimmed = v.trim();
+                if !trimmed.is_empty() {
+                    if policy == ApiKeyPolicy::Forbid {
+                        return Err(ApiKeyInProjectConfig { provider: spec.id });
+                    }
+                    m.insert(spec.api_key_env.to_string(), trimmed.to_string());
+                }
+                // blank/whitespace-only: silently skip (treat as unset)
+            }
+
             if let Some(v) = &b.backend {
-                m.insert(format!("CONSULT_LLM_{name}_BACKEND"), v.clone());
+                m.insert(spec.backend_env.to_string(), v.clone());
             }
             if let Some(v) = &b.opencode_provider {
-                m.insert(format!("CONSULT_LLM_OPENCODE_{name}_PROVIDER"), v.clone());
+                m.insert(spec.opencode_env.to_string(), v.clone());
             }
         }
 
@@ -92,7 +149,7 @@ impl ConfigFile {
             m.insert("CONSULT_LLM_OPENCODE_PROVIDER".into(), v.clone());
         }
 
-        m
+        Ok(m)
     }
 }
 
@@ -124,11 +181,13 @@ mod tests {
                 backend: Some("gemini-cli".into()),
                 opencode_provider: Some("google".into()),
                 reasoning_effort: None,
+                api_key: None,
             }),
             openai: Some(ProviderBlock {
                 backend: Some("api".into()),
                 opencode_provider: None,
                 reasoning_effort: Some("high".into()),
+                api_key: None,
             }),
             anthropic: None,
             deepseek: None,
@@ -138,7 +197,7 @@ mod tests {
             }),
         };
 
-        let m = cfg.to_env_map();
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["CONSULT_LLM_DEFAULT_MODEL"], "gemini");
         assert_eq!(m["CONSULT_LLM_ALLOWED_MODELS"], "gemini-2.5-pro,gpt-5.2");
         assert_eq!(m["CONSULT_LLM_EXTRA_MODELS"], "custom-model");
@@ -153,7 +212,95 @@ mod tests {
 
     #[test]
     fn test_to_env_map_skips_unset_fields() {
-        let m = ConfigFile::default().to_env_map();
+        let m = ConfigFile::default()
+            .to_env_map(ApiKeyPolicy::Allow)
+            .unwrap();
         assert!(m.is_empty());
+    }
+
+    #[test]
+    fn test_api_key_emitted_in_allow_layer() {
+        let cfg = ConfigFile {
+            openai: Some(ProviderBlock {
+                api_key: Some("sk-test".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
+        assert_eq!(m["OPENAI_API_KEY"], "sk-test");
+    }
+
+    #[test]
+    fn test_api_key_rejected_in_project_layer() {
+        let cfg = ConfigFile {
+            gemini: Some(ProviderBlock {
+                api_key: Some("key-abc".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let err = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap_err();
+        assert_eq!(err.provider, "gemini");
+    }
+
+    #[test]
+    fn test_blank_api_key_silently_skipped() {
+        for blank in &["", "   ", "\t"] {
+            let cfg = ConfigFile {
+                openai: Some(ProviderBlock {
+                    api_key: Some((*blank).into()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            };
+            // Not an error even with Forbid — blank key is not a secret
+            let m = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap();
+            assert!(!m.contains_key("OPENAI_API_KEY"), "blank {:?} should be skipped", blank);
+            // Also skipped with Allow
+            let m2 = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
+            assert!(!m2.contains_key("OPENAI_API_KEY"), "blank {:?} should be skipped", blank);
+        }
+    }
+
+    #[test]
+    fn test_api_key_is_trimmed() {
+        let cfg = ConfigFile {
+            openai: Some(ProviderBlock {
+                api_key: Some("  sk-padded  ".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
+        assert_eq!(m["OPENAI_API_KEY"], "sk-padded");
+    }
+
+    #[test]
+    fn test_api_key_canonical_env_names() {
+        let make = |key: &str| ConfigFile {
+            gemini: Some(ProviderBlock {
+                api_key: Some(key.into()),
+                ..Default::default()
+            }),
+            anthropic: Some(ProviderBlock {
+                api_key: Some(key.into()),
+                ..Default::default()
+            }),
+            deepseek: Some(ProviderBlock {
+                api_key: Some(key.into()),
+                ..Default::default()
+            }),
+            minimax: Some(ProviderBlock {
+                api_key: Some(key.into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let m = make("x").to_env_map(ApiKeyPolicy::Allow).unwrap();
+        assert!(m.contains_key("GEMINI_API_KEY"));
+        assert!(m.contains_key("ANTHROPIC_API_KEY"));
+        assert!(m.contains_key("DEEPSEEK_API_KEY"));
+        assert!(m.contains_key("MINIMAX_API_KEY"));
     }
 }

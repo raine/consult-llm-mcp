@@ -74,7 +74,14 @@ consult-llm config set gemini.backend gemini-cli   # requires: gemini login
 consult-llm config set openai.backend codex-cli    # requires: codex login
 ```
 
-Or set API keys as environment variables:
+Or set API keys in your user config:
+
+```bash
+consult-llm config set openai.api_key your_openai_key
+consult-llm config set gemini.api_key your_gemini_key
+```
+
+Or as environment variables:
 
 ```bash
 export OPENAI_API_KEY=your_openai_key
@@ -412,14 +419,16 @@ A **backend** is how `consult-llm` reaches that model family:
 
 ### API backend
 
-Direct HTTP calls to the provider. Requires an API key via environment variable.
+Direct HTTP calls to the provider. Requires an API key. Set it in your user config or as an environment variable:
 
 ```bash
+# User config (recommended, persists across sessions)
+consult-llm config set openai.api_key your_openai_key
+consult-llm config set gemini.api_key your_gemini_key
+
+# Or as environment variables
 export OPENAI_API_KEY=your_openai_key
 export GEMINI_API_KEY=your_gemini_key
-export ANTHROPIC_API_KEY=your_anthropic_key
-export DEEPSEEK_API_KEY=your_deepseek_key
-export MINIMAX_API_KEY=your_minimax_key
 ```
 
 The `api` backend is the default. To set it explicitly:
@@ -570,7 +579,27 @@ opencode:
 
 ### API keys
 
-API keys cannot go in config files and must be set as environment variables:
+API keys can be set in your user config, a project-local config file, or as environment variables. Environment variables take highest precedence.
+
+**User config** (`~/.config/consult-llm/config.yaml`), applies everywhere:
+
+```yaml
+openai:
+  api_key: your_openai_key
+gemini:
+  api_key: your_gemini_key
+```
+
+**Project-local config** (`.consult-llm.local.yaml` in the repo root, gitignored), overrides the user config for that project:
+
+```yaml
+openai:
+  api_key: your_project_specific_key
+```
+
+API keys are **not** allowed in `.consult-llm.yaml` (the committed project config). The tool will refuse to load it and tell you to move the key to `.consult-llm.local.yaml`.
+
+**Environment variables** — highest precedence, useful for CI:
 
 - `OPENAI_API_KEY`
 - `GEMINI_API_KEY`
@@ -766,7 +795,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    consult-llm install-skills
    ```
 
-5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.config/consult-llm/config.yaml`. API keys must stay as env vars.
+5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.config/consult-llm/config.yaml`, including API keys.
 
    For example, this MCP config:
 

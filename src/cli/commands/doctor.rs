@@ -61,10 +61,6 @@ fn check_writable(path: &Path) -> bool {
 
 // ---- backend helpers --------------------------------------------------------
 
-fn api_key_set(var: &str) -> bool {
-    std::env::var(var).map(|v| !v.is_empty()).unwrap_or(false)
-}
-
 fn which(bin: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path) {
@@ -226,8 +222,9 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
         };
 
         let (dep_ok, detail) = if backend == "api" {
-            if api_key_set(spec.api_key_env) {
-                (true, format!("{} set", spec.api_key_env))
+            if let Some((_, src)) = env.lookup(spec.api_key_env) {
+                let src_label = shorten_str(&src.to_string(), home.as_deref());
+                (true, format!("{} set [{}]", spec.api_key_env, src_label))
             } else {
                 (false, format!("{} unset", spec.api_key_env))
             }
