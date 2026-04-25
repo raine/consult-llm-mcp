@@ -18,6 +18,7 @@ EOF
 
 Rules:
 
+- **Run Bash in the foreground** (synchronous, no `run_in_background`). Only background the call when the caller explicitly passes `--background`.
 - **ALWAYS use `<<'EOF'` (quoted).** The quotes prevent the shell from expanding `$var`, backticks, or escapes inside the prompt. Unquoted heredocs corrupt prompts.
 - **Fallback to `--prompt-file <path>`** if the prompt contains the heredoc terminator, or on Windows/PowerShell. Write the prompt to a temp file, then `consult-llm --prompt-file /tmp/prompt.txt …`.
 - **Stdout layout.** First line is `[model:<id>] [thread_id:<id>]`, then a blank line, then the response body. In `--web` mode the prefix is just `[model:<id>]` (no thread).

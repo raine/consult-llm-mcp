@@ -21,6 +21,7 @@ Check `$ARGUMENTS` for flags:
 
 **Mode flags:**
 - `--browser` → use web mode (`--web`, copies prompt to clipboard)
+- `--background` → run the Bash call in background mode (`run_in_background`)
 
 Strip all flags from the arguments to get the user query.
 
