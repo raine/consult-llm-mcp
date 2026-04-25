@@ -16,6 +16,7 @@ mod llm;
 mod llm_query;
 mod logger;
 mod models;
+mod paths;
 mod prompt_builder;
 mod schema;
 mod service;

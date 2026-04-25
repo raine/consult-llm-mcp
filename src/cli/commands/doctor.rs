@@ -369,9 +369,6 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
 
     // ---- Config files
     println!("\nConfig files:");
-    let user_config = home
-        .as_deref()
-        .map(|h| h.join(".consult-llm").join("config.yaml"));
     struct FileEntry {
         label: &'static str,
         display: String,
@@ -380,10 +377,11 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
     let file_entries = [
         FileEntry {
             label: "user",
-            display: user_config
+            display: disc
+                .user
                 .as_deref()
                 .map(|p| shorten(p, home.as_deref()))
-                .unwrap_or_else(|| "~/.consult-llm/config.yaml".into()),
+                .unwrap_or_else(|| "~/.config/consult-llm/config.yaml".into()),
             loaded: disc.user.is_some(),
         },
         FileEntry {

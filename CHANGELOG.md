@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Moved user config directory from `~/.consult-llm/` to `~/.config/consult-llm/`
+  for XDG Base Directory compliance. Supports `$XDG_CONFIG_HOME`. The legacy
+  `~/.consult-llm/` path is still read for backward compatibility, and existing
+  configs are auto-migrated on first write.
+
 ## v2.13.4 (2026-04-24)
 
 - Updated DeepSeek model from `deepseek-reasoner` to `deepseek-v4-pro`. The

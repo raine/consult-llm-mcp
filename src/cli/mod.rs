@@ -70,9 +70,9 @@ pub enum Command {
         #[arg(long = "verbose")]
         verbose: bool,
     },
-    /// Scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+    /// Scaffold ~/.config/consult-llm/SYSTEM_PROMPT.md
     InitPrompt,
-    /// Scaffold ~/.consult-llm/config.yaml
+    /// Scaffold ~/.config/consult-llm/config.yaml
     InitConfig,
     /// Set a config value
     Config(commands::config::ConfigArgs),

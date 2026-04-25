@@ -375,8 +375,8 @@ The CLI is invoked by your agent via the installed skills; you don't call it dir
 consult-llm models                    # list available models and resolved selectors
 consult-llm doctor                    # diagnose backend auth and config
 consult-llm config set <key> <value>  # set a config value (user config by default)
-consult-llm init-config               # scaffold ~/.consult-llm/config.yaml
-consult-llm init-prompt               # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+consult-llm init-config               # scaffold ~/.config/consult-llm/config.yaml
+consult-llm init-prompt               # scaffold ~/.config/consult-llm/SYSTEM_PROMPT.md
 consult-llm install-skills            # install bundled skills to platform skill dirs
 consult-llm update                    # self-update the binary
 ```
@@ -507,7 +507,9 @@ consult-llm reads layered YAML config files. Resolution order (highest to lowest
 1. Environment variables
 2. `.consult-llm.local.yaml` (project-local overrides, not committed to git)
 3. `.consult-llm.yaml` (committed project config)
-4. `~/.consult-llm/config.yaml` (user config)
+4. `~/.config/consult-llm/config.yaml` (user config)
+
+   Supports `$XDG_CONFIG_HOME`. The legacy path `~/.consult-llm/config.yaml` is still read for backward compatibility.
 
 Project files are discovered by walking up from the current directory to the nearest `.git` root or `$HOME`.
 
@@ -544,7 +546,7 @@ consult-llm config set no_update_check true
 consult-llm config set allowed_models '[gemini, openai]'
 ```
 
-Example `~/.consult-llm/config.yaml`:
+Example `~/.config/consult-llm/config.yaml`:
 
 ```yaml
 default_model: gemini
@@ -573,7 +575,7 @@ API keys cannot go in config files and must be set as environment variables:
 ### Custom system prompt
 
 ```bash
-consult-llm init-prompt   # scaffold ~/.consult-llm/SYSTEM_PROMPT.md
+consult-llm init-prompt   # scaffold ~/.config/consult-llm/SYSTEM_PROMPT.md
 ```
 
 Override the path in config:
@@ -608,7 +610,7 @@ Environment variables override config file values.
 | `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                  | `google`                          |
 | `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                  | `deepseek`                        |
 | `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                  | `minimax`                         |
-| `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.consult-llm/SYSTEM_PROMPT.md` |
+| `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.config/consult-llm/SYSTEM_PROMPT.md` |
 | `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               |                                   |
 
 </details>
@@ -758,7 +760,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    consult-llm install-skills
    ```
 
-5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.consult-llm/config.yaml`. API keys must stay as env vars.
+5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.config/consult-llm/config.yaml`. API keys must stay as env vars.
 
    For example, this MCP config:
 
@@ -790,7 +792,7 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
      opencode_provider: minimax
    ```
 
-   Put this in `~/.consult-llm/config.yaml` for user-wide settings, or in `.consult-llm.yaml` at the project root if the settings were specific to that project.
+   Put this in `~/.config/consult-llm/config.yaml` for user-wide settings, or in `.consult-llm.yaml` at the project root if the settings were specific to that project.
 
 ## Development
 

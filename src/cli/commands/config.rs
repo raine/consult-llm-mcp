@@ -41,17 +41,33 @@ fn run_set(key: String, value: String, project: bool, local: bool) -> anyhow::Re
     validate_key_path(&key)?;
 
     let path = target_path(project, local)?;
-    let mut doc: Value = if path.exists() {
+    let (mut doc, from_legacy) = if path.exists() {
         let src = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let v: Value =
             serde_yaml::from_str(&src).with_context(|| format!("parse {}", path.display()))?;
         // An empty file deserializes as Null — treat it as an empty mapping
-        match v {
+        let doc = match v {
             Value::Null => Value::Mapping(serde_yaml::Mapping::new()),
             other => other,
-        }
+        };
+        (doc, false)
     } else {
-        Value::Mapping(serde_yaml::Mapping::new())
+        let legacy = (!project && !local)
+            .then(|| crate::paths::legacy_config_dir().map(|d| d.join("config.yaml")))
+            .flatten()
+            .filter(|p| p.exists());
+        if let Some(l) = legacy {
+            let src = fs::read_to_string(&l).with_context(|| format!("read {}", l.display()))?;
+            let v: Value =
+                serde_yaml::from_str(&src).with_context(|| format!("parse {}", l.display()))?;
+            let doc = match v {
+                Value::Null => Value::Mapping(serde_yaml::Mapping::new()),
+                other => other,
+            };
+            (doc, true)
+        } else {
+            (Value::Mapping(serde_yaml::Mapping::new()), false)
+        }
     };
 
     let parsed = serde_yaml::from_str::<Value>(&value)
@@ -71,6 +87,9 @@ fn run_set(key: String, value: String, project: bool, local: bool) -> anyhow::Re
         fs::create_dir_all(parent)?;
     }
     fs::write(&path, &out)?;
+    if from_legacy {
+        eprintln!("Migrated config from legacy path to: {}", path.display());
+    }
     println!("set {} in {}", key, path.display());
     Ok(())
 }
@@ -82,9 +101,8 @@ fn target_path(project: bool, local: bool) -> anyhow::Result<PathBuf> {
     if project {
         return Ok(PathBuf::from(".consult-llm.yaml"));
     }
-    let home =
-        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
-    Ok(home.join(".consult-llm").join("config.yaml"))
+    crate::paths::user_config_file()
+        .ok_or_else(|| anyhow::anyhow!("cannot determine config directory"))
 }
 
 fn validate_key_path(key: &str) -> anyhow::Result<()> {

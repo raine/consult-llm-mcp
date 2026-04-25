@@ -7,9 +7,10 @@ pub struct DiscoveredPaths {
 }
 
 pub fn discover(cwd: &Path, home: Option<&Path>) -> DiscoveredPaths {
-    let user = home
-        .map(|h| h.join(".consult-llm").join("config.yaml"))
-        .filter(|p| p.exists());
+    let user = match home {
+        Some(h) => crate::paths::resolve_user_config_with_home(h),
+        None => crate::paths::resolve_user_config(),
+    };
 
     let mut project = None;
     let mut project_local = None;
@@ -103,6 +104,20 @@ mod tests {
     fn test_discover_user_config() {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().to_path_buf();
+        let user_config_dir = home.join(".config").join("consult-llm");
+        std::fs::create_dir_all(&user_config_dir).unwrap();
+        std::fs::write(user_config_dir.join("config.yaml"), "").unwrap();
+
+        let cwd = home.join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let paths = discover(&cwd, Some(&home));
+        assert!(paths.user.is_some());
+    }
+
+    #[test]
+    fn test_discover_legacy_user_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_path_buf();
         let user_config_dir = home.join(".consult-llm");
         std::fs::create_dir_all(&user_config_dir).unwrap();
         std::fs::write(user_config_dir.join("config.yaml"), "").unwrap();
@@ -111,5 +126,24 @@ mod tests {
         std::fs::create_dir_all(&cwd).unwrap();
         let paths = discover(&cwd, Some(&home));
         assert!(paths.user.is_some());
+    }
+
+    #[test]
+    fn test_discover_xdg_wins_when_both_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().to_path_buf();
+
+        let xdg_dir = home.join(".config").join("consult-llm");
+        std::fs::create_dir_all(&xdg_dir).unwrap();
+        std::fs::write(xdg_dir.join("config.yaml"), "").unwrap();
+
+        let legacy_dir = home.join(".consult-llm");
+        std::fs::create_dir_all(&legacy_dir).unwrap();
+        std::fs::write(legacy_dir.join("config.yaml"), "").unwrap();
+
+        let cwd = home.join("project");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let paths = discover(&cwd, Some(&home));
+        assert_eq!(paths.user.unwrap(), xdg_dir.join("config.yaml"));
     }
 }

@@ -33,9 +33,9 @@ fn mode_overlay(mode: TaskMode) -> &'static str {
 pub const DEFAULT_SYSTEM_PROMPT: &str = BASE_SYSTEM_PROMPT;
 
 pub fn init_system_prompt() -> anyhow::Result<()> {
-    let home = dirs::home_dir().expect("Could not determine home directory");
-    let config_dir = home.join(".consult-llm");
-    let prompt_path = config_dir.join("SYSTEM_PROMPT.md");
+    let prompt_path = crate::paths::system_prompt_file()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine config directory"))?;
+    let legacy_path = crate::paths::legacy_config_dir().map(|d| d.join("SYSTEM_PROMPT.md"));
 
     if prompt_path.exists() {
         anyhow::bail!(
@@ -43,8 +43,14 @@ pub fn init_system_prompt() -> anyhow::Result<()> {
             prompt_path.display()
         );
     }
+    if let Some(l) = legacy_path.filter(|p| p.exists()) {
+        anyhow::bail!(
+            "Legacy system prompt already exists at: {}\nRemove or migrate it first if you want to reinitialize.",
+            l.display()
+        );
+    }
 
-    std::fs::create_dir_all(&config_dir)?;
+    std::fs::create_dir_all(prompt_path.parent().unwrap())?;
     std::fs::write(&prompt_path, DEFAULT_SYSTEM_PROMPT)?;
     println!("Created system prompt at: {}", prompt_path.display());
     println!("You can now edit this file to customize the system prompt.");
@@ -54,10 +60,8 @@ pub fn init_system_prompt() -> anyhow::Result<()> {
 pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
     let cfg = config();
     let custom_path = cfg.system_prompt_path.clone().unwrap_or_else(|| {
-        dirs::home_dir()
-            .unwrap_or_default()
-            .join(".consult-llm")
-            .join("SYSTEM_PROMPT.md")
+        crate::paths::resolve_system_prompt()
+            .unwrap_or_else(|| crate::paths::system_prompt_file().unwrap_or_default())
             .to_string_lossy()
             .to_string()
     });

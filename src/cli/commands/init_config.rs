@@ -15,14 +15,21 @@ const TEMPLATE: &str = r#"# consult-llm user config
 "#;
 
 pub fn run() -> anyhow::Result<()> {
-    let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("no home dir"))?;
-    let dir = home.join(".consult-llm");
-    let path = dir.join("config.yaml");
+    let path = crate::paths::user_config_file().ok_or_else(|| anyhow::anyhow!("no home dir"))?;
+    let legacy = crate::paths::legacy_config_dir().map(|d| d.join("config.yaml"));
+
     if path.exists() {
         println!("{} already exists", path.display());
         return Ok(());
     }
-    std::fs::create_dir_all(&dir)?;
+    if let Some(l) = legacy.filter(|p| p.exists()) {
+        println!(
+            "Legacy config already exists at {}. Remove or migrate it first.",
+            l.display()
+        );
+        return Ok(());
+    }
+    std::fs::create_dir_all(path.parent().unwrap())?;
     std::fs::write(&path, TEMPLATE)?;
     println!("wrote {}", path.display());
     Ok(())
