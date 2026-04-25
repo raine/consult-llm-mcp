@@ -26,6 +26,12 @@ pub enum CliError {
     Generic(String),
 }
 
+impl From<anyhow::Error> for CliError {
+    fn from(e: anyhow::Error) -> Self {
+        Self::Generic(e.to_string())
+    }
+}
+
 impl CliError {
     pub fn exit_code(&self) -> i32 {
         match self {

@@ -4,6 +4,7 @@ pub mod commands;
 pub mod input;
 pub mod output;
 pub mod run;
+pub mod run_spec;
 
 #[cfg(test)]
 mod tests;

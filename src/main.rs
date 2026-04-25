@@ -42,29 +42,22 @@ async fn main() {
         update::check_and_notify();
     }
 
-    let result: Result<(), cli::input::CliError> =
-        match cli.cmd {
-            None => cli::run::run_ask(cli).await,
-            Some(cli::Command::Models) => cli::commands::models::run()
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::Doctor { verbose }) => cli::commands::doctor::run(verbose)
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run()
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::InitConfig) => cli::commands::init_config::run()
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::Config(args)) => cli::commands::config::run(args)
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::InstallSkills(args)) => cli::commands::install_skills::run(args)
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::Update) => cli::commands::update::run()
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-            Some(cli::Command::Docs) => {
-                cli::commands::docs::run().map_err(|e| cli::input::CliError::Generic(e.to_string()))
-            }
-            Some(cli::Command::CheckUpdate) => update::run_background_check()
-                .map_err(|e| cli::input::CliError::Generic(e.to_string())),
-        };
+    let result: Result<(), cli::input::CliError> = match cli.cmd {
+        None => cli::run::run_ask(cli).await,
+        Some(cli::Command::Models) => cli::commands::models::run().map_err(Into::into),
+        Some(cli::Command::Doctor { verbose }) => {
+            cli::commands::doctor::run(verbose).map_err(Into::into)
+        }
+        Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run().map_err(Into::into),
+        Some(cli::Command::InitConfig) => cli::commands::init_config::run().map_err(Into::into),
+        Some(cli::Command::Config(args)) => cli::commands::config::run(args).map_err(Into::into),
+        Some(cli::Command::InstallSkills(args)) => {
+            cli::commands::install_skills::run(args).map_err(Into::into)
+        }
+        Some(cli::Command::Update) => cli::commands::update::run().map_err(Into::into),
+        Some(cli::Command::Docs) => cli::commands::docs::run().map_err(Into::into),
+        Some(cli::Command::CheckUpdate) => update::run_background_check().map_err(Into::into),
+    };
 
     if let Err(e) = result {
         eprintln!("error: {}", e.message());
