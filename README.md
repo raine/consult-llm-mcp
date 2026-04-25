@@ -670,7 +670,7 @@ This downloads the latest GitHub release, verifies its SHA-256 checksum, updates
 
 If you previously used the MCP server version (`consult-llm-mcp` npm package):
 
-1. **Remove the MCP server registration** from your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+1. **Remove the MCP server registration** from your Claude Code config (`~/.claude.json`):
 
    ```json
    // remove this block:
