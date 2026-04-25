@@ -11,16 +11,16 @@ Reference for invoking the `consult-llm` CLI. Workflow skills delegate here for 
 Run `consult-llm` with the prompt on **stdin**, using a quoted heredoc.
 
 ```bash
-cat <<'EOF' | consult-llm -m <selector> -f src/foo.rs -f src/bar.rs
+cat <<'__CONSULT_LLM_END__' | consult-llm -m <selector> -f src/foo.rs -f src/bar.rs
 <prompt body>
-EOF
+__CONSULT_LLM_END__
 ```
 
 Rules:
 
 - **Run Bash in the foreground** (synchronous, no `run_in_background`). Only background the call when the caller explicitly passes `--background`.
-- **ALWAYS use `<<'EOF'` (quoted).** The quotes prevent the shell from expanding `$var`, backticks, or escapes inside the prompt. Unquoted heredocs corrupt prompts.
-- **Fallback to `--prompt-file <path>`** if the prompt contains the heredoc terminator, or on Windows/PowerShell. Write the prompt to a temp file, then `consult-llm --prompt-file /tmp/prompt.txt …`.
+- **ALWAYS use `<<'__CONSULT_LLM_END__'` (quoted, with this exact terminator).** The single quotes prevent shell expansion of `$var`, backticks, and escapes. The specific terminator `__CONSULT_LLM_END__` is chosen because it won't appear in model responses — never use `EOF` or `PROMPT` which commonly appear in code samples and would silently truncate the prompt.
+- **Fallback to `--prompt-file <path>`** if the prompt contains `__CONSULT_LLM_END__`, or on Windows/PowerShell. Write the prompt to a temp file with `$(mktemp)`, then pass it via `consult-llm --prompt-file "$f" …`.
 - **Stdout layout.** First line is `[model:<id>] [thread_id:<id>]`, then a blank line, then the response body. In `--web` mode the prefix is just `[model:<id>]` (no thread).
 - **Multi-turn.** Read `[thread_id:xxx]` from line 1 and pass it back with `-t <id>` on the next call. Thread IDs are opaque strings — don't modify them. Not portable across backends.
 - **Stderr** carries progress/spinner output. Ignore it.

@@ -636,9 +636,9 @@ The skill system has two layers:
 When a workflow skill runs, the agent pipes the prompt via stdin and passes file context with `-f`:
 
 ```bash
-cat <<'EOF' | consult-llm -m gemini -f src/main.rs -f src/config.rs
+cat <<'__CONSULT_LLM_END__' | consult-llm -m gemini -f src/main.rs -f src/config.rs
 Your question here.
-EOF
+__CONSULT_LLM_END__
 ```
 
 The response streams back to stdout and the agent sees it inline. If the response exceeds the shell tool's output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it — it can use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
