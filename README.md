@@ -427,6 +427,8 @@ consult-llm config set openai.backend api
 
 Shell out to an already-installed local CLI. No API keys needed in `consult-llm` — authentication is handled by the CLI tool.
 
+A key advantage over the API backend: CLI agents can browse your codebase, run commands, and do their own research before responding. The API backend receives only the prompt and files you explicitly include.
+
 **Gemini CLI** — requires the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and `gemini login`:
 
 ```bash
