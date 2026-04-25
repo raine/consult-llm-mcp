@@ -343,8 +343,6 @@ The CLI is invoked by your agent via the installed skills; you don't call it dir
 /debate should this be a separate service or stay in the monolith?
 ```
 
-If a response exceeds your agent's shell tool output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it — it can then use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
-
 ### CLI utilities
 
 ```bash
@@ -616,6 +614,18 @@ The skill system has two layers:
 **`consult-llm` (base CLI)** handles the mechanics: reading stdin, attaching file context, calling the right backend, streaming the response, and managing thread IDs for multi-turn conversations. A dedicated `consult-llm` reference skill documents this contract and is loaded by other skills before they invoke the CLI.
 
 **Workflow skills** compose on top. They gather context from the codebase, decide which models to call and how, and synthesize the results for you. When you run `/consult` or `/debate`, the agent reads a skill file that tells it how to orchestrate one or more `consult-llm` calls and what to do with the responses.
+
+### Invocation
+
+When a workflow skill runs, the agent pipes the prompt via stdin and passes file context with `-f`:
+
+```bash
+cat <<'EOF' | consult-llm -m gemini -f src/main.rs -f src/config.rs
+Your question here.
+EOF
+```
+
+The response streams back to stdout and the agent sees it inline. If the response exceeds the shell tool's output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it — it can use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
 
 ### Install
 
