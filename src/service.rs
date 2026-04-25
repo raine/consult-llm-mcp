@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::catalog::ModelRegistry;
-use crate::executors::types::{LlmExecutor, Usage};
+use crate::executors::types::{ExecutionRequest, LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
 use crate::group_thread_store::{self, StoredGroup, is_group_id};
@@ -490,13 +490,15 @@ impl ConsultService {
 
         let start = std::time::Instant::now();
         let run = query_llm(
-            &final_prompt,
-            &model,
+            ExecutionRequest {
+                prompt: final_prompt,
+                model: model.clone(),
+                system_prompt,
+                file_paths,
+                thread_id: thread_id.clone(),
+                spool: Arc::clone(&spool),
+            },
             &executor,
-            file_paths.as_deref(),
-            thread_id.as_deref(),
-            &system_prompt,
-            Arc::clone(&spool),
         )
         .await;
         let duration_ms = start.elapsed().as_millis() as u64;

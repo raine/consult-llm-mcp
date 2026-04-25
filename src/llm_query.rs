@@ -1,9 +1,6 @@
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
 use crate::executors::types::{ExecutionRequest, LlmExecutor, Usage};
 use consult_llm_core::llm_cost::calculate_cost;
-use consult_llm_core::monitoring::RunSpool;
+use std::sync::Arc;
 
 pub struct QueryResult {
     pub response: String,
@@ -13,24 +10,11 @@ pub struct QueryResult {
 }
 
 pub async fn query_llm(
-    prompt: &str,
-    model: &str,
+    req: ExecutionRequest,
     executor: &Arc<dyn LlmExecutor>,
-    file_paths: Option<&[PathBuf]>,
-    thread_id: Option<&str>,
-    system_prompt: &str,
-    spool: Arc<Mutex<RunSpool>>,
 ) -> anyhow::Result<QueryResult> {
-    let result = executor
-        .execute(ExecutionRequest {
-            prompt: prompt.to_string(),
-            model: model.to_string(),
-            system_prompt: system_prompt.to_string(),
-            file_paths: file_paths.map(|ps| ps.to_vec()),
-            thread_id: thread_id.map(|s| s.to_string()),
-            spool,
-        })
-        .await?;
+    let model = req.model.clone();
+    let result = executor.execute(req).await?;
 
     if result.response.is_empty() {
         anyhow::bail!("No response from the model");
@@ -38,7 +22,7 @@ pub async fn query_llm(
 
     let cost_info = match &result.usage {
         Some(usage) => {
-            let cost = calculate_cost(usage.prompt_tokens, usage.completion_tokens, model);
+            let cost = calculate_cost(usage.prompt_tokens, usage.completion_tokens, &model);
             format!(
                 "Tokens: {} input, {} output | Cost: ${:.6} (input: ${:.6}, output: ${:.6})",
                 usage.prompt_tokens,
