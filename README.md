@@ -387,93 +387,80 @@ consult-llm update                    # self-update the binary
 
 ## Providers & Configuration
 
-### Backends
+`consult-llm` separates **model families** from **backends**.
 
-Each model resolves to a provider backend.
+A **model family** is what you ask for — `gemini`, `openai`, `deepseek`, `minimax`, or `anthropic`.
 
-| Backend    | Description                  | When to use                                          |
-| ---------- | ---------------------------- | ---------------------------------------------------- |
-| API        | Direct provider API calls    | You have API keys and want the simplest setup        |
-| Gemini CLI | Shells out to `gemini`       | Free Gemini quota or existing Google tooling         |
-| Codex CLI  | Shells out to `codex`        | OpenAI models via Codex subscription                 |
-| Cursor CLI | Shells out to `cursor-agent` | Route GPT and Gemini through Cursor                  |
-| OpenCode   | Shells out to `opencode`     | Use Copilot, OpenRouter, or other OpenCode providers |
+A **backend** is how `consult-llm` reaches that model family:
 
-### Gemini CLI
+- **`api`** — direct HTTP calls using an API key
+- **CLI backends** — shell out to a local CLI tool already installed and logged in
 
-Requirements:
+| Model family | `api` backend | CLI backends available | API key env var |
+| ------------ | ------------- | ---------------------- | --------------- |
+| Gemini       | yes           | `gemini-cli`, `cursor-cli`, `opencode` | `GEMINI_API_KEY` |
+| OpenAI       | yes           | `codex-cli`, `cursor-cli`, `opencode`  | `OPENAI_API_KEY` |
+| DeepSeek     | yes           | `opencode`                             | `DEEPSEEK_API_KEY` |
+| MiniMax      | yes           | `opencode`                             | `MINIMAX_API_KEY` |
+| Anthropic    | yes           | none                                   | `ANTHROPIC_API_KEY` |
 
-1. Install the [Gemini CLI](https://github.com/google-gemini/gemini-cli)
-2. Run `gemini login`
+### API backend
+
+Direct HTTP calls to the provider. Requires an API key via environment variable.
+
+```bash
+export OPENAI_API_KEY=your_openai_key
+export GEMINI_API_KEY=your_gemini_key
+export ANTHROPIC_API_KEY=your_anthropic_key
+export DEEPSEEK_API_KEY=your_deepseek_key
+export MINIMAX_API_KEY=your_minimax_key
+```
+
+The `api` backend is the default. To set it explicitly:
+
+```bash
+consult-llm config set gemini.backend api
+consult-llm config set openai.backend api
+```
+
+### CLI backends
+
+Shell out to an already-installed local CLI. No API keys needed in `consult-llm` — authentication is handled by the CLI tool.
+
+**Gemini CLI** — requires the [Gemini CLI](https://github.com/google-gemini/gemini-cli) and `gemini login`:
 
 ```bash
 consult-llm config set gemini.backend gemini-cli
 ```
 
-### Codex CLI
-
-Requirements:
-
-1. Install Codex CLI
-2. Run `codex login`
+**Codex CLI** — requires Codex CLI and `codex login`:
 
 ```bash
 consult-llm config set openai.backend codex-cli
 consult-llm config set openai.reasoning_effort high  # none | minimal | low | medium | high | xhigh
 ```
 
-### Cursor CLI
+**Cursor CLI** — routes through `cursor-agent`:
 
 ```bash
 consult-llm config set openai.backend cursor-cli
 consult-llm config set gemini.backend cursor-cli
 ```
 
-If your prompts need shell commands in Cursor CLI ask mode, allow them in
-`~/.cursor/cli-config.json`.
+If your prompts need shell commands in Cursor CLI ask mode, allow them in `~/.cursor/cli-config.json`.
 
-### OpenCode
+**OpenCode** — routes through `opencode` to Copilot, OpenRouter, or other providers:
 
 ```bash
 consult-llm config set openai.backend opencode
-consult-llm config set openai.opencode_provider openai  # optional: override the OpenCode provider
 consult-llm config set gemini.backend opencode
-consult-llm config set opencode.default_provider copilot  # applies to providers without an override
-```
-
-### DeepSeek
-
-DeepSeek models can be used via the API backend or through OpenCode.
-
-```bash
-# API backend (requires DEEPSEEK_API_KEY)
-consult-llm config set deepseek.backend api
-
-# Or route through OpenCode
 consult-llm config set deepseek.backend opencode
-```
-
-### MiniMax
-
-MiniMax models can be used via the API backend or through OpenCode.
-
-```bash
-# API backend (requires MINIMAX_API_KEY)
-consult-llm config set minimax.backend api
-
-# Or route through OpenCode
 consult-llm config set minimax.backend opencode
+
+# Optional: configure OpenCode provider routing
+consult-llm config set opencode.default_provider copilot
+consult-llm config set openai.opencode_provider openai
 ```
-
-### Anthropic
-
-Anthropic models are available via the API backend only.
-
-```bash
-consult-llm config set anthropic.backend api
-```
-
-Requires `ANTHROPIC_API_KEY`.
 
 ## Multi-turn conversations
 
