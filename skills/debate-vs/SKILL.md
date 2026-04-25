@@ -6,7 +6,11 @@ description: Claude debates an opponent LLM (Gemini or Codex) through a multi-tu
 Debate an opponent LLM on the best implementation approach using multi-turn
 conversations, then synthesize and implement.
 
-Load `consult-llm` skill for CLI invocation mechanics.
+**Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
+
+## Phase 0: Load `consult-llm` Skill
+
+Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ## Configuration
 

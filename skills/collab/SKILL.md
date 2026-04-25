@@ -5,9 +5,13 @@ description: Gemini and Codex collaboratively brainstorm solutions, building on 
 
 Have Gemini and Codex collaboratively brainstorm solutions, then synthesize the best ideas into a plan. Both LLMs build on each other's ideas across rounds rather than critiquing positions.
 
-Load `consult-llm` skill for CLI invocation mechanics.
+**Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
 
 **Arguments:** `$ARGUMENTS`
+
+## Phase 0: Load `consult-llm` Skill
+
+Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ## Phase 1: Understand the Task (No Questions)
 

@@ -6,7 +6,7 @@ allowed-tools: Bash, Glob, Grep, Read
 
 Consult an external LLM with the user's query via the `consult-llm` CLI.
 
-Load `consult-llm` skill for CLI invocation mechanics.
+**Load the `consult-llm` skill before invoking** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
 
 ## Argument handling
 
@@ -26,6 +26,10 @@ Check `$ARGUMENTS` for flags:
 Strip all flags from the arguments to get the user query.
 
 ## Workflow
+
+### 0. Load `consult-llm` skill
+
+Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ### 1. Gather context
 

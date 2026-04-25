@@ -5,7 +5,7 @@ description: Claude brainstorms with an opponent LLM (Gemini or Codex) in altern
 
 Brainstorm collaboratively with an opponent LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.
 
-Load `consult-llm` skill for CLI invocation mechanics.
+**Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
 
 **Arguments:** `$ARGUMENTS`
 
@@ -25,6 +25,10 @@ Strip all flags from arguments to get the task description.
 
 If neither `--gemini` nor `--codex` is provided, ask the user which partner to
 use.
+
+## Phase 0: Load `consult-llm` Skill
+
+Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ## Phase 1: Understand the Task (No Questions)
 
