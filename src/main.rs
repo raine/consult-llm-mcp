@@ -36,7 +36,7 @@ async fn main() {
     let cli = cli::Cli::parse();
     if !matches!(
         cli.cmd,
-        Some(cli::Command::CheckUpdate | cli::Command::Update)
+        Some(cli::Command::CheckUpdate | cli::Command::Update | cli::Command::Docs)
     ) {
         update::check_and_notify();
     }
@@ -58,6 +58,9 @@ async fn main() {
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
             Some(cli::Command::Update) => cli::commands::update::run()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
+            Some(cli::Command::Docs) => {
+                cli::commands::docs::run().map_err(|e| cli::input::CliError::Generic(e.to_string()))
+            }
             Some(cli::Command::CheckUpdate) => update::run_background_check()
                 .map_err(|e| cli::input::CliError::Generic(e.to_string())),
         };

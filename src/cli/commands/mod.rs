@@ -1,4 +1,5 @@
 pub mod config;
+pub mod docs;
 pub mod doctor;
 pub mod init_config;
 pub mod init_prompt;

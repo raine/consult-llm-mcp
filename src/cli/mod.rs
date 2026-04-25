@@ -71,6 +71,8 @@ pub enum Command {
     Config(commands::config::ConfigArgs),
     /// Install bundled skills to platform skill directories
     InstallSkills(commands::install_skills::InstallSkillsArgs),
+    /// Show bundled documentation
+    Docs,
     /// Internal: background update check (self-spawned by update.rs).
     #[command(hide = true)]
     CheckUpdate,
