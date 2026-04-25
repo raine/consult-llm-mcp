@@ -5,26 +5,46 @@ agent workflow. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
+## How it works
+
+```
+Agent skill → consult-llm CLI → backend → stronger model → response inline
+```
+
 1. Install skills into your agent (Claude Code, Codex, OpenCode)
 2. Trigger with a slash command — `/consult`, `/debate`, `/collab`
 3. The skill pipes your prompt into `consult-llm`, which calls the backend and streams the response back inline
+
+```
+> The hint unlocking is still broken after your fix. Ask gemini
+
+⏺ Let me consult Gemini to understand this segmentation mismatch:
+
+⏺ Bash(cat issue.md | consult-llm -m gemini -f HintsText.tsx -f hints.ts)
+  ⎿ [model:gemini-3.1-pro-preview]
+
+     The root cause is a race condition in `handleConfirmGenerateHints`.
+     After `await generateHints()`, the component state updates in the
+     background, but the function continues with a stale `activeSegment`
+     variable — requesting a hint for "isn't" instead of "isn't it".
+
+⏺ Gemini identified the real issue — a race condition with stale state
+  after async operations. I was looking at the wrong thing entirely.
+```
 
 [Quick start](#quick-start) · [Usage](#usage) · [Backends](#backends) · [Configuration](#configuration) · [Logging](#logging) · [Monitor](#monitor) · [Skills](#skills) · [Migrating](#migrating-from-mcp) · [Changelog](CHANGELOG.md)
 
 > [!NOTE]
 > This project previously used MCP as its transport layer. If you were using that version, see the [migration guide](#migrating-from-mcp) below.
 
-## Features
+## What you can do
 
-- Query powerful AI models (GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7, DeepSeek V4 Pro, MiniMax M2.7) with relevant file context
-- [Gemini CLI backend](#gemini-cli): use the `gemini` CLI for Gemini models
-- [Codex CLI backend](#codex-cli): use the `codex` CLI for OpenAI models
-- [Cursor CLI backend](#cursor-cli): route GPT and Gemini through `cursor-agent`
-- [OpenCode backend](#opencode): use `opencode` with Copilot, OpenRouter, or 75+ providers
-- [Multi-turn conversations](#multi-turn-conversations): resume sessions across requests with `thread_id`
-- [Web mode](#web-mode): copy formatted prompts to clipboard for browser-based LLMs
-- [Skills](#skills): multi-LLM debate, collaboration, and consultation workflows
-- [Monitor TUI](#monitor): real-time dashboard for active runs and history
+- **Consult a stronger model** from your agent with relevant file context (`/consult`)
+- **Have models debate the best approach** and synthesize a consensus (`/debate`)
+- **Use existing subscriptions** via CLI backends without API keys ([Gemini CLI](#gemini-cli), [Codex CLI](#codex-cli), [Cursor CLI](#cursor-cli), [OpenCode](#opencode))
+- **Continue conversations across requests** with `thread_id`
+- **Copy prompts to clipboard** for browser-based LLMs (`--web`)
+- **[Monitor](#monitor) active and past runs** in a real-time TUI
 
 <img src="meta/monitor-screenshot.webp" alt="consult-llm-monitor screenshot" width="600">
 
@@ -56,7 +76,14 @@ export OPENAI_API_KEY=your_openai_key
 export GEMINI_API_KEY=your_gemini_key
 ```
 
-3. Install the skills so your agent can call `consult-llm` for you:
+3. Verify your setup:
+
+```bash
+consult-llm models                    # see available models and resolved selectors
+echo "hello" | consult-llm -m gemini  # quick smoke test
+```
+
+4. Install the skills so your agent can call `consult-llm` for you:
 
 ```bash
 consult-llm install-skills
@@ -359,7 +386,9 @@ consult-llm update                    # self-update the binary
 
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
 
-## Backends
+## Providers & Configuration
+
+### Backends
 
 Each model resolves to a provider backend.
 
@@ -448,8 +477,6 @@ the conversation with full context from prior turns.
 This works with all CLI backends (Gemini CLI, Codex CLI, Cursor CLI). See the
 [debate skills](#skills) for multi-LLM workflows that use thread IDs to
 maintain context across debate rounds.
-
-## Configuration
 
 ### Config files
 
