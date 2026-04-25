@@ -441,6 +441,30 @@ consult-llm config set gemini.backend opencode
 consult-llm config set opencode.default_provider copilot  # applies to providers without an override
 ```
 
+### DeepSeek
+
+DeepSeek models can be used via the API backend or through OpenCode.
+
+```bash
+# API backend (requires DEEPSEEK_API_KEY)
+consult-llm config set deepseek.backend api
+
+# Or route through OpenCode
+consult-llm config set deepseek.backend opencode
+```
+
+### MiniMax
+
+MiniMax models can be used via the API backend or through OpenCode.
+
+```bash
+# API backend (requires MINIMAX_API_KEY)
+consult-llm config set minimax.backend api
+
+# Or route through OpenCode
+consult-llm config set minimax.backend opencode
+```
+
 ## Multi-turn conversations
 
 CLI backends support multi-turn conversations. The first response includes a
