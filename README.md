@@ -18,6 +18,9 @@ Agent skill → consult-llm CLI → backend → stronger model → response inli
 ```
 > The hint unlocking is still broken after your fix. Ask gemini
 
+⏺ Skill(consult-llm)
+  ⎿  Successfully loaded skill · 1 tool allowed
+
 ⏺ Let me consult Gemini to understand this segmentation mismatch:
 
 ⏺ Bash(cat issue.md | consult-llm -m gemini -f HintsText.tsx -f hints.ts)
