@@ -99,32 +99,7 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Each model receives the other's latest response. Write each rebuttal prompt to a temp file with `mktemp` and invoke `consult-llm` once with two `--run` flags:
-
-```bash
-GEMINI_PROMPT=$(mktemp)
-CODEX_PROMPT=$(mktemp)
-
-cat <<'__CONSULT_LLM_END__' >| "$GEMINI_PROMPT"
-Your opponent proposed this alternative approach:
-[Codex's latest response]
-
-Provide a rebuttal:
-...
-__CONSULT_LLM_END__
-
-cat <<'__CONSULT_LLM_END__' >| "$CODEX_PROMPT"
-Your opponent proposed this alternative approach:
-[Gemini's latest response]
-
-Provide a rebuttal:
-...
-__CONSULT_LLM_END__
-
-consult-llm \
-  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
-  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
-```
+Each model receives the other's latest response. Invoke `consult-llm` once with two `--run` flags, continuing each model's thread.
 
 Present both responses to the user after each round.
 
@@ -229,26 +204,7 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Write the review prompt to a temp file and invoke `consult-llm` once with two `--run` flags, passing `--diff-files` and `--diff-base` as shared context:
-
-```bash
-REVIEW_PROMPT=$(mktemp)
-
-cat <<'__CONSULT_LLM_END__' >| "$REVIEW_PROMPT"
-Forget which side you argued during the debate. Review the implementation purely on its merits:
-- Any obvious bugs or edge cases missed?
-- Code quality issues (error handling, naming, structure)?
-- Deviations from best practices?
-- Security concerns?
-
-Be concise. Only flag issues worth fixing.
-__CONSULT_LLM_END__
-
-consult-llm --task review \
-  --diff-files <path> [--diff-files <path> ...] --diff-base HEAD~N \
-  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$REVIEW_PROMPT" \
-  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$REVIEW_PROMPT"
-```
+Invoke `consult-llm --task review` once with two `--run` flags, passing `--diff-files` and `--diff-base` as shared context, continuing each model's thread.
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

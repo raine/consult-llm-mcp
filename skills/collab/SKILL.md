@@ -75,34 +75,7 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Each model receives a different prompt (the other model's response embedded). Write each prompt to a temp file with `mktemp` and invoke `consult-llm` once with two `--run` flags:
-
-```bash
-GEMINI_PROMPT=$(mktemp)
-CODEX_PROMPT=$(mktemp)
-
-cat <<'__CONSULT_LLM_END__' >| "$GEMINI_PROMPT"
-A collaborator shared these ideas:
-
-[Codex's response from the previous round]
-
-Build on their thinking:
-...
-__CONSULT_LLM_END__
-
-cat <<'__CONSULT_LLM_END__' >| "$CODEX_PROMPT"
-A collaborator shared these ideas:
-
-[Gemini's response from the previous round]
-
-Build on their thinking:
-...
-__CONSULT_LLM_END__
-
-consult-llm \
-  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
-  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
-```
+Each model receives a different prompt (the other model's response embedded). Invoke `consult-llm` once with two `--run` flags, continuing each model's thread.
 
 Present both responses to the user after each round.
 
