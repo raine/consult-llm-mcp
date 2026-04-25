@@ -465,6 +465,16 @@ consult-llm config set minimax.backend api
 consult-llm config set minimax.backend opencode
 ```
 
+### Anthropic
+
+Anthropic models are available via the API backend only.
+
+```bash
+consult-llm config set anthropic.backend api
+```
+
+Requires `ANTHROPIC_API_KEY`.
+
 ## Multi-turn conversations
 
 CLI backends support multi-turn conversations. The first response includes a
