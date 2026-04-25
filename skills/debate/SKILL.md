@@ -103,15 +103,34 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Each model receives the other's latest response, so two separate calls are needed. Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full rebuttal prompt text and thread ID.
+Each model receives the other's latest response. Write each rebuttal prompt to a temp file with `mktemp` and invoke `consult-llm` once with two `--run` flags:
 
-**Gemini subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-t <gemini_thread_id>`. Send the rebuttal prompt (with Codex's latest response embedded) on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+```bash
+GEMINI_PROMPT=$(mktemp)
+CODEX_PROMPT=$(mktemp)
 
-**Codex subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-t <codex_thread_id>`. Send the rebuttal prompt (with Gemini's latest response embedded) on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+cat <<'__CONSULT_LLM_END__' > "$GEMINI_PROMPT"
+Your opponent proposed this alternative approach:
+[Codex's latest response]
+
+Provide a rebuttal:
+...
+__CONSULT_LLM_END__
+
+cat <<'__CONSULT_LLM_END__' > "$CODEX_PROMPT"
+Your opponent proposed this alternative approach:
+[Gemini's latest response]
+
+Provide a rebuttal:
+...
+__CONSULT_LLM_END__
+
+consult-llm \
+  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
+  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
+```
+
+Always use `__CONSULT_LLM_END__` as the heredoc terminator. Output is in the same group format as Phase 2 — extract updated thread IDs from each model's `[thread_id:xxx]` tag.
 
 Present both responses to the user after each round.
 
@@ -216,15 +235,28 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full review prompt, thread ID, and the list of changed files + base ref.
+Write the review prompt to a temp file and invoke `consult-llm` once with two `--run` flags, passing `--diff-files` and `--diff-base` as shared context:
 
-**Gemini subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini`, `--task review`, `-t <gemini_thread_id>`, `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+```bash
+REVIEW_PROMPT=$(mktemp)
 
-**Codex subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m openai`, `--task review`, `-t <codex_thread_id>`, `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+cat <<'__CONSULT_LLM_END__' > "$REVIEW_PROMPT"
+Forget which side you argued during the debate. Review the implementation purely on its merits:
+- Any obvious bugs or edge cases missed?
+- Code quality issues (error handling, naming, structure)?
+- Deviations from best practices?
+- Security concerns?
+
+Be concise. Only flag issues worth fixing.
+__CONSULT_LLM_END__
+
+consult-llm --task review \
+  --diff-files <path> [--diff-files <path> ...] --diff-base HEAD~N \
+  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$REVIEW_PROMPT" \
+  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$REVIEW_PROMPT"
+```
+
+Always use `__CONSULT_LLM_END__` as the heredoc terminator. Both models receive the same review prompt but continue their own threads.
 
 **Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases

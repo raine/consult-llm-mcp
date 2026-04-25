@@ -79,15 +79,36 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Each model receives a different prompt (the other model's response embedded), so two separate calls are needed. Spawn BOTH as parallel subagents (`Agent` tool, `subagent_type: "general-purpose"`, `model: "sonnet"`). NEVER run subagents in the background — always run them in the foreground so you can process their results immediately. Each subagent prompt must include the full build-on prompt text and thread ID.
+Each model receives a different prompt (the other model's response embedded). Write each prompt to a temp file with `mktemp` and invoke `consult-llm` once with two `--run` flags:
 
-**Gemini subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m gemini` and `-t <gemini_thread_id>`. Send the build-on prompt (with Codex's latest ideas embedded) on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+```bash
+GEMINI_PROMPT=$(mktemp)
+CODEX_PROMPT=$(mktemp)
 
-**Codex subagent** — prompt must instruct it to:
-- Invoke `consult-llm` per the `consult-llm` skill with `-m openai` and `-t <codex_thread_id>`. Send the build-on prompt (with Gemini's latest ideas embedded) on stdin via quoted heredoc.
-- Return the COMPLETE response including the `[thread_id:xxx]` prefix on the first line.
+cat <<'__CONSULT_LLM_END__' > "$GEMINI_PROMPT"
+A collaborator shared these ideas:
+
+[Codex's response from the previous round]
+
+Build on their thinking:
+...
+__CONSULT_LLM_END__
+
+cat <<'__CONSULT_LLM_END__' > "$CODEX_PROMPT"
+A collaborator shared these ideas:
+
+[Gemini's response from the previous round]
+
+Build on their thinking:
+...
+__CONSULT_LLM_END__
+
+consult-llm \
+  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
+  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
+```
+
+Always use `__CONSULT_LLM_END__` as the heredoc terminator. Output is in the same group format as Phase 2 — extract updated thread IDs from each model's `[thread_id:xxx]` tag.
 
 Present both responses to the user after each round.
 

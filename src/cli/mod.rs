@@ -49,6 +49,12 @@ pub struct Cli {
     /// Repo path for git diff (default cwd)
     #[arg(long = "diff-repo")]
     pub diff_repo: Option<String>,
+
+    /// Per-model run spec (repeatable). Format: model=<selector>,thread=<id>,prompt-file=<path>
+    /// Cannot be combined with -m, -t, --prompt-file, or --web.
+    /// Note: prompt-file paths containing commas are not supported.
+    #[arg(long = "run")]
+    pub runs: Vec<String>,
 }
 
 #[derive(Subcommand, Debug)]

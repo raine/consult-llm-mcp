@@ -14,6 +14,7 @@ fn bare_cli(files: Vec<String>, diff_files: Vec<String>) -> super::Cli {
         diff_files,
         diff_base: None,
         diff_repo: None,
+        runs: vec![],
     }
 }
 

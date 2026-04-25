@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -11,7 +10,7 @@ use crate::llm::ExecutorProvider;
 use crate::llm_query::query_llm;
 use crate::logger::{log_prompt, log_response};
 use crate::prompt_builder::build_prompt;
-use crate::schema::{ConsultLlmArgs, GitDiffArgs, ModelSelector};
+use crate::schema::{ConsultLlmArgs, GitDiffArgs, ModelSelector, TaskMode};
 use crate::system_prompt::get_system_prompt;
 use consult_llm_core::monitoring::RunSpool;
 
@@ -45,6 +44,12 @@ pub enum ConsultOutcome {
     },
 }
 
+pub struct ConsultJob {
+    pub model: String,
+    pub prompt: String,
+    pub thread_id: Option<String>,
+}
+
 pub struct ConsultService {
     registry: Arc<ModelRegistry>,
     executor_provider: Arc<ExecutorProvider>,
@@ -52,8 +57,8 @@ pub struct ConsultService {
 
 /// Pre-built inputs shared across all parallel model runs.
 struct SharedInputs {
-    /// Inlined prompt with file contents + git diff for API-mode executors.
-    api_context_block: Option<String>,
+    /// Parsed file contents for building API-mode prompts.
+    context_files: Vec<(String, String)>,
     /// Absolute file paths for CLI-mode executors.
     abs_file_paths: Option<Vec<PathBuf>>,
     git_diff: Option<String>,
@@ -72,6 +77,7 @@ struct SingleResult {
     body: String,
     usage: Option<Usage>,
     thread_id: Option<String>,
+    failed: bool,
 }
 
 fn normalize_models(
@@ -159,44 +165,37 @@ fn plan_resume(
     }
 }
 
-fn build_shared_inputs(
-    args: &ConsultLlmArgs,
-    executors: &[Arc<dyn LlmExecutor>],
-) -> anyhow::Result<SharedInputs> {
-    let git_diff = resolve_git_diff(args.git_diff.as_ref());
+fn build_shared_inputs(args: &ConsultLlmArgs) -> anyhow::Result<SharedInputs> {
+    build_shared_inputs_from_files(
+        args.files.as_deref().unwrap_or_default(),
+        args.git_diff.as_ref(),
+    )
+}
 
-    let any_api_mode = executors
-        .iter()
-        .any(|e| !e.capabilities().supports_file_refs);
-    let api_context_block = if any_api_mode {
-        let context_files = args
-            .files
-            .as_ref()
-            .map(|f| process_files(f))
-            .transpose()?
-            .unwrap_or_default();
-        Some(build_prompt(
-            &args.prompt,
-            &context_files,
-            git_diff.as_deref(),
-        ))
+fn build_shared_inputs_from_files(
+    files: &[String],
+    git_diff_args: Option<&GitDiffArgs>,
+) -> anyhow::Result<SharedInputs> {
+    let git_diff = resolve_git_diff(git_diff_args);
+
+    let context_files = if !files.is_empty() {
+        process_files(files)?
     } else {
-        None
+        vec![]
     };
 
-    let abs_file_paths = if let Some(files) = args.files.as_ref() {
+    let abs_file_paths = if !files.is_empty() {
         let cwd = std::env::current_dir()?;
-        let paths: Vec<PathBuf> = files.iter().map(|f| cwd.join(f)).collect();
-        Some(paths)
+        Some(files.iter().map(|f| cwd.join(f)).collect())
     } else {
         None
     };
 
     Ok(SharedInputs {
-        api_context_block,
+        context_files,
         abs_file_paths,
         git_diff,
-        raw_files: args.files.clone().unwrap_or_default(),
+        raw_files: files.to_vec(),
     })
 }
 
@@ -237,28 +236,76 @@ impl ConsultService {
         };
 
         let models = normalize_models(&self.registry, args.model.clone(), loaded_group.as_ref())?;
+        let plan = plan_resume(args.thread_id.as_deref(), &models, loaded_group)?;
+        let shared = build_shared_inputs(&args)?;
+
+        let jobs: Vec<ConsultJob> = models
+            .iter()
+            .map(|m| ConsultJob {
+                model: m.clone(),
+                prompt: args.prompt.clone(),
+                thread_id: plan.threads.get(m).cloned().flatten(),
+            })
+            .collect();
+
+        self.run_jobs(
+            jobs,
+            shared,
+            args.task_mode,
+            plan.group_id,
+            plan.unwrap_single,
+        )
+        .await
+    }
+
+    /// Run a set of pre-built jobs with per-job prompts in parallel.
+    pub async fn consult_jobs(
+        &self,
+        jobs: Vec<ConsultJob>,
+        files: &[String],
+        git_diff_args: Option<&GitDiffArgs>,
+        task_mode: TaskMode,
+        existing_group_id: Option<String>,
+    ) -> anyhow::Result<ConsultOutcome> {
+        let shared = build_shared_inputs_from_files(files, git_diff_args)?;
+        // --run always uses the group output path; never unwrap to a plain Response.
+        self.run_jobs(jobs, shared, task_mode, existing_group_id, false)
+            .await
+    }
+
+    async fn run_jobs(
+        &self,
+        jobs: Vec<ConsultJob>,
+        shared: SharedInputs,
+        task_mode: TaskMode,
+        existing_group_id: Option<String>,
+        unwrap_single: bool,
+    ) -> anyhow::Result<ConsultOutcome> {
+        let models: Vec<String> = jobs.iter().map(|j| j.model.clone()).collect();
 
         let executors: Vec<Arc<dyn LlmExecutor>> = models
             .iter()
             .map(|m| self.executor_provider.get_executor(m))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let shared = build_shared_inputs(&args, &executors)?;
-        let plan = plan_resume(args.thread_id.as_deref(), &models, loaded_group)?;
-
-        let futures: Vec<_> = models
-            .iter()
-            .cloned()
+        let futures: Vec<_> = jobs
+            .into_iter()
             .zip(executors.into_iter())
-            .map(|(m, exec)| {
-                let tid = plan.threads.get(&m).cloned().flatten();
-                self.run_single_model(&args, &shared, m, exec, tid)
+            .map(|(job, exec)| {
+                self.run_single_model(
+                    &shared,
+                    job.model,
+                    exec,
+                    job.thread_id,
+                    job.prompt,
+                    task_mode,
+                )
             })
             .collect();
 
         let outcomes = futures::future::join_all(futures).await;
 
-        if plan.unwrap_single {
+        if unwrap_single {
             // Single-model path: propagate errors directly.
             let r = outcomes.into_iter().next().unwrap()?;
             return Ok(ConsultOutcome::Response {
@@ -279,38 +326,61 @@ impl ConsultService {
                     body: format!("**Error:** {e:#}"),
                     usage: None,
                     thread_id: None,
+                    failed: true,
                 }),
             }
         }
-        if results.iter().all(|r| r.body.starts_with("**Error:**")) {
+        if results.iter().all(|r| r.failed) {
             anyhow::bail!("all model consultations failed");
         }
 
-        let group_id = plan
-            .group_id
+        let group_id = existing_group_id
             .clone()
             .unwrap_or_else(group_thread_store::generate_group_id);
 
-        let mut members = match &plan.group_id {
-            Some(gid) => group_thread_store::load(gid)?
-                .map(|g| g.members)
-                .unwrap_or_default(),
-            None => BTreeMap::new(),
-        };
+        // Load existing group state so we can preserve members from previous calls
+        // that are not part of this invocation.
+        let existing_group = existing_group_id
+            .as_deref()
+            .map(group_thread_store::load)
+            .transpose()?
+            .flatten();
+
+        let mut members = existing_group
+            .as_ref()
+            .map(|g| g.members.clone())
+            .unwrap_or_default();
+
+        // Preserve the existing display order; only append models new to this group.
+        let mut member_order: Vec<String> = existing_group
+            .as_ref()
+            .map(|g| {
+                if g.member_order.is_empty() {
+                    g.members.keys().cloned().collect()
+                } else {
+                    g.member_order.clone()
+                }
+            })
+            .unwrap_or_default();
+
         for r in &results {
-            if let Some(tid) = &r.thread_id {
-                members.insert(r.model.clone(), tid.clone());
+            if !r.failed {
+                if let Some(tid) = &r.thread_id {
+                    members.insert(r.model.clone(), tid.clone());
+                }
+                if !member_order.contains(&r.model) {
+                    member_order.push(r.model.clone());
+                }
             }
         }
-        // Preserve original selection order for consistent resume behaviour.
-        let member_order: Vec<String> = models.clone();
+
         group_thread_store::save(&StoredGroup {
             id: group_id.clone(),
             members,
             member_order,
         })?;
 
-        if plan.group_id.is_none() {
+        if existing_group_id.is_none() {
             tokio::task::spawn_blocking(|| {
                 let _ = group_thread_store::cleanup_expired(7);
             });
@@ -346,11 +416,12 @@ impl ConsultService {
 
     async fn run_single_model(
         &self,
-        args: &ConsultLlmArgs,
         shared: &SharedInputs,
         model: String,
         executor: Arc<dyn LlmExecutor>,
         thread_id: Option<String>,
+        prompt: String,
+        task_mode: TaskMode,
     ) -> anyhow::Result<SingleResult> {
         if thread_id.is_some() && !executor.capabilities().supports_threads {
             anyhow::bail!(
@@ -361,7 +432,7 @@ impl ConsultService {
         let consultation_id = uuid::Uuid::new_v4().simple().to_string();
         let backend_name = executor.backend_name().to_string();
 
-        let task_mode_str = match args.task_mode {
+        let task_mode_str = match task_mode {
             crate::schema::TaskMode::General => None,
             other => Some(format!("{other:?}").to_lowercase()),
         };
@@ -390,23 +461,22 @@ impl ConsultService {
         };
         let spool = Arc::new(Mutex::new(RunSpool::new(meta)));
 
-        let (prompt, file_paths) = if !executor.capabilities().supports_file_refs {
-            let block = shared
-                .api_context_block
-                .clone()
-                .expect("api_context_block must be built when any executor is API-mode");
-            (block, None)
+        let (final_prompt, file_paths) = if !executor.capabilities().supports_file_refs {
+            (
+                build_prompt(&prompt, &shared.context_files, shared.git_diff.as_deref()),
+                None,
+            )
         } else {
-            let prompt = match &shared.git_diff {
+            let p = match &shared.git_diff {
                 Some(diff) if !diff.trim().is_empty() => {
-                    format!("## Git Diff\n```diff\n{diff}\n```\n\n{}", args.prompt)
+                    format!("## Git Diff\n```diff\n{diff}\n```\n\n{prompt}")
                 }
-                _ => args.prompt.clone(),
+                _ => prompt.clone(),
             };
-            (prompt, shared.abs_file_paths.clone())
+            (p, shared.abs_file_paths.clone())
         };
 
-        log_prompt(&model, &prompt);
+        log_prompt(&model, &final_prompt);
 
         if !shared.raw_files.is_empty() {
             spool.lock().unwrap().stream_event(
@@ -416,11 +486,11 @@ impl ConsultService {
             );
         }
 
-        let system_prompt = get_system_prompt(executor.capabilities().is_cli, args.task_mode);
+        let system_prompt = get_system_prompt(executor.capabilities().is_cli, task_mode);
 
         let start = std::time::Instant::now();
         let run = query_llm(
-            &prompt,
+            &final_prompt,
             &model,
             &executor,
             file_paths.as_deref(),
@@ -471,12 +541,15 @@ impl ConsultService {
             body,
             usage,
             thread_id: result_thread_id,
+            failed: false,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn reg() -> ModelRegistry {
