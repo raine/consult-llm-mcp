@@ -1,11 +1,7 @@
 use async_trait::async_trait;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
@@ -152,24 +148,27 @@ impl LlmExecutor for CodexCliExecutor {
         Some(&self.codex_reasoning_effort)
     }
 
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult> {
-        let message = append_file_refs(prompt, file_paths);
-        let full_prompt = if thread_id.is_some() {
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+        let ExecutionRequest {
+            prompt,
+            model,
+            system_prompt,
+            file_paths,
+            thread_id,
+            spool,
+        } = req;
+        let fps = file_paths.as_deref();
+        let tid = thread_id.as_deref();
+
+        let message = append_file_refs(&prompt, fps);
+        let full_prompt = if tid.is_some() {
             message
         } else {
             format!("{system_prompt}\n\n{message}")
         };
 
         let mut args: Vec<String> = vec!["exec".to_string()];
-        if thread_id.is_some() {
+        if tid.is_some() {
             args.push("resume".to_string());
         }
         args.extend(["--json".to_string(), "--skip-git-repo-check".to_string()]);
@@ -180,22 +179,22 @@ impl LlmExecutor for CodexCliExecutor {
         ));
 
         // --add-dir is not supported by `codex exec resume`
-        if thread_id.is_none() {
-            args.extend(build_extra_dir_args(file_paths, "--add-dir"));
+        if tid.is_none() {
+            args.extend(build_extra_dir_args(fps, "--add-dir"));
         }
 
         args.push("-m".to_string());
-        args.push(model.to_string());
-        if let Some(tid) = thread_id {
-            args.push(tid.to_string());
+        args.push(model.clone());
+        if let Some(t) = tid {
+            args.push(t.to_string());
         }
 
         run_cli_executor(
             "codex",
             &args,
             &full_prompt,
-            prompt,
-            system_prompt,
+            &prompt,
+            &system_prompt,
             spool,
             parse_codex_line,
         )

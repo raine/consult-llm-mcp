@@ -19,6 +19,17 @@ pub struct ExecuteResult {
     pub thread_id: Option<String>,
 }
 
+/// All parameters for a single LLM execution, bundled to allow future additions
+/// without breaking every executor's method signature.
+pub struct ExecutionRequest {
+    pub prompt: String,
+    pub model: String,
+    pub system_prompt: String,
+    pub file_paths: Option<Vec<PathBuf>>,
+    pub thread_id: Option<String>,
+    pub spool: Arc<Mutex<RunSpool>>,
+}
+
 #[async_trait]
 pub trait LlmExecutor: Send + Sync {
     fn capabilities(&self) -> &LlmExecutorCapabilities;
@@ -26,13 +37,5 @@ pub trait LlmExecutor: Send + Sync {
     fn reasoning_effort(&self, _model: &str) -> Option<&str> {
         None
     }
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult>;
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult>;
 }

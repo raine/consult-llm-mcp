@@ -1,11 +1,7 @@
 use async_trait::async_trait;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 
 pub struct GeminiCliExecutor {
@@ -155,17 +151,20 @@ impl LlmExecutor for GeminiCliExecutor {
         "gemini_cli"
     }
 
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult> {
-        let message_with_files = append_file_refs(prompt, file_paths);
-        let message = if thread_id.is_some() {
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+        let ExecutionRequest {
+            prompt,
+            model,
+            system_prompt,
+            file_paths,
+            thread_id,
+            spool,
+        } = req;
+        let fps = file_paths.as_deref();
+        let tid = thread_id.as_deref();
+
+        let message_with_files = append_file_refs(&prompt, fps);
+        let message = if tid.is_some() {
             message_with_files
         } else {
             format!("{system_prompt}\n\n{message_with_files}")
@@ -173,24 +172,24 @@ impl LlmExecutor for GeminiCliExecutor {
 
         let mut args: Vec<String> = vec![
             "-m".to_string(),
-            model.to_string(),
+            model.clone(),
             "-o".to_string(),
             "stream-json".to_string(),
         ];
 
-        args.extend(build_extra_dir_args(file_paths, "--include-directories"));
+        args.extend(build_extra_dir_args(fps, "--include-directories"));
 
-        if let Some(tid) = thread_id {
+        if let Some(t) = tid {
             args.push("-r".to_string());
-            args.push(tid.to_string());
+            args.push(t.to_string());
         }
 
         run_cli_executor(
             "gemini",
             &args,
             &message,
-            prompt,
-            system_prompt,
+            &prompt,
+            &system_prompt,
             spool,
             parse_gemini_line,
         )

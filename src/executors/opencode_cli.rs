@@ -1,11 +1,7 @@
 use async_trait::async_trait;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use consult_llm_core::monitoring::RunSpool;
 
 use super::stream::{ParsedStreamEvent, StreamEvents};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, run_cli_executor};
 
 pub struct OpenCodeCliExecutor {
@@ -107,17 +103,20 @@ impl LlmExecutor for OpenCodeCliExecutor {
         "opencode_cli"
     }
 
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult> {
-        let message = append_file_refs(prompt, file_paths);
-        let full_prompt = if thread_id.is_some() {
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+        let ExecutionRequest {
+            prompt,
+            model,
+            system_prompt,
+            file_paths,
+            thread_id,
+            spool,
+        } = req;
+        let fps = file_paths.as_deref();
+        let tid = thread_id.as_deref();
+
+        let message = append_file_refs(&prompt, fps);
+        let full_prompt = if tid.is_some() {
             message
         } else {
             format!("{system_prompt}\n\n{message}")
@@ -133,12 +132,12 @@ impl LlmExecutor for OpenCodeCliExecutor {
             opencode_model,
         ];
 
-        if let Some(tid) = thread_id {
+        if let Some(t) = tid {
             args.push("--session".to_string());
-            args.push(tid.to_string());
+            args.push(t.to_string());
         }
 
-        if let Some(fps) = file_paths
+        if let Some(fps) = fps
             && !fps.is_empty()
         {
             for fp in fps {
@@ -151,8 +150,8 @@ impl LlmExecutor for OpenCodeCliExecutor {
             "opencode",
             &args,
             &full_prompt,
-            prompt,
-            system_prompt,
+            &prompt,
+            &system_prompt,
             spool,
             parse_opencode_line,
         )

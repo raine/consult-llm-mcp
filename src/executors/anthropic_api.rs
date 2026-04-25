@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 
-use consult_llm_core::monitoring::RunSpool;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::thread_store;
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities, Usage};
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
 use crate::logger::log_to_file;
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -92,16 +89,17 @@ impl LlmExecutor for AnthropicApiExecutor {
         "api"
     }
 
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult> {
-        if let Some(fps) = file_paths
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+        let ExecutionRequest {
+            prompt,
+            model,
+            system_prompt,
+            file_paths,
+            thread_id,
+            spool,
+        } = req;
+
+        if let Some(ref fps) = file_paths
             && !fps.is_empty()
         {
             let msg = format!(
@@ -112,7 +110,7 @@ impl LlmExecutor for AnthropicApiExecutor {
         }
 
         let is_new_thread = thread_id.is_none();
-        let active_thread_id = match thread_id {
+        let active_thread_id = match thread_id.as_deref() {
             Some(id) => id.to_string(),
             None => thread_store::generate_thread_id(),
         };
@@ -132,10 +130,10 @@ impl LlmExecutor for AnthropicApiExecutor {
         {
             let mut s = spool.lock().unwrap();
             s.stream_event(ParsedStreamEvent::SystemPrompt {
-                text: system_prompt.to_string(),
+                text: system_prompt.clone(),
             });
             s.stream_event(ParsedStreamEvent::Prompt {
-                text: prompt.to_string(),
+                text: prompt.clone(),
             });
         }
 
@@ -155,12 +153,12 @@ impl LlmExecutor for AnthropicApiExecutor {
         }
         messages.push(Message {
             role: "user".to_string(),
-            content: prompt.to_string(),
+            content: prompt.clone(),
         });
 
         let request = MessagesRequest {
-            model: model.to_string(),
-            system: system_prompt.to_string(),
+            model: model.clone(),
+            system: system_prompt,
             messages,
             max_tokens: DEFAULT_MAX_TOKENS,
         };
@@ -247,9 +245,9 @@ impl LlmExecutor for AnthropicApiExecutor {
         thread_store::append_turn(
             &active_thread_id,
             thread_store::StoredTurn {
-                user_prompt: prompt.to_string(),
+                user_prompt: prompt,
                 assistant_response: response.clone(),
-                model: model.to_string(),
+                model,
                 usage: usage.clone(),
             },
             is_new_thread,

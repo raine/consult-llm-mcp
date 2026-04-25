@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::config::ModelRegistry;
+use crate::catalog::ModelRegistry;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;

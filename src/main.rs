@@ -1,3 +1,4 @@
+mod catalog;
 mod cli;
 mod clipboard;
 mod config;

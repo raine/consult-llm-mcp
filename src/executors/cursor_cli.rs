@@ -1,13 +1,10 @@
 use async_trait::async_trait;
 use smallvec::SmallVec;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use consult_llm_core::monitoring::RunSpool;
 
 use super::run_cli_executor;
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
-use super::types::{ExecuteResult, LlmExecutor, LlmExecutorCapabilities};
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 pub struct CursorCliExecutor {
     capabilities: LlmExecutorCapabilities,
     codex_reasoning_effort: String,
@@ -270,23 +267,26 @@ impl LlmExecutor for CursorCliExecutor {
         }
     }
 
-    async fn execute(
-        &self,
-        prompt: &str,
-        model: &str,
-        system_prompt: &str,
-        file_paths: Option<&[PathBuf]>,
-        thread_id: Option<&str>,
-        spool: Arc<Mutex<RunSpool>>,
-    ) -> anyhow::Result<ExecuteResult> {
-        let message_with_files = append_files(prompt, file_paths);
-        let message = if thread_id.is_some() {
+    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+        let ExecutionRequest {
+            prompt,
+            model,
+            system_prompt,
+            file_paths,
+            thread_id,
+            spool,
+        } = req;
+        let fps = file_paths.as_deref();
+        let tid = thread_id.as_deref();
+
+        let message_with_files = append_files(&prompt, fps);
+        let message = if tid.is_some() {
             message_with_files
         } else {
             format!("{system_prompt}\n\n{message_with_files}")
         };
 
-        let cursor_model = map_cursor_model(model, &self.codex_reasoning_effort);
+        let cursor_model = map_cursor_model(&model, &self.codex_reasoning_effort);
 
         // --trust is required for headless (--print) mode to skip the interactive
         // workspace trust prompt. --mode ask restricts to read-only operations.
@@ -300,24 +300,24 @@ impl LlmExecutor for CursorCliExecutor {
             "--model".to_string(),
             cursor_model,
         ];
-        if let Some(tid) = thread_id {
+        if let Some(t) = tid {
             args.push("--resume".to_string());
-            args.push(tid.to_string());
+            args.push(t.to_string());
         }
 
         let mut result = run_cli_executor(
             "cursor-agent",
             &args,
             &message,
-            prompt,
-            system_prompt,
+            &prompt,
+            &system_prompt,
             spool,
             parse_cursor_line,
         )
         .await?;
         // Cursor doesn't always emit a session ID; preserve the input thread_id
         if result.thread_id.is_none() {
-            result.thread_id = thread_id.map(|s| s.to_string());
+            result.thread_id = tid.map(|s| s.to_string());
         }
         Ok(result)
     }

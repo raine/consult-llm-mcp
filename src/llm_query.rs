@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::executors::types::{LlmExecutor, Usage};
+use crate::executors::types::{ExecutionRequest, LlmExecutor, Usage};
 use consult_llm_core::llm_cost::calculate_cost;
 use consult_llm_core::monitoring::RunSpool;
 
@@ -22,7 +22,14 @@ pub async fn query_llm(
     spool: Arc<Mutex<RunSpool>>,
 ) -> anyhow::Result<QueryResult> {
     let result = executor
-        .execute(prompt, model, system_prompt, file_paths, thread_id, spool)
+        .execute(ExecutionRequest {
+            prompt: prompt.to_string(),
+            model: model.to_string(),
+            system_prompt: system_prompt.to_string(),
+            file_paths: file_paths.map(|ps| ps.to_vec()),
+            thread_id: thread_id.map(|s| s.to_string()),
+            spool,
+        })
         .await?;
 
     if result.response.is_empty() {
