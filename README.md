@@ -343,6 +343,8 @@ The CLI is invoked by your agent via the installed skills; you don't call it dir
 /debate should this be a separate service or stay in the monolith?
 ```
 
+If a response exceeds your agent's shell tool output limit (30k chars in Claude Code by default), the full output is saved to a file and the agent is notified where to find it — it can then use `Read` to retrieve the rest. In practice this is rare; the large majority of responses are well under that limit.
+
 ### CLI utilities
 
 ```bash
