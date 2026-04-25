@@ -1,5 +1,3 @@
-# consult-llm
-
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
   <img src="meta/logo-light.svg" alt="consult-llm" height="48">
