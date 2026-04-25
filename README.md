@@ -1,7 +1,10 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
-  <img src="meta/logo-light.svg" alt="consult-llm" height="48">
-</picture>
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
+    <img src="meta/logo-light.svg" alt="consult-llm" height="72">
+  </picture>
+</div>
+<br>
 
 `consult-llm` is a tool for consulting stronger AI models from your existing
 agent workflow. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
