@@ -71,5 +71,39 @@ Ask neutral, open-ended questions. Do not suggest specific solutions in the prom
 | `--diff-files <path>`        | Repeatable. Include git diff for this file as context.          |
 | `--diff-base <ref>`          | Base ref for diff (default `HEAD` — shows uncommitted changes). |
 | `--diff-repo <path>`         | Repo path (default cwd).                                        |
+| `--run <spec>`               | Per-model run. See "Per-model runs" below.                      |
 
 Run `consult-llm --help` for the authoritative flag list.
+
+## Per-model runs
+
+Use `--run` when a workflow needs to query multiple models in parallel with **different prompt bodies**. Do not use it for ordinary multi-model calls where the same prompt goes to every model — repeat `-m` for that.
+
+```bash
+GEMINI_PROMPT=$(mktemp)
+CODEX_PROMPT=$(mktemp)
+
+cat <<'__CONSULT_LLM_END__' >| "$GEMINI_PROMPT"
+[prompt for Gemini]
+__CONSULT_LLM_END__
+
+cat <<'__CONSULT_LLM_END__' >| "$CODEX_PROMPT"
+[prompt for Codex]
+__CONSULT_LLM_END__
+
+# First call — no existing threads yet
+consult-llm \
+  --run "model=gemini,prompt-file=$GEMINI_PROMPT" \
+  --run "model=openai,prompt-file=$CODEX_PROMPT"
+
+# Subsequent calls — continue each model's thread
+consult-llm \
+  --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
+  --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
+```
+
+Each `--run` value accepts `model=<selector-or-id>`, `prompt-file=<path>`, and optionally `thread=<id>`. Use `mktemp` for temporary prompt files and always use `__CONSULT_LLM_END__` as the heredoc terminator. Use `>|` to overwrite temp files in zsh (avoids `noclobber` errors).
+
+Constraints: max 5 runs, cannot combine with `-m`/`-t`/`--prompt-file`/`--web`, duplicate resolved models are rejected, shared `-f` and `--diff-*` context applies to every run, prompt-file paths with commas are unsupported.
+
+Output is the same group format as multi-model `-m` calls. Extract per-model thread IDs from `[thread_id:xxx]` in each model's section header for subsequent turns.
