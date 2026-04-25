@@ -462,6 +462,20 @@ consult-llm reads layered YAML config files. Resolution order (highest to lowest
 
 Project files are discovered by walking up from the current directory to the nearest `.git` root or `$HOME`.
 
+`.consult-llm.local.yaml` is useful for personal backend or model preferences that you don't want committed. Add it to your global gitignore so it's excluded from all projects:
+
+```bash
+echo '.consult-llm.local.yaml' >> ~/.gitignore_global
+```
+
+If you use [workmux](https://github.com/raine/workmux) worktrees, symlink it into new worktrees automatically by adding it to your `.workmux.yaml`:
+
+```yaml
+files:
+  symlink:
+    - .consult-llm.local.yaml
+```
+
 Scaffold the user config and set values:
 
 ```bash
