@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # consult-llm installation script
-# Usage: curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install.sh | bash
 #
 # Environment variables:
 #   CONSULT_LLM_VERSION          - Pin a specific version (e.g., v3.0.0)
@@ -84,7 +84,7 @@ install_from_release() {
 
 	if [ -z "$version" ]; then
 		log_info "Fetching latest release..."
-		local latest_url="https://api.github.com/repos/raine/consult-llm-mcp/releases/latest"
+		local latest_url="https://api.github.com/repos/raine/consult-llm/releases/latest"
 		local release_json
 
 		if command -v curl &>/dev/null; then
@@ -112,7 +112,7 @@ install_from_release() {
 	log_info "Installing version: $version"
 
 	local archive_name="consult-llm-${platform}.tar.gz"
-	local download_url="https://github.com/raine/consult-llm-mcp/releases/download/${version}/${archive_name}"
+	local download_url="https://github.com/raine/consult-llm/releases/download/${version}/${archive_name}"
 
 	log_info "Downloading $archive_name..."
 
@@ -139,7 +139,7 @@ install_from_release() {
 
 	log_info "Verifying checksum..."
 	local checksum_file="consult-llm-${platform}.sha256"
-	local checksum_url="https://github.com/raine/consult-llm-mcp/releases/download/${version}/${checksum_file}"
+	local checksum_url="https://github.com/raine/consult-llm/releases/download/${version}/${checksum_file}"
 
 	if command -v curl &>/dev/null; then
 		if ! curl -fsSL --retry 3 --retry-connrefused --connect-timeout 10 --max-time 30 -o "$checksum_file" "$checksum_url"; then
@@ -255,7 +255,7 @@ verify_installation() {
 	"$install_dir/consult-llm" --version
 	echo ""
 
-	echo "Get started: https://github.com/raine/consult-llm-mcp#quick-start"
+	echo "Get started: https://github.com/raine/consult-llm#quick-start"
 	echo ""
 }
 

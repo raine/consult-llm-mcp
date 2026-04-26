@@ -58,7 +58,7 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 1. Install the binaries:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install.sh | bash
 ```
 
 2. Pick a backend and scaffold your config:
@@ -840,8 +840,8 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
 ## Development
 
 ```bash
-git clone https://github.com/raine/consult-llm-mcp.git
-cd consult-llm-mcp
+git clone https://github.com/raine/consult-llm.git
+cd consult-llm
 just check
 ```
 

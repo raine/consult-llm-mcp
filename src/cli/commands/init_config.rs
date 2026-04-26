@@ -1,5 +1,5 @@
 const TEMPLATE: &str = r#"# consult-llm user config
-# See: https://github.com/raine/consult-llm-mcp#configuration
+# See: https://github.com/raine/consult-llm#configuration
 
 # default_model: gemini
 # allowed_models: [gemini, openai]

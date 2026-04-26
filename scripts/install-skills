@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Install/uninstall consult-llm-mcp skills globally
+# Install/uninstall consult-llm skills globally
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash
-#   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm-mcp/main/scripts/install-skills | bash -s uninstall
+#   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install-skills | bash
+#   curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install-skills | bash -s uninstall
 #
 # Supported platforms:
 #   Claude Code  ~/.claude/skills/
@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-repo="raine/consult-llm-mcp"
+repo="raine/consult-llm"
 branch="main"
 base_url="https://raw.githubusercontent.com/$repo/$branch"
 

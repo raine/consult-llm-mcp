@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const REPO: &str = "raine/consult-llm-mcp";
+const REPO: &str = "raine/consult-llm";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
 const NOTIFY_INTERVAL_SECS: u64 = 24 * 60 * 60;
