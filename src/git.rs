@@ -19,9 +19,12 @@ pub fn generate_git_diff(
     args.extend(files.iter().cloned());
 
     match Command::new("git").args(&args).current_dir(cwd).output() {
-        Ok(output) if output.status.success() => {
-            Ok(String::from_utf8_lossy(&output.stdout).to_string())
-        }
+        Ok(output) if output.status.success() => String::from_utf8(output.stdout).map_err(|_| {
+            anyhow::anyhow!(
+                "git diff produced non-UTF-8 output (likely a file in a non-UTF-8 encoding); \
+                 refusing to send corrupted text to the model"
+            )
+        }),
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
             anyhow::bail!("{}", stderr.trim())
