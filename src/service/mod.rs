@@ -241,46 +241,49 @@ impl ConsultService {
             .clone()
             .unwrap_or_else(group_thread_store::generate_group_id);
 
-        // Load existing group state so we can preserve members from previous calls
-        // that are not part of this invocation.
-        let existing_group = existing_group_id
-            .as_deref()
-            .map(group_thread_store::load)
-            .transpose()?
-            .flatten();
+        // Take an exclusive lock around load → merge → save so concurrent
+        // runs against the same group can't both read the old state and
+        // clobber each other on write.
+        group_thread_store::with_lock(&group_id, || {
+            let existing_group = existing_group_id
+                .as_deref()
+                .map(group_thread_store::load)
+                .transpose()?
+                .flatten();
 
-        let mut members = existing_group
-            .as_ref()
-            .map(|g| g.members.clone())
-            .unwrap_or_default();
+            let mut members = existing_group
+                .as_ref()
+                .map(|g| g.members.clone())
+                .unwrap_or_default();
 
-        // Preserve the existing display order; only append models new to this group.
-        let mut member_order: Vec<String> = existing_group
-            .as_ref()
-            .map(|g| {
-                if g.member_order.is_empty() {
-                    g.members.keys().cloned().collect()
-                } else {
-                    g.member_order.clone()
-                }
-            })
-            .unwrap_or_default();
+            // Preserve the existing display order; only append models new to this group.
+            let mut member_order: Vec<String> = existing_group
+                .as_ref()
+                .map(|g| {
+                    if g.member_order.is_empty() {
+                        g.members.keys().cloned().collect()
+                    } else {
+                        g.member_order.clone()
+                    }
+                })
+                .unwrap_or_default();
 
-        for r in &results {
-            if !r.failed {
-                if let Some(tid) = &r.thread_id {
-                    members.insert(r.model.clone(), tid.clone());
-                }
-                if !member_order.contains(&r.model) {
-                    member_order.push(r.model.clone());
+            for r in &results {
+                if !r.failed {
+                    if let Some(tid) = &r.thread_id {
+                        members.insert(r.model.clone(), tid.clone());
+                    }
+                    if !member_order.contains(&r.model) {
+                        member_order.push(r.model.clone());
+                    }
                 }
             }
-        }
 
-        group_thread_store::save(&StoredGroup {
-            id: group_id.clone(),
-            members,
-            member_order,
+            group_thread_store::save(&StoredGroup {
+                id: group_id.clone(),
+                members,
+                member_order,
+            })
         })?;
 
         if existing_group_id.is_none() {

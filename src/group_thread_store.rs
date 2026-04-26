@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +46,28 @@ pub fn save(group: &StoredGroup) -> anyhow::Result<()> {
     serde_json::to_writer(&tmp, group)?;
     tmp.persist(path)?;
     Ok(())
+}
+
+/// Acquire an exclusive lock on this group's lockfile for the duration of
+/// `f`. Used by callers that need to load → modify → save atomically; two
+/// concurrent runs of the same group otherwise both load the old state and
+/// the second persist clobbers the first.
+pub fn with_lock<R, F>(group_id: &str, f: F) -> anyhow::Result<R>
+where
+    F: FnOnce() -> anyhow::Result<R>,
+{
+    let dir = groups_dir();
+    fs::create_dir_all(&dir)?;
+    let lock_path = dir.join(format!("{group_id}.lock"));
+    let lock_file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)?;
+    lock_file.lock_exclusive()?;
+    let result = f();
+    let _ = FileExt::unlock(&lock_file);
+    result
 }
 
 pub fn cleanup_expired(ttl_days: u64) -> anyhow::Result<()> {
