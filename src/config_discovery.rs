@@ -27,9 +27,6 @@ pub fn discover(cwd: &Path, home: Option<&Path>) -> DiscoveredPaths {
             }
             break;
         }
-        if d.join(".git").exists() {
-            break;
-        }
         if home.is_some_and(|h| d == h) {
             break;
         }
@@ -48,19 +45,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_discover_stops_at_git_root() {
+    fn test_discover_walks_through_git_root() {
+        // A nested git repo should not block discovery of a config in an
+        // ancestor directory.
         let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        // Create a subdirectory with a .git marker at root
-        std::fs::create_dir_all(root.join(".git")).unwrap();
-        let sub = root.join("sub").join("deep");
+        let home = dir.path().to_path_buf();
+        let outer = home.join("outer");
+        let inner = outer.join("inner");
+        let sub = inner.join("src");
         std::fs::create_dir_all(&sub).unwrap();
-        // Place config file above .git (should not be found)
-        std::fs::write(root.parent().unwrap().join(".consult-llm.yaml"), "").ok();
+        std::fs::create_dir_all(inner.join(".git")).unwrap();
+        std::fs::write(outer.join(".consult-llm.local.yaml"), "").unwrap();
 
-        let paths = discover(&sub, None);
-        assert!(paths.project.is_none());
-        assert!(paths.project_local.is_none());
+        let paths = discover(&sub, Some(&home));
+        assert_eq!(
+            paths.project_local.unwrap(),
+            outer.join(".consult-llm.local.yaml")
+        );
     }
 
     #[test]
