@@ -600,10 +600,16 @@ API keys are **not** allowed in `.consult-llm.yaml` (the committed project confi
 - `DEEPSEEK_API_KEY`
 - `MINIMAX_API_KEY`
 
-**[direnv](https://direnv.net/)** is an alternative to `.consult-llm.local.yaml` for project-specific keys via environment variables. Add a `.envrc` in the repo root (gitignored) and `direnv allow` it:
+**[direnv](https://direnv.net/)** is an alternative to `.consult-llm.local.yaml` for project-specific keys via environment variables. Add a `.envrc` in the repo root and `direnv allow` it, then put keys in a `.env` file (both gitignored):
 
 ```bash
-export OPENAI_API_KEY=your_project_specific_key
+# .envrc
+dotenv
+```
+
+```bash
+# .env
+OPENAI_API_KEY=your_project_specific_key
 ```
 
 direnv loads the variables automatically when you enter the directory and unloads them when you leave.
