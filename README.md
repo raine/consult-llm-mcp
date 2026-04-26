@@ -37,7 +37,7 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
   after async operations. I was looking at the wrong thing entirely.
 ```
 
-[Quick start](#quick-start) · [Usage](#usage) · [Backends](#backends) · [Skills](#skills) · [Configuration](#configuration) · [Logging](#logging) · [Monitor](#monitor) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Usage](#usage) · [Providers & Configuration](#providers--configuration) · [Skills](#skills) · [Logging](#logging) · [Monitor](#monitor) · [Changelog](CHANGELOG.md)
 
 > [!NOTE]
 > This project previously used MCP as its transport layer. If you were using that version, see the [migration guide](#migrating-from-mcp) below.
