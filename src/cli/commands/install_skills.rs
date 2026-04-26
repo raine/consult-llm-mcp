@@ -180,9 +180,7 @@ fn run_interactive(detected: &[&Platform], home: &Path) -> anyhow::Result<()> {
             .enumerate()
             .map(|(idx, p)| PlatformChoice { idx, name: p.name })
             .collect();
-        let defaults: Vec<usize> = (0..options.len()).collect();
         let chosen = match inquire::MultiSelect::new("Install to which platforms?", options)
-            .with_default(&defaults)
             .with_page_size(10)
             .prompt()
         {
