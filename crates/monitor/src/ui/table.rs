@@ -182,10 +182,18 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
         return;
     }
 
+    let model_col_width = state
+        .active_order
+        .iter()
+        .filter_map(|id| state.active_runs.get(id))
+        .map(|run| run.model.chars().count() as u16)
+        .max()
+        .unwrap_or(5)
+        .max(5);
     let mut constraints = vec![
         Constraint::Length(started_col_width),
         Constraint::Length(PROJECT_COL_WIDTH),
-        Constraint::Length(16),
+        Constraint::Length(model_col_width),
         Constraint::Length(9),
         Constraint::Min(18),
     ];
@@ -244,6 +252,17 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
 
     let now = Utc::now();
     let display_rows = state.build_history_display_rows();
+    let model_col_width = display_rows
+        .iter()
+        .map(|row| match row {
+            HistoryDisplayRow::Single(idx) => state.history[*idx].model.chars().count() as u16,
+            HistoryDisplayRow::ThreadSummary {
+                model, mixed_model, ..
+            } => model.chars().count() as u16 + if *mixed_model { 1 } else { 0 },
+        })
+        .max()
+        .unwrap_or(5)
+        .max(5);
     let rows: Vec<Row> = display_rows
         .iter()
         .map(|display_row| match display_row {
@@ -395,7 +414,7 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     if show_task_col {
         constraints.push(Constraint::Length(task_col_width));
     }
-    constraints.push(Constraint::Length(14));
+    constraints.push(Constraint::Length(model_col_width));
     constraints.push(Constraint::Length(10));
     constraints.push(Constraint::Length(duration_col_width));
     constraints.push(Constraint::Length(tokens_col_width));
