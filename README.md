@@ -815,41 +815,32 @@ This downloads the latest GitHub release, verifies its SHA-256 checksum, updates
 
 If you previously used the MCP server version (`consult-llm-mcp` npm package):
 
-1. **Remove the MCP server registration** from your Claude Code config (`~/.claude.json`):
+1. **Install the CLI binary** (see [Quick Start](#quick-start)).
 
-   ```json
-   // remove this block:
-   "mcpServers": {
-     "consult-llm": { ... }
-   }
-   ```
-
-2. **Uninstall the npm package** if you installed it globally:
-
-   ```bash
-   npm uninstall -g consult-llm-mcp
-   ```
-
-3. **Install the CLI binary** (see [Quick Start](#quick-start)).
-
-4. **Install skills** so your agent can call `consult-llm` for you:
+2. **Install skills** so your agent can call `consult-llm` for you:
 
    ```bash
    consult-llm install-skills
    ```
 
-5. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.config/consult-llm/config.yaml`, including API keys.
+3. **Migrate your config.** Any env vars you set in the MCP `"env"` block can move to `~/.config/consult-llm/config.yaml`, including API keys.
 
-   For example, this MCP config:
+   For example, this MCP config in `~/.claude.json`:
 
    ```json
-   "env": {
-     "CONSULT_LLM_GEMINI_BACKEND": "api",
-     "CONSULT_LLM_OPENAI_BACKEND": "codex-cli",
-     "CONSULT_LLM_CODEX_REASONING_EFFORT": "xhigh",
-     "CONSULT_LLM_ALLOWED_MODELS": "gpt-5.4,gemini-3.1-pro-preview,MiniMax-M2.7",
-     "CONSULT_LLM_MINIMAX_BACKEND": "opencode",
-     "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER": "minimax"
+   "mcpServers": {
+     "consult-llm": {
+       "command": "npx",
+       "args": ["-y", "consult-llm-mcp"],
+       "env": {
+         "CONSULT_LLM_GEMINI_BACKEND": "api",
+         "CONSULT_LLM_OPENAI_BACKEND": "codex-cli",
+         "CONSULT_LLM_CODEX_REASONING_EFFORT": "xhigh",
+         "CONSULT_LLM_ALLOWED_MODELS": "gpt-5.4,gemini-3.1-pro-preview,MiniMax-M2.7",
+         "CONSULT_LLM_MINIMAX_BACKEND": "opencode",
+         "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER": "minimax"
+       }
+     }
    }
    ```
 
@@ -871,6 +862,21 @@ If you previously used the MCP server version (`consult-llm-mcp` npm package):
    ```
 
    Put this in `~/.config/consult-llm/config.yaml` for user-wide settings, or in `.consult-llm.yaml` at the project root if the settings were specific to that project.
+
+4. **Remove the MCP server registration** from your Claude Code config (`~/.claude.json`):
+
+   ```json
+   "mcpServers": {
+     // remove this entry:
+     "consult-llm": { ... }
+   }
+   ```
+
+5. **Uninstall the npm package** if you installed it globally:
+
+   ```bash
+   npm uninstall -g consult-llm-mcp
+   ```
 
 ## Development
 
