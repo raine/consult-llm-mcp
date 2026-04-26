@@ -797,6 +797,7 @@ All workflow skills accept `--<selector>` flags matching the selectors reported 
 - [`debate-vs`](skills/debate-vs/SKILL.md): the agent debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
 - [`panel`](skills/panel/SKILL.md): role-asymmetric advisory panel; each model speaks from one expert lens, agent synthesizes a trade-off resolution. The agent picks roles to fit the task (with a `--roles` override). Modes: `--mode design` (default) or `--mode review` for diff critique
 - [`review-panel`](skills/review-panel/SKILL.md): standalone multi-model code review of a diff with identical prompts; agent dedupes findings by severity/confidence. Read-only by default; `--fix` opt-in for localized must-fix items
+- [`implement`](skills/implement/SKILL.md): autonomous spec → plan → review → implement → red-team workflow. Evidence-gated reviewers, written feedback ledger, triggered debug loop, opt-in commits. Rigor knob: `--rigor lite|standard|deep`
 
 See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 

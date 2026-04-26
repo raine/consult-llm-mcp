@@ -21,6 +21,10 @@ const SKILL_SOURCES: &[(&str, &str)] = &[
         "debate-vs",
         include_str!("../../../skills/debate-vs/SKILL.md"),
     ),
+    (
+        "implement",
+        include_str!("../../../skills/implement/SKILL.md"),
+    ),
     ("panel", include_str!("../../../skills/panel/SKILL.md")),
     (
         "review-panel",
