@@ -3,9 +3,17 @@ name: debate
 description: LLMs propose and critique approaches, agent moderates the debate and synthesizes the best solution, then implements.
 ---
 
-Have Gemini and Codex debate the best approach, then synthesize and implement.
+Have multiple LLMs debate the best approach, then synthesize and implement.
 
 **Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
+
+## Available models
+
+Selectors resolvable in this environment (depends on configured API keys):
+
+```
+!`consult-llm models`
+```
 
 ## Phase 0: Load `consult-llm` Skill
 
@@ -17,12 +25,18 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 Check the arguments for flags:
 
+**Model flags:** any `--<selector>` from the Models block above selects a debater (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two** debaters. With no model flag, debate uses **all** listed selectors.
+
+Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
+
 **Mode flags:**
 - `--dry-run` → debate and plan only, skip implementation
 - `--skip-final` → skip the final review phase
 - `--rounds N` → number of debate rounds (default: 2, max: 3)
 
 Strip all flags from arguments to get the task description.
+
+Throughout this skill, references to "each LLM"/"each debater" mean every selected model. Use the selector name (`gemini`, `openai`, etc.) as the label when presenting per-model output.
 
 ## Phase 1: Understand the Task (No Questions)
 
@@ -65,37 +79,37 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Invoke `consult-llm` with `-m gemini -m openai` and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc. Both models are queried in parallel in a single call.
+Invoke `consult-llm` with one `-m <selector>` per debater and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc. All models are queried in parallel in a single call.
 
-**Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives the other's rebuttal.
+**Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives the others' rebuttals.
 
 ## Phase 3: Debate Rounds
 
 For each round (default 2, configurable with `--rounds N`, max 3):
 
-Have each LLM critique the other's latest argument (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponent's latest response.
+Have each LLM critique the others' latest arguments (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and their own prior arguments, so you only need to send the opponents' latest responses.
 
-**Round 1 rebuttal prompt (same for both, swap the opponent's argument):**
+**Round 1 rebuttal prompt (same template for each debater; embed every other debater's opening argument, labeled by selector):**
 ```
-Your opponent proposed this alternative approach:
-[Opponent's opening argument]
+Your opponent(s) proposed these alternative approaches:
+[Opponents' opening arguments, each labeled with the selector name]
 
 Provide a rebuttal:
-1. **Critique**: What are the weaknesses in your opponent's approach?
+1. **Critique**: What are the weaknesses in each opponent's approach?
 2. **Defense**: Address any weaknesses in your own approach
-3. **Concessions**: Are there any good ideas from your opponent worth adopting?
+3. **Concessions**: Are there any good ideas worth adopting?
 4. **Updated position**: State your refined recommendation
 
 Be constructive but thorough in your critique.
 ```
 
-**Subsequent round prompt (same for both, swap the opponent's latest rebuttal):**
+**Subsequent round prompt (same template; embed every other debater's latest rebuttal):**
 ```
-Your opponent has responded to your critique:
-[Opponent's latest rebuttal]
+Your opponent(s) have responded to your critique:
+[Opponents' latest rebuttals, each labeled with the selector name]
 
 Continue the debate:
-1. **Critique**: What weaknesses remain in your opponent's updated position?
+1. **Critique**: What weaknesses remain in their updated positions?
 2. **Defense**: Address any new points raised against your approach
 3. **Concessions**: Any new ideas worth adopting?
 4. **Updated position**: State your refined recommendation
@@ -103,7 +117,7 @@ Continue the debate:
 Focus on unresolved disagreements. Don't repeat settled points.
 ```
 
-Each model receives the other's latest response. Invoke `consult-llm` once with two `--run` flags, continuing each model's thread.
+Each model receives every other model's latest response. Invoke `consult-llm` once with one `--run` per debater, continuing each model's thread.
 
 Present both responses to the user after each round.
 
@@ -117,11 +131,11 @@ As the moderator, analyze the debate and synthesize the best approach:
    - Which critiques were valid?
    - What concessions were made?
 
-2. **Identify consensus**: Where did both LLMs agree?
+2. **Identify consensus**: Where did all the debaters agree?
 
 3. **Resolve disagreements**: For each point of contention:
-   - Evaluate the arguments from both sides
-   - Pick the stronger position or find a middle ground
+   - Evaluate the arguments from each side
+   - Pick the strongest position or find a middle ground
    - Prefer simpler solutions when arguments are equally strong
 
 4. **Write the verdict** as part of the plan:
@@ -133,15 +147,15 @@ As the moderator, analyze the debate and synthesize the best approach:
 
 ## Debate Summary
 
-**Gemini's position:** [1-2 sentence summary]
-**Codex's position:** [1-2 sentence summary]
+**Positions** (one bullet per debater, labeled with the selector name):
+- **<selector>:** [1-2 sentence summary]
 
 **Points of agreement:**
 - [Consensus point 1]
 - [Consensus point 2]
 
 **Resolved disagreements:**
-- [Issue]: Gemini said X, Codex said Y → **Verdict:** [Your decision and why]
+- [Issue]: <selector-A> said X, <selector-B> said Y → **Verdict:** [Your decision and why]
 
 **Verdict:** [2-3 sentences on the final synthesized approach]
 
@@ -195,7 +209,7 @@ Implementation rules:
 
 **If `--skip-final`:** Skip to Phase 7 (Summary).
 
-After implementation, have both LLMs review the result (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and the debate, so you only need to send the review prompt and the diff.
+After implementation, have every debater LLM review the result (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation — they already have full context of the task and the debate, so you only need to send the review prompt and the diff.
 
 **Final review prompt:**
 ```
@@ -208,9 +222,9 @@ Forget which side you argued during the debate. Review the implementation purely
 Be concise. Only flag issues worth fixing.
 ```
 
-Invoke `consult-llm --task review` once with two `--run` flags, passing `--diff-files` and `--diff-base` as shared context, continuing each model's thread.
+Invoke `consult-llm --task review` once with one `--run` per debater, passing `--diff-files` and `--diff-base` as shared context, continuing each model's thread.
 
-**Apply fixes** if both reviewers identify the same issue, or if one raises a clearly valid concern:
+**Apply fixes** if multiple reviewers identify the same issue, or if one raises a clearly valid concern:
 - Fix bugs and edge cases
 - Commit each fix separately with clear messages
 
@@ -226,8 +240,7 @@ Present a final summary to the user:
 **Implemented:** [One sentence describing what was built]
 
 **Debate outcome:**
-- Gemini advocated: [key position]
-- Codex advocated: [key position]
+- One bullet per debater, labeled with the selector: `<selector>` advocated: [key position]
 - Final verdict: [synthesized approach]
 
 **Key decisions from debate:**

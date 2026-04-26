@@ -1,13 +1,27 @@
 ---
 name: collab
-description: Gemini and Codex collaboratively brainstorm solutions, building on each other's ideas across rounds. Agent synthesizes the best ideas into a plan.
+description: Multiple LLMs collaboratively brainstorm solutions, building on each other's ideas across rounds. Agent synthesizes the best ideas into a plan.
 ---
 
-Have Gemini and Codex collaboratively brainstorm solutions, then synthesize the best ideas into a plan. Both LLMs build on each other's ideas across rounds rather than critiquing positions.
+Have multiple LLMs collaboratively brainstorm solutions, then synthesize the best ideas into a plan. The LLMs build on each other's ideas across rounds rather than critiquing positions.
 
 **Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
 
+## Available models
+
+Selectors resolvable in this environment (depends on configured API keys):
+
+```
+!`consult-llm models`
+```
+
 **Arguments:** `$ARGUMENTS`
+
+**Model flags:** any `--<selector>` from the Models block above selects a collaborator (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two**. With no model flag, brainstorm uses **all** listed selectors.
+
+Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
+
+Strip all flags from arguments to get the task description. Use the selector name as the label when presenting per-model output.
 
 ## Phase 0: Load `consult-llm` Skill
 
@@ -33,7 +47,7 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ## Phase 2: Initial Ideas
 
-Have both LLMs independently brainstorm approaches (in parallel).
+Have all selected LLMs independently brainstorm approaches (in parallel).
 
 **Seed prompt:**
 ```
@@ -53,21 +67,21 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Invoke `consult-llm` with `-m gemini -m openai` and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc. Both models are queried in parallel in a single call.
+Invoke `consult-llm` with one `-m <selector>` per collaborator and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc. All models are queried in parallel in a single call.
 
 **Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives a different prompt.
 
-Present both sets of ideas to the user.
+Present each set of ideas to the user, labeled by selector.
 
 ## Phase 3: Build On Each Other
 
-Each round, share both LLMs' ideas with each other and ask them to build on them (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation. Continue until the ideas converge into a clear approach — typically 2-3 rounds, but use as many as needed.
+Each round, share every other LLM's ideas with each model and ask them to build on them (in parallel). Pass each LLM's thread ID via `-t <id>` to continue its conversation. Continue until the ideas converge into a clear approach — typically 2-3 rounds, but use as many as needed.
 
-**Build-on prompt (same for both, include the other's ideas):**
+**Build-on prompt (same template for each model; embed every other model's previous-round response, labeled by selector):**
 ```
-A collaborator shared these ideas:
+Your collaborator(s) shared these ideas:
 
-[Other LLM's response from the previous round]
+[Other LLMs' responses from the previous round, each labeled with the selector name]
 
 Build on their thinking:
 1. **What resonates**: Which ideas are strong? Why?
@@ -79,11 +93,11 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Each model receives a different prompt (the other model's response embedded). Invoke `consult-llm` once with two `--run` flags, continuing each model's thread.
+Each model receives a different prompt (the other models' responses embedded). Invoke `consult-llm` once with one `--run` flag per collaborator, continuing each model's thread.
 
-Present both responses to the user after each round.
+Present every response to the user after each round, labeled by selector.
 
-**When to stop:** Both LLMs are refining details rather than introducing new ideas, and a clear approach has emerged. Don't stop while there are still unresolved open questions or competing directions.
+**When to stop:** All collaborators are refining details rather than introducing new ideas, and a clear approach has emerged. Don't stop while there are still unresolved open questions or competing directions.
 
 ## Phase 4: Synthesize
 
@@ -91,7 +105,7 @@ After all rounds, synthesize the brainstorm into a plan:
 
 1. **Identify the strongest ideas** — which approaches gained momentum across rounds?
 
-2. **Note convergence** — where did both LLMs naturally align?
+2. **Note convergence** — where did the LLMs naturally align?
 
 3. **Pick the best combination** — merge the strongest elements into one coherent approach
 
@@ -104,10 +118,11 @@ After all rounds, synthesize the brainstorm into a plan:
 
 ## Brainstorm Summary
 
-**Key ideas from Gemini:** [2-3 bullet points]
-**Key ideas from Codex:** [2-3 bullet points]
+**Key ideas** (one block per collaborator, labeled with the selector):
+- **<selector>:** [2-3 bullet points]
+
 **Convergence:** [Where they naturally agreed]
-**Synthesis:** [How the final approach combines the best of both]
+**Synthesis:** [How the final approach combines the best ideas]
 
 ---
 

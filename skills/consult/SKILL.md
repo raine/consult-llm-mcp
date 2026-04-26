@@ -8,16 +8,23 @@ Consult an external LLM with the user's query via the `consult-llm` CLI.
 
 **Load the `consult-llm` skill before invoking** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
 
+## Available models
+
+Selectors resolvable in this environment (depends on configured API keys):
+
+```
+!`consult-llm models`
+```
+
 ## Argument handling
 
 **Arguments:** `$ARGUMENTS`
 
 Check `$ARGUMENTS` for flags:
 
-**Reviewer flags** (mutually exclusive):
-- `--gemini` → consult only Gemini (`-m gemini`)
-- `--codex` → consult only Codex (`-m openai`)
-- No flag → consult both Gemini and Codex in parallel (default)
+**Model flags:** any `--<selector>` from the Models block above selects that model (e.g. `--gemini`, `--openai`, `--deepseek`, `--minimax`). Repeat for multiple models — they run in parallel. With no model flag, consult **all** listed selectors in parallel.
+
+Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
 
 **Mode flags:**
 - `--browser` → use web mode (`--web`, copies prompt to clipboard)
@@ -39,18 +46,16 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ### 2. Invoke
 
-**`--gemini`** — single call with `-m gemini`.
+**One or more `--<selector>` flags** — single call with one `-m <selector>` per flag, plus `-f <path>` for each relevant file. Multiple selectors run in parallel and the CLI returns a combined response with per-model sections.
 
-**`--codex`** — single call with `-m openai`.
+**No model flag (default)** — single call with `-m <selector>` repeated for **every** selector in the Models block, plus `-f <path>` for each relevant file.
 
-**No flag (default)** — single call with `-m gemini -m openai` and `-f <path>` for each relevant file. The CLI queries both models in parallel and returns a combined response with per-model sections.
-
-**`--browser`** — single call with `--web` (model flag is ignored in web mode).
+**`--browser`** — single call with `--web` (model flags are ignored in web mode).
 
 ### 3. Present results
 
 - **Normal mode (single model):** summarize key insights, recommendations, and considerations.
-- **Normal mode (both models):** the CLI output already contains labeled per-model sections. Synthesize — highlight agreements, note disagreements, present a unified takeaway.
+- **Normal mode (multiple models):** the CLI output already contains labeled per-model sections. Synthesize — highlight agreements, note disagreements, present a unified takeaway.
 - **Web mode:** inform the user the prompt was copied to clipboard and ask them to paste it into their browser-based LLM and share the response back.
 
 ## Critical rules

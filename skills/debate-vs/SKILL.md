@@ -1,12 +1,20 @@
 ---
 name: debate-vs
-description: Claude debates an opponent LLM (Gemini or Codex) through a multi-turn conversation, then synthesizes the best approach and implements.
+description: Claude debates an opponent LLM through a multi-turn conversation, then synthesizes the best approach and implements.
 ---
 
 Debate an opponent LLM on the best implementation approach using multi-turn
 conversations, then synthesize and implement.
 
 **Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
+
+## Available models
+
+Selectors resolvable in this environment (depends on configured API keys):
+
+```
+!`consult-llm models`
+```
 
 ## Phase 0: Load `consult-llm` Skill
 
@@ -18,10 +26,7 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 Check the arguments for flags:
 
-**Opponent flags** (mutually exclusive, exactly one required):
-
-- `--gemini` → debate Gemini (`-m gemini`)
-- `--codex` → debate Codex (`-m openai`)
+**Opponent flag** (exactly one required): any `--<selector>` from the Models block above (e.g. `--gemini`, `--openai`, `--deepseek`). Translates to `-m <selector>` for the CLI.
 
 **Mode flags:**
 
@@ -32,13 +37,13 @@ Check the arguments for flags:
 
 Strip all flags from arguments to get the task description.
 
-**Set variables based on opponent flag:**
+**Set variables from the opponent flag:**
 
-- `OPPONENT`: "Gemini" or "Codex"
-- `MODEL`: "gemini" or "openai"
+- `MODEL`: the selector (e.g. `gemini`, `openai`)
+- `OPPONENT`: the same selector, used as the display label
 
-If neither `--gemini` nor `--codex` is provided, ask the user which opponent to
-use.
+If no `--<selector>` flag is provided, ask the user which opponent to use,
+listing the selectors from the Models block.
 
 ## Phase 1: Understand the Task (No Questions)
 

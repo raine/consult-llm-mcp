@@ -1,30 +1,35 @@
 ---
 name: collab-vs
-description: Claude brainstorms with an opponent LLM (Gemini or Codex) in alternating turns, building on each other's ideas. Synthesizes the best ideas into a plan.
+description: Claude brainstorms with a partner LLM in alternating turns, building on each other's ideas. Synthesizes the best ideas into a plan.
 ---
 
-Brainstorm collaboratively with an opponent LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.
+Brainstorm collaboratively with a partner LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.
 
 **Load the `consult-llm` skill before proceeding** — it defines the invocation contract (stdin heredoc, flags, output format, multi-turn). Do not call the CLI without loading it first.
+
+## Available models
+
+Selectors resolvable in this environment (depends on configured API keys):
+
+```
+!`consult-llm models`
+```
 
 **Arguments:** `$ARGUMENTS`
 
 Check the arguments for flags:
 
-**Partner flags** (mutually exclusive, exactly one required):
-
-- `--gemini` → brainstorm with Gemini (`-m gemini`)
-- `--codex` → brainstorm with Codex (`-m openai`)
+**Partner flag** (exactly one required): any `--<selector>` from the Models block above (e.g. `--gemini`, `--openai`, `--deepseek`). Translates to `-m <selector>` for the CLI.
 
 Strip all flags from arguments to get the task description.
 
-**Set variables based on partner flag:**
+**Set variables from the partner flag:**
 
-- `PARTNER`: "Gemini" or "Codex"
-- `MODEL`: "gemini" or "openai"
+- `MODEL`: the selector (e.g. `gemini`, `openai`)
+- `PARTNER`: the same selector, used as the display label
 
-If neither `--gemini` nor `--codex` is provided, ask the user which partner to
-use.
+If no `--<selector>` flag is provided, ask the user which partner to use,
+listing the selectors from the Models block.
 
 ## Phase 0: Load `consult-llm` Skill
 
