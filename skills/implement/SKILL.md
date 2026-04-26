@@ -28,7 +28,7 @@ Check `$ARGUMENTS` for flags:
 **Rigor knob:**
 
 - `--rigor lite|standard|deep` — default `standard`.
-  - `lite` — single shared-prompt review, no premortem section, generic final review, no debug consult. Suitable for small focused tasks.
+  - `lite` — single shared-prompt review, no premortem section, generic final review, no debug consult. Use this (not "skip review") when the task is small.
   - `standard` — shared-prompt review with structured premortem and independent-alternative sections, evidence-gated final review with attack lenses, debug consult after 2 failed hypotheses.
   - `deep` — Phase 3 and Phase 6 use `--run` with role-asymmetric prompts (security, test-strategist, data-integrity, fuzzing-strategist). Same number of reviewer calls but each model gets a focused persona.
 
@@ -145,7 +145,7 @@ Guidelines:
 
 ## Phase 3: Plan review
 
-**If `--no-review`:** skip to Phase 5.
+**Mandatory unless `--no-review` was passed.** See "Review phases are mandatory" in Critical rules.
 
 Reviewers receive the plan file and the relevant source files. They must produce structured output — never accept free-form review.
 
@@ -207,7 +207,28 @@ Pick 3–5 roles to fit the task. Each role still produces the four sections abo
 
 ## Phase 4: Apply feedback through the ledger
 
-Synthesize findings, then **append a Feedback Ledger to the plan file**. Every conflict and every rejected suggestion goes here — this is the single biggest defense against silent judging.
+### Verify each finding before adopting it
+
+Reviewers hallucinate, misread the plan, and inflate corner cases. Treat every finding — must-fix included — as a *claim that needs evidence* before it earns a plan change. Reviewer severity is advisory; the agent owns the call after verification.
+
+For each finding, pick the cheapest method that actually proves or disproves the claim:
+
+- **Plan claims** ("acceptance criterion X is missing", "task 3 contradicts task 5") — re-read the cited plan section and confirm.
+- **Source claims** ("the existing pattern uses X", "module Y already does Z") — read the cited file and confirm against current code, not memory.
+- **Library/API claims** ("SDK Foo doesn't support Y", "this method throws on null") — verify against the library source or official docs. Use `gh search code` for usage-pattern lookups, `Grep` in `node_modules`/vendored deps for the actual implementation, or run a tiny throwaway script (`/tmp/verify-*.{sh,ts,py}`) that isolates the specific behavior.
+- **Premortem claims** — confirm the described trigger actually occurs in the planned design, not in some adjacent shape. A failure mode that requires conditions the design rules out is not a real risk.
+
+For each finding, classify:
+
+- **Confirmed and worth fixing** — issue is real and the fix is proportionate. Adopt.
+- **Confirmed but YAGNI** — issue is real but the trigger requires contrived inputs no caller produces, or timing windows that don't occur in practice, and the fix would add disproportionate complexity. Record as a Watched Risk with the cost-benefit reason; do not adopt.
+- **Not a real issue** — reviewer misread the plan or source. Record as rejected with the evidence that disproves it.
+
+Complexity has its own cost. A "must-fix" guarding a corner case that virtually never occurs is not worth shipping a more complicated codebase for.
+
+### Build the ledger
+
+After verification, **append a Feedback Ledger to the plan file**. Every conflict, every rejected suggestion, and every YAGNI dismissal goes here — this is the single biggest defense against silent judging.
 
 ```markdown
 ## Feedback Ledger — Round N
@@ -296,7 +317,7 @@ If the third hypothesis fails, stop. Record the blocker, the hypotheses tried, a
 
 ## Phase 6: Red-team review
 
-**If `--no-review` or `--skip-final`:** skip to Phase 7.
+**Mandatory unless `--no-review` or `--skip-final` was passed.** Whether the diff is too narrow for adversarial review is the reviewer's call (it exits cleanly), not the agent's. See "Review phases are mandatory" in Critical rules.
 
 Resolve the diff base: use `--diff-base` if passed, otherwise the `START_HEAD` snapshot from Phase 0. Re-list changed files (mirror `review-panel/SKILL.md` Phase 1):
 
@@ -347,9 +368,18 @@ rationale: <why the diff allows it>
 
 For deep rigor, use `--run` with the same persona set as Phase 3 deep, but each persona is given a single attack lens.
 
+### Verify each finding before fixing
+
+The reviewer's `repro_or_poc` is a claim, not proof. Run it. Confirm the failure reproduces and the diff is actually responsible.
+
+- **PoC reproduces, diff is responsible** → eligible to fix.
+- **PoC reproduces, but a different part of the code is responsible** → re-target the fix or note the misattribution; do not silently fix the wrong place.
+- **PoC does not reproduce** → drop the finding. List it in the Phase 7 summary under "rejected after verification".
+- **Reproduces only via inputs no caller produces, or timing that doesn't occur in practice** → record as Watched Risk; do not fix. Same cost-benefit calculus as Phase 4 — complexity has its own cost.
+
 ### Apply fixes
 
-Apply only `Verified Findings` that are `must-fix` AND localized (mirrors `review-panel` Phase 5 criteria — single hunk, single right answer, no interface changes). For each fix:
+Apply only `Verified Findings` that survived verification, are `must-fix`, AND localized (mirrors `review-panel` Phase 5 criteria — single hunk, single right answer, no interface changes). For each fix:
 
 1. Re-read the file and apply the smallest correct change.
 2. Run the validation command for the touched scope.
@@ -369,6 +399,7 @@ Print to the user:
 **Implemented:** <one sentence>
 **Plan:** history/<date>-plan-<topic>.md
 **Diff base:** <START_HEAD short sha>
+**Review phases run:** Phase 3 [yes | skipped: --no-review] · Phase 6 [yes | skipped: --no-review | skipped: --skip-final]
 
 **Plan review (Round N):**
 - accepted: <count> (must-fix: X, should-fix: Y)
@@ -398,7 +429,9 @@ If implementation drifted from the plan, list the deviations so the plan and the
 ## Critical rules
 
 - **Spec is mandatory.** Phase 2 always produces a Behavioral Spec and Test Matrix. There is no flag to disable it.
+- **Review phases are mandatory.** Phases 3 and 6 run on every invocation unless the user passed `--no-review` (both) or `--skip-final` (Phase 6 only). "The change is small / obvious / low-risk" is not a valid reason to skip — drop to `--rigor lite` for lighter review, but do not skip. Whether the diff is too narrow for adversarial review is the Phase 6 reviewer's call (it exits cleanly), not the agent's. Skipping a phase without an explicit user flag is a contract violation and must be reported in the Phase 7 summary.
 - **Reviewers always produce structured output.** Free-form review is not accepted at any rigor level.
+- **Findings are claims, not facts.** Verify every finding before adopting it — re-read the cited code, run the PoC, check the library source. Findings that are real but only fire on contrived inputs or impossible timing are recorded as Watched Risks rather than fixed. Complexity has its own cost.
 - **No silent judging.** Every reviewer conflict and every rejected suggestion is recorded in the Feedback Ledger with rationale and tiebreaker.
 - **Evidence-gated final review.** A finding is must-fix only if it ships with a concrete repro. Speculation cannot trigger fixes.
 - **Plan drift halts.** If implementation needs to leave the agreed scope, update the plan first, then continue.
