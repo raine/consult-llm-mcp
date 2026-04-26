@@ -24,6 +24,10 @@ struct ChatRequest {
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extra_body: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -142,6 +146,23 @@ impl LlmExecutor for ApiExecutor {
             content: prompt.clone(),
         });
 
+        let is_gemini = self.base_url.contains("generativelanguage.googleapis.com");
+        let (reasoning_effort, extra_body) = if is_gemini {
+            (
+                None,
+                Some(serde_json::json!({
+                    "google": {
+                        "thinking_config": {
+                            "thinking_level": "high",
+                            "include_thoughts": true
+                        }
+                    }
+                })),
+            )
+        } else {
+            (None, None)
+        };
+
         let request = ChatRequest {
             model: model.clone(),
             messages,
@@ -149,6 +170,8 @@ impl LlmExecutor for ApiExecutor {
             stream_options: Some(StreamOptions {
                 include_usage: true,
             }),
+            reasoning_effort,
+            extra_body,
         };
 
         let resp = self
