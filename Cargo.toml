@@ -32,7 +32,7 @@ categories = ["command-line-utilities"]
 build = "build.rs"
 
 [dependencies]
-consult-llm-core = { path = "crates/core", version = "=3.0.0" }
+consult-llm-core = { path = "crates/core", version = "3" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

@@ -12,7 +12,7 @@ name = "consult-llm-monitor"
 path = "src/main.rs"
 
 [dependencies]
-consult-llm-core = { path = "../core", version = "=3.0.0" }
+consult-llm-core = { path = "../core", version = "3" }
 ratatui = "0.30"
 crossterm = "0.29"
 chrono = { workspace = true }
