@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.3 (2026-04-26)
+
+- API executors now stream responses via SSE for faster, incremental output
+- Reasoning/thinking output is now surfaced for Gemini, DeepSeek, and other reasoning models when using API backends
+- `install-skills` now has an interactive multi-select UI for choosing which platforms to install to, with no platforms pre-selected
+
 ## v3.0.1 (2026-04-26)
 
 - `consult-llm` is now published to crates.io and can be installed with `cargo install consult-llm`
