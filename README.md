@@ -12,6 +12,17 @@ review changes, debate approaches, or get unstuck on tricky bugs. It supports GP
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
+## Why a second opinion?
+
+A model reviewing its own work isn't an independent check. Even in a fresh
+context, it shares the same training, priors, and many of the same failure
+modes. A different model was trained differently and makes different
+mistakes, so it's more likely to push back, challenge weak reasoning, or
+expose a blind spot.
+
+Model strengths are uneven and hard to predict per task. A quick cross-check
+is cheap, and sometimes the other model is the one that finds the path forward.
+
 ## How it works
 
 1. Install skills into your agent (Claude Code, Codex, OpenCode)
