@@ -1,10 +1,23 @@
+<br>
+
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="meta/logo-dark.svg">
     <img src="meta/logo-light.svg" alt="consult-llm" height="120">
   </picture>
 </div>
+
 <br>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#usage">Usage</a> ·
+  <a href="#providers--configuration">Providers & Configuration</a> ·
+  <a href="#skills">Skills</a> ·
+  <a href="#logging">Logging</a> ·
+  <a href="#monitor">Monitor</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
+</p>
 
 `consult-llm` is a tool for getting a second opinion from another AI model,
 right inside your existing agent workflow. Use it to plan architecture,
@@ -48,8 +61,6 @@ is cheap, and sometimes the other model is the one that finds the path forward.
 ⏺ Gemini identified the real issue: a race condition with stale state
   after async operations. I was looking at the wrong thing entirely.
 ```
-
-[Quick start](#quick-start) · [Usage](#usage) · [Providers & Configuration](#providers--configuration) · [Skills](#skills) · [Logging](#logging) · [Monitor](#monitor) · [Changelog](CHANGELOG.md)
 
 > [!NOTE]
 > This project previously used MCP as its transport layer. If you were using that version, see the [migration guide](#migrating-from-mcp) below.
