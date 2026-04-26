@@ -8,10 +8,12 @@ use std::time::{Duration, Instant};
 
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 
+use chrono::Utc;
+
 use consult_llm_core::jsonl::read_jsonl_from_offset;
 use consult_llm_core::monitoring::{
-    ActiveSnapshot, HISTORY_FILE, HistoryRecord, RunEvent, RunEventKind, RunMeta, is_pid_alive,
-    runs_dir,
+    ActiveSnapshot, HISTORY_FILE, HistoryRecord, RunEvent, RunEventKind, RunMeta, append_history,
+    is_pid_alive, runs_dir,
 };
 
 use crate::meta::load_run_meta;
@@ -82,6 +84,8 @@ fn run(
         let _ = watcher.watch(&active_dir, RecursiveMode::NonRecursive);
         let _ = watcher.watch(&dir, RecursiveMode::NonRecursive);
     }
+
+    cleanup_startup_orphans(&dir, &active_dir);
 
     let mut watched_detail_path: Option<PathBuf> = None;
     let mut active_snapshots = HashMap::new();
@@ -317,6 +321,72 @@ fn poll_history(dir: &Path, history_offset: &mut u64) -> Vec<HistoryRecord> {
 
 fn poll_detail_events(dir: &Path, run_id: &str, file_offset: &mut u64) -> Vec<RunEvent> {
     read_jsonl_from_offset(&detail_events_path(dir, run_id), file_offset)
+}
+
+fn cleanup_startup_orphans(dir: &Path, active_dir: &Path) {
+    let snapshots = load_active_snapshots(active_dir);
+    if snapshots.is_empty() {
+        return;
+    }
+
+    let history_ids = read_history_run_ids(dir);
+
+    for (run_id, snapshot) in &snapshots {
+        if is_pid_alive(snapshot.pid) || events_file_has_finish(run_id) {
+            continue;
+        }
+        if !history_ids.contains(run_id) {
+            persist_snapshot_orphan(snapshot);
+        }
+        let _ = fs::remove_file(active_dir.join(format!("{run_id}.json")));
+    }
+}
+
+fn read_history_run_ids(dir: &Path) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    let Ok(file) = fs::File::open(dir.join(HISTORY_FILE)) else {
+        return ids;
+    };
+    for line in BufReader::new(file).lines().map_while(Result::ok) {
+        if let Ok(record) = serde_json::from_str::<HistoryRecord>(&line)
+            && let Some(id) = record.run_id
+        {
+            ids.insert(id);
+        }
+    }
+    ids
+}
+
+fn persist_snapshot_orphan(snapshot: &ActiveSnapshot) {
+    let started_at = chrono::DateTime::parse_from_rfc3339(&snapshot.started_at)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc));
+    let finished_at = Utc::now();
+    let duration_ms = started_at
+        .map(|s| {
+            finished_at
+                .signed_duration_since(s)
+                .num_milliseconds()
+                .max(0) as u64
+        })
+        .unwrap_or(0);
+    let record = HistoryRecord {
+        ts: finished_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        run_id: Some(snapshot.run_id.clone()),
+        project: snapshot.project.clone(),
+        model: snapshot.model.clone(),
+        backend: snapshot.backend.clone(),
+        duration_ms,
+        success: false,
+        error: Some("process died without completing".into()),
+        tokens_in: None,
+        tokens_out: None,
+        parsed_ts: Some(finished_at),
+        thread_id: snapshot.thread_id.clone(),
+        reasoning_effort: snapshot.reasoning_effort.clone(),
+        task_mode: snapshot.task_mode.clone(),
+    };
+    append_history(&record);
 }
 
 fn collect_orphans(
