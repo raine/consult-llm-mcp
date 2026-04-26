@@ -28,9 +28,13 @@ pub fn resolve_user_config() -> Option<PathBuf> {
 }
 
 /// Resolve the user config file path using an explicit home directory.
-/// Used by config discovery so tests can inject a temp home.
+/// Used by config discovery so tests can inject a temp home. Honors
+/// `$XDG_CONFIG_HOME` (when absolute) the same way `resolve_user_config`
+/// does — otherwise the runtime path silently disagrees with the
+/// documented XDG behavior.
 pub fn resolve_user_config_with_home(home: &Path) -> Option<PathBuf> {
-    let new = home.join(".config").join("consult-llm").join("config.yaml");
+    let xdg_dir = user_config_dir_with_home(Some(home))?;
+    let new = xdg_dir.join("config.yaml");
     if new.exists() {
         return Some(new);
     }
