@@ -470,7 +470,13 @@ consult-llm config set gemini.backend gemini-cli
 ```bash
 consult-llm config set openai.backend codex-cli
 consult-llm config set openai.reasoning_effort high  # none | minimal | low | medium | high | xhigh
+
+# Optional: append extra args to every `codex exec` invocation. Shell-quoted.
+# Useful e.g. to skip the sandbox in environments that already isolate Codex:
+consult-llm config set openai.extra_args '--dangerously-bypass-approvals-and-sandbox'
 ```
+
+The same `extra_args` field is supported on `gemini:` for the Gemini CLI backend.
 
 **Cursor CLI**: routes through `cursor-agent`:
 
@@ -669,6 +675,8 @@ Environment variables override config file values.
 | `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                      | all                                      |
 | `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      |                                          |
 | `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh` | `high`                                   |
+| `CONSULT_LLM_CODEX_EXTRA_ARGS`           | Extra CLI args appended to `codex exec` (shell-quoted)        | e.g. `--dangerously-bypass-approvals-and-sandbox` |                                       |
+| `CONSULT_LLM_GEMINI_EXTRA_ARGS`          | Extra CLI args appended to `gemini` (shell-quoted)            | shell-quoted args                              |                                          |
 | `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                  | per-model default                        |
 | `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                  | `openai`                                 |
 | `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                  | `google`                                 |

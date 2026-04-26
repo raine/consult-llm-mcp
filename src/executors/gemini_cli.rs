@@ -6,16 +6,18 @@ use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 
 pub struct GeminiCliExecutor {
     capabilities: LlmExecutorCapabilities,
+    extra_args: Vec<String>,
 }
 
 impl GeminiCliExecutor {
-    pub fn new() -> Self {
+    pub fn new(extra_args: Vec<String>) -> Self {
         Self {
             capabilities: LlmExecutorCapabilities {
                 is_cli: true,
                 supports_threads: true,
                 supports_file_refs: true,
             },
+            extra_args,
         }
     }
 }
@@ -183,6 +185,8 @@ impl LlmExecutor for GeminiCliExecutor {
             args.push("-r".to_string());
             args.push(t.to_string());
         }
+
+        args.extend(self.extra_args.iter().cloned());
 
         run_cli_executor(
             "gemini",

@@ -51,6 +51,8 @@ pub struct Config {
     #[allow(dead_code)]
     pub default_model: Option<String>,
     pub codex_reasoning_effort: String,
+    pub codex_extra_args: Vec<String>,
+    pub gemini_extra_args: Vec<String>,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
 }
@@ -91,6 +93,11 @@ pub enum ConfigError {
         allowed: Vec<String>,
     },
     InvalidCodexReasoningEffort(String),
+    InvalidExtraArgs {
+        env_var: String,
+        raw: String,
+        message: String,
+    },
     ConfigFile {
         path: PathBuf,
         message: String,
@@ -135,6 +142,14 @@ impl fmt::Display for ConfigError {
             ConfigError::InvalidCodexReasoningEffort(effort) => write!(
                 f,
                 "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"
+            ),
+            ConfigError::InvalidExtraArgs {
+                env_var,
+                raw,
+                message,
+            } => write!(
+                f,
+                "Invalid environment variables:\n  {env_var}: {message} (received '{raw}')"
             ),
             ConfigError::ConfigFile { path, message } => write!(
                 f,

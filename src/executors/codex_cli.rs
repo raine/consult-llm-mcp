@@ -6,10 +6,11 @@ use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
 pub struct CodexCliExecutor {
     capabilities: LlmExecutorCapabilities,
     codex_reasoning_effort: String,
+    extra_args: Vec<String>,
 }
 
 impl CodexCliExecutor {
-    pub fn new(codex_reasoning_effort: String) -> Self {
+    pub fn new(codex_reasoning_effort: String, extra_args: Vec<String>) -> Self {
         Self {
             capabilities: LlmExecutorCapabilities {
                 is_cli: true,
@@ -17,6 +18,7 @@ impl CodexCliExecutor {
                 supports_file_refs: true,
             },
             codex_reasoning_effort,
+            extra_args,
         }
     }
 }
@@ -185,6 +187,7 @@ impl LlmExecutor for CodexCliExecutor {
 
         args.push("-m".to_string());
         args.push(model.clone());
+        args.extend(self.extra_args.iter().cloned());
         if let Some(t) = tid {
             args.push(t.to_string());
         }

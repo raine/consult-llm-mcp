@@ -76,10 +76,11 @@ impl ExecutorProvider {
                     )),
                 }
             }
-            Backend::CodexCli => {
-                Arc::new(CodexCliExecutor::new(cfg.codex_reasoning_effort.clone()))
-            }
-            Backend::GeminiCli => Arc::new(GeminiCliExecutor::new()),
+            Backend::CodexCli => Arc::new(CodexCliExecutor::new(
+                cfg.codex_reasoning_effort.clone(),
+                cfg.codex_extra_args.clone(),
+            )),
+            Backend::GeminiCli => Arc::new(GeminiCliExecutor::new(cfg.gemini_extra_args.clone())),
             Backend::CursorCli => {
                 Arc::new(CursorCliExecutor::new(cfg.codex_reasoning_effort.clone()))
             }

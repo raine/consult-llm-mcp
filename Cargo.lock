@@ -415,6 +415,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "shlex",
  "smallvec",
  "tempfile",
  "thiserror 2.0.18",

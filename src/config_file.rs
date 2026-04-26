@@ -28,6 +28,10 @@ pub struct ProviderBlock {
     pub opencode_provider: Option<String>,
     pub reasoning_effort: Option<String>,
     pub api_key: Option<String>,
+    /// Extra CLI args appended to the underlying CLI invocation (codex/gemini).
+    /// Tokenized with shell-style quoting; only honored for providers whose
+    /// active backend is `codex-cli` (openai) or `gemini-cli` (gemini).
+    pub extra_args: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -143,6 +147,17 @@ impl ConfigFile {
             m.insert("CONSULT_LLM_CODEX_REASONING_EFFORT".into(), v.clone());
         }
 
+        if let Some(b) = &self.openai
+            && let Some(v) = &b.extra_args
+        {
+            m.insert("CONSULT_LLM_CODEX_EXTRA_ARGS".into(), v.clone());
+        }
+        if let Some(b) = &self.gemini
+            && let Some(v) = &b.extra_args
+        {
+            m.insert("CONSULT_LLM_GEMINI_EXTRA_ARGS".into(), v.clone());
+        }
+
         if let Some(oc) = &self.opencode
             && let Some(v) = &oc.default_provider
         {
@@ -182,12 +197,14 @@ mod tests {
                 opencode_provider: Some("google".into()),
                 reasoning_effort: None,
                 api_key: None,
+                extra_args: Some("--yolo".into()),
             }),
             openai: Some(ProviderBlock {
                 backend: Some("api".into()),
                 opencode_provider: None,
                 reasoning_effort: Some("high".into()),
                 api_key: None,
+                extra_args: Some("--dangerously-bypass-approvals-and-sandbox".into()),
             }),
             anthropic: None,
             deepseek: None,
@@ -207,6 +224,11 @@ mod tests {
         assert_eq!(m["CONSULT_LLM_OPENCODE_GEMINI_PROVIDER"], "google");
         assert_eq!(m["CONSULT_LLM_OPENAI_BACKEND"], "api");
         assert_eq!(m["CONSULT_LLM_CODEX_REASONING_EFFORT"], "high");
+        assert_eq!(
+            m["CONSULT_LLM_CODEX_EXTRA_ARGS"],
+            "--dangerously-bypass-approvals-and-sandbox"
+        );
+        assert_eq!(m["CONSULT_LLM_GEMINI_EXTRA_ARGS"], "--yolo");
         assert_eq!(m["CONSULT_LLM_OPENCODE_PROVIDER"], "copilot");
     }
 

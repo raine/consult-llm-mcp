@@ -8,6 +8,22 @@ use crate::models::{PROVIDER_SPECS, Provider, all_builtin_models};
 use super::migrate::{migrate_backend_env, migrate_prefixed_env};
 use super::types::{Backend, Config, ConfigError, ProviderRuntimeConfig};
 
+/// Tokenize a shell-quoted extra-args string. Empty/whitespace-only returns an
+/// empty vec; malformed quoting returns an error.
+pub fn parse_extra_args(raw: Option<&str>, env_var: &str) -> Result<Vec<String>, ConfigError> {
+    let Some(s) = raw else {
+        return Ok(Vec::new());
+    };
+    if s.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    shlex::split(s).ok_or_else(|| ConfigError::InvalidExtraArgs {
+        env_var: env_var.to_string(),
+        raw: s.to_string(),
+        message: "could not tokenize value (unbalanced quotes?)".to_string(),
+    })
+}
+
 pub fn filter_by_availability(
     models: &[String],
     providers: &HashMap<Provider, ProviderRuntimeConfig>,
@@ -160,6 +176,15 @@ pub fn parse_config(
         ));
     }
 
+    let codex_extra_args = parse_extra_args(
+        env("CONSULT_LLM_CODEX_EXTRA_ARGS").as_deref(),
+        "CONSULT_LLM_CODEX_EXTRA_ARGS",
+    )?;
+    let gemini_extra_args = parse_extra_args(
+        env("CONSULT_LLM_GEMINI_EXTRA_ARGS").as_deref(),
+        "CONSULT_LLM_GEMINI_EXTRA_ARGS",
+    )?;
+
     let fallback_model = if enabled_models.contains(&"gpt-5.2".to_string()) {
         "gpt-5.2".to_string()
     } else {
@@ -170,6 +195,8 @@ pub fn parse_config(
         providers,
         default_model: resolved_default.clone(),
         codex_reasoning_effort,
+        codex_extra_args,
+        gemini_extra_args,
         system_prompt_path: env("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
         allowed_models: enabled_models.clone(),
     };
@@ -376,6 +403,71 @@ mod tests {
                 .iter()
                 .any(|m| m.starts_with("gemini"))
         );
+    }
+
+    #[test]
+    fn test_parse_extra_args_empty() {
+        assert!(parse_extra_args(None, "X").unwrap().is_empty());
+        assert!(parse_extra_args(Some(""), "X").unwrap().is_empty());
+        assert!(parse_extra_args(Some("   "), "X").unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_parse_extra_args_tokenizes() {
+        let args = parse_extra_args(
+            Some("--dangerously-bypass-approvals-and-sandbox -C /tmp"),
+            "X",
+        )
+        .unwrap();
+        assert_eq!(
+            args,
+            vec!["--dangerously-bypass-approvals-and-sandbox", "-C", "/tmp"]
+        );
+    }
+
+    #[test]
+    fn test_parse_extra_args_handles_quoted() {
+        let args =
+            parse_extra_args(Some(r#"-c 'sandbox_mode="danger-full-access"'"#), "X").unwrap();
+        assert_eq!(args, vec!["-c", r#"sandbox_mode="danger-full-access""#]);
+    }
+
+    #[test]
+    fn test_parse_extra_args_invalid_quoting() {
+        let err = parse_extra_args(
+            Some(r#"--foo "unterminated"#),
+            "CONSULT_LLM_CODEX_EXTRA_ARGS",
+        )
+        .unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidExtraArgs { .. }));
+    }
+
+    #[test]
+    fn test_parse_config_codex_extra_args() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            (
+                "CONSULT_LLM_CODEX_EXTRA_ARGS",
+                "--dangerously-bypass-approvals-and-sandbox",
+            ),
+            ("CONSULT_LLM_GEMINI_EXTRA_ARGS", "--yolo --foo bar"),
+        ]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(
+            config.codex_extra_args,
+            vec!["--dangerously-bypass-approvals-and-sandbox"]
+        );
+        assert_eq!(config.gemini_extra_args, vec!["--yolo", "--foo", "bar"]);
+    }
+
+    #[test]
+    fn test_parse_config_invalid_extra_args() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_CODEX_EXTRA_ARGS", r#"--foo "unterminated"#),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidExtraArgs { .. }));
     }
 
     #[test]
