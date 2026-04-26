@@ -45,6 +45,9 @@ struct ChatChunkChoice {
 #[derive(Deserialize, Default)]
 struct ChatDelta {
     content: Option<String>,
+    /// DeepSeek-style chain-of-thought field, separate from the response content.
+    #[serde(default)]
+    reasoning_content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -161,8 +164,9 @@ impl LlmExecutor for ApiExecutor {
 
         let mut event_stream = resp.bytes_stream().eventsource();
         let mut raw_content = String::new();
+        let mut raw_thinking = String::new();
         let mut usage: Option<Usage> = None;
-        let mut responding = false;
+        let mut current_stage: Option<ProgressStage> = None;
         let idle_timeout = self.idle_timeout;
         let idle_secs = idle_timeout.as_secs();
 
@@ -188,26 +192,34 @@ impl LlmExecutor for ApiExecutor {
                     if chunk.choices.is_empty() {
                         continue;
                     }
-                    if let Some(text) = chunk
-                        .choices
-                        .first()
-                        .and_then(|c| c.delta.content.as_deref())
+                    let delta = &chunk.choices[0].delta;
+                    if let Some(t) = delta.reasoning_content.as_deref()
+                        && !t.is_empty()
+                    {
+                        set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
+                        raw_thinking.push_str(t);
+                    }
+                    if let Some(text) = delta.content.as_deref()
                         && !text.is_empty()
                     {
-                        if !responding {
-                            spool.lock().unwrap().set_stage(ProgressStage::Responding);
-                            responding = true;
-                        }
+                        set_stage_once(&mut current_stage, ProgressStage::Responding, &spool);
                         raw_content.push_str(text);
                     }
                 }
             }
         }
 
-        let (thinking, response) = extract_think_tags(&raw_content);
+        let (tag_thinking, response) = extract_think_tags(&raw_content);
         if response.is_empty() {
             anyhow::bail!("No response from the model via API");
         }
+
+        // Merge DeepSeek-style reasoning_content with <think>-tag thinking (e.g. MiniMax).
+        let thinking = match (raw_thinking.is_empty(), tag_thinking) {
+            (false, Some(tags)) => Some(format!("{}\n{}", raw_thinking.trim(), tags)),
+            (false, None) => Some(raw_thinking),
+            (true, t) => t,
+        };
 
         {
             let mut s = spool.lock().unwrap();
@@ -269,4 +281,21 @@ fn extract_think_tags(s: &str) -> (Option<String>, String) {
         Some(thinking)
     };
     (thinking, result.trim().to_string())
+}
+
+fn set_stage_once(
+    current: &mut Option<ProgressStage>,
+    next: ProgressStage,
+    spool: &std::sync::Mutex<consult_llm_core::monitoring::RunSpool>,
+) {
+    let needs_update = match current {
+        None => true,
+        Some(ProgressStage::Thinking) => !matches!(next, ProgressStage::Thinking),
+        Some(ProgressStage::Responding) => !matches!(next, ProgressStage::Responding),
+        _ => true,
+    };
+    if needs_update {
+        spool.lock().unwrap().set_stage(next.clone());
+        *current = Some(next);
+    }
 }
