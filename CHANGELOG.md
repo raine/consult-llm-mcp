@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.0.1 (2026-04-26)
+
+- `consult-llm` is now published to crates.io and can be installed with `cargo install consult-llm`
+
 ## v3.0.0 (2026-04-26)
 
 - **Migrated from MCP server to standalone CLI.** `consult-llm` is now a
