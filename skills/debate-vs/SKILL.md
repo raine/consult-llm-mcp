@@ -1,6 +1,6 @@
 ---
 name: debate-vs
-description: Claude debates an opponent LLM through a multi-turn conversation, then synthesizes the best approach and implements.
+description: The agent debates an opponent LLM through a multi-turn conversation, then synthesizes the best approach and implements.
 ---
 
 Debate an opponent LLM on the best implementation approach using multi-turn
@@ -33,7 +33,7 @@ Check the arguments for flags:
 - `--dry-run` → debate and plan only, skip implementation
 - `--skip-final` → skip the final review phase
 - `--rounds N` → number of debate rounds (default: 1, max: 3). Each round =
-  Claude argues + opponent responds.
+  agent argues + opponent responds.
 
 Strip all flags from arguments to get the task description.
 
@@ -67,13 +67,13 @@ listing the selectors from the Models block.
 
 Both debaters propose their approach independently.
 
-### Step 1: Claude's Opening Argument
+### Step 1: Agent's Opening Argument
 
 You ARE the debater. Form your own implementation approach based on what you
 found in Phase 1. Write it out in full:
 
 ```
-## Claude's Opening Argument
+## Agent's Opening Argument
 
 1. **Approach**: [2-3 sentences]
 2. **Key decisions**: [architectural/design decisions]
@@ -118,12 +118,12 @@ Present the opponent's opening argument to the user as
 
 For each round (default 1, configurable with `--rounds N`):
 
-### Claude's Turn
+### Agent's Turn
 
 Analyze the opponent's latest argument. Write your rebuttal:
 
 ```
-## Claude's Rebuttal (Round N)
+## Agent's Rebuttal (Round N)
 
 1. **Critique**: [weaknesses in opponent's approach]
 2. **Defense**: [address weaknesses opponent identified in your approach]
@@ -140,14 +140,14 @@ Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-t <thre
 **Rebuttal prompt:**
 
 ```
-Your opponent (Claude) has responded with this rebuttal:
+Your opponent has responded with this rebuttal:
 
-[Claude's rebuttal from above]
+[Opponent's rebuttal from above]
 
 Provide your counter-argument:
-1. **Critique**: What are the weaknesses in Claude's approach and rebuttal?
-2. **Defense**: Address the weaknesses Claude identified in your approach
-3. **Concessions**: Are there any good ideas from Claude worth adopting?
+1. **Critique**: What are the weaknesses in your opponent's approach and rebuttal?
+2. **Defense**: Address the weaknesses your opponent identified in your approach
+3. **Concessions**: Are there any good ideas from your opponent worth adopting?
 4. **Updated position**: State your refined recommendation
 
 Be constructive but thorough in your critique.
@@ -185,7 +185,7 @@ As both debater and moderator, synthesize the final approach:
 
 ## Debate Summary
 
-**Claude's position:** [1-2 sentence summary] **OPPONENT's position:** [1-2
+**Agent's position:** [1-2 sentence summary] **OPPONENT's position:** [1-2
 sentence summary]
 
 **Points of agreement:**
@@ -195,7 +195,7 @@ sentence summary]
 
 **Resolved disagreements:**
 
-- [Issue]: Claude said X, OPPONENT said Y → **Verdict:** [Decision and why]
+- [Issue]: Agent said X, OPPONENT said Y → **Verdict:** [Decision and why]
 
 **Verdict:** [2-3 sentences on the final synthesized approach]
 
@@ -289,8 +289,8 @@ Present a final summary to the user:
 
 **Implemented:** [One sentence describing what was built]
 
-**Debate outcome (Claude vs OPPONENT):**
-- Claude advocated: [key position]
+**Debate outcome (Agent vs OPPONENT):**
+- Agent advocated: [key position]
 - OPPONENT advocated: [key position]
 - Final verdict: [who won which points, synthesized approach]
 

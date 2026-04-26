@@ -1,6 +1,6 @@
 ---
 name: collab-vs
-description: Claude brainstorms with a partner LLM in alternating turns, building on each other's ideas. Synthesizes the best ideas into a plan.
+description: The agent brainstorms with a partner LLM in alternating turns, building on each other's ideas. Synthesizes the best ideas into a plan.
 ---
 
 Brainstorm collaboratively with a partner LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.
@@ -53,13 +53,13 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
    - Key patterns and conventions in the codebase
    - Any constraints or considerations
 
-## Phase 2: Seed (Claude starts)
+## Phase 2: Seed (agent starts)
 
 You kick off the brainstorm with initial ideas based on what you found in
 Phase 1. Write them out in full:
 
 ```
-## Claude's Ideas
+## Agent's Ideas
 
 1. **Ideas**: [2-3 possible approaches with brief descriptions]
 2. **Favorite**: [which approach you lean toward and why]
@@ -71,21 +71,21 @@ Present this to the user.
 
 ## Phase 3: Back and Forth
 
-Alternate between the partner LLM and Claude. Each turn builds on the previous
+Alternate between the partner LLM and the agent. Each turn builds on the previous
 response. Continue until the ideas converge into a clear approach — typically
 2-3 rounds, but use as many as needed.
 
 ### Round 1
 
-**Step 1 — PARTNER responds** to Claude's seed:
+**Step 1 — PARTNER responds** to the agent's seed:
 
-Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the build-on prompt below (with Claude's seed ideas embedded) on stdin via quoted heredoc.
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the build-on prompt below (with the agent's seed ideas embedded) on stdin via quoted heredoc.
 
 **Build-on prompt:**
 ```
 A collaborator shared these ideas:
 
-[Claude's ideas from above]
+[Agent's ideas from above]
 
 Build on their thinking:
 1. **What resonates**: Which ideas are strong? Why?
@@ -101,12 +101,12 @@ Save `partner_thread_id` from the `[thread_id:xxx]` prefix on line 1 of stdout.
 
 Present PARTNER's response to the user as `## PARTNER's Ideas (Round 1)`.
 
-**Step 2 — Claude responds** to PARTNER:
+**Step 2 — agent responds** to PARTNER:
 
 Analyze the partner's response and build on it:
 
 ```
-## Claude's Ideas (Round 1)
+## Agent's Ideas (Round 1)
 
 1. **What resonates**: [which of PARTNER's ideas are strong and why]
 2. **Combinations**: [ideas that can be merged into something better]
@@ -119,7 +119,7 @@ Present this to the user.
 
 ### Subsequent rounds
 
-Continue alternating (PARTNER → Claude). On each PARTNER turn, invoke `consult-llm` with `-m <MODEL>` and `-t <partner_thread_id>` to continue the conversation, sending the build-on prompt (with Claude's latest response embedded) on stdin via quoted heredoc.
+Continue alternating (PARTNER → agent). On each PARTNER turn, invoke `consult-llm` with `-m <MODEL>` and `-t <partner_thread_id>` to continue the conversation, sending the build-on prompt (with the agent's latest response embedded) on stdin via quoted heredoc.
 
 **When to stop:** Both sides are refining details rather than introducing new
 ideas, and a clear approach has emerged. Don't stop while there are still
@@ -146,7 +146,7 @@ After all rounds, synthesize the brainstorm into a plan:
 
 ## Brainstorm Summary
 
-**Key ideas from Claude:** [2-3 bullet points]
+**Key ideas from agent:** [2-3 bullet points]
 **Key ideas from PARTNER:** [2-3 bullet points]
 **Convergence:** [Where they naturally agreed]
 **Synthesis:** [How the final approach combines the best of both]
