@@ -139,9 +139,16 @@ jobs:
             exit 1
           fi
 
+          crate_published() {
+            local crate="$1"
+            curl -sf "https://crates.io/api/v1/crates/$crate/$CARGO_VERSION" \
+              -H "User-Agent: consult-llm-release-workflow" \
+              | jq -e '.version.num == "'$CARGO_VERSION'"' > /dev/null 2>&1
+          }
+
           publish_if_missing() {
             local crate="$1"
-            if cargo search "$crate" --limit 1 | grep -q "^$crate = \"$CARGO_VERSION\""; then
+            if crate_published "$crate"; then
               echo "$crate $CARGO_VERSION already published, skipping"
             else
               cargo publish -p "$crate"
@@ -150,9 +157,9 @@ jobs:
 
           wait_for_crate() {
             local crate="$1"
-            echo "Waiting for $crate $CARGO_VERSION to appear in crates.io index..."
+            echo "Waiting for $crate $CARGO_VERSION to appear on crates.io..."
             for i in $(seq 1 60); do
-              if cargo search "$crate" --limit 1 | grep -q "^$crate = \"$CARGO_VERSION\""; then
+              if crate_published "$crate"; then
                 echo "$crate $CARGO_VERSION is available"
                 return 0
               fi
