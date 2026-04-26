@@ -22,16 +22,12 @@ Selectors resolvable in this environment (depends on configured API keys):
 
 Check `$ARGUMENTS` for flags:
 
-**Role flags** (mutually exclusive — pass at most one):
+**Role selection:**
 
-- (none) — default roles: `architect,security,maintainability,test-strategist`.
-- `--roles <comma-separated>` — explicit kebab-case role list (e.g. `--roles security,api-design,ops-readiness`).
-- `--frontend` preset → `frontend-architect,accessibility,performance,design-system-maintainer`.
-- `--backend` preset → `backend-architect,security,reliability,data-integrity`.
-- `--migration` preset → `migration-architect,data-integrity,rollback-operator,compatibility`.
-- `--library` preset → `api-designer,backward-compatibility,documentation,test-strategist`.
+- `--roles <comma-separated>` — explicit kebab-case role list (e.g. `--roles security,api-design,ops-readiness`). Trim whitespace; reject duplicates and empty entries.
+- (none) — **the agent picks the roles** based on the task focus and the Phase 1 context. Default starting point is `architect, security, maintainability, test-strategist`; swap individual roles to fit the actual work. See "Example role bundles" near the bottom of this file as a reference. Pick 3–5 roles; do not exceed 5.
 
-Reject combining `--roles` with a preset. Trim whitespace from role labels; reject duplicates and empty entries.
+After picking, **show the chosen roles to the user before Round 1** so they can override with `--roles` if the inference is off (e.g. "Roles: migration-architect, security, data-integrity, rollback-operator. Override with --roles if needed.").
 
 **Mode flags:**
 
@@ -59,7 +55,7 @@ Error format:
 panel: <N> roles requested, only <M> distinct models available.
 Roles:     <role list>
 Selectors: <selector list>
-Either reduce --roles or pass distinct --<selector> flags.
+Either pick fewer roles (--roles ...) or pass distinct --<selector> flags.
 ```
 
 ## Phase 0: Load `consult-llm` skill
@@ -219,3 +215,19 @@ Print the saved path and a short final-recommendation summary to the user.
 - **Defer to security on safety conflicts. Prefer simpler when trade-offs balance.**
 - **Preserve unresolved disagreements.** No fake consensus.
 - **Advisory only.** The panel produces a report. Do not modify source files or commit as part of this skill — hand the artifact back to the user.
+
+## Example role bundles
+
+Reference starting points when the agent is picking roles. Use them as inspiration, not canonical sets — swap individual roles to fit the actual task. Each bundle is 4 roles; trim or extend within the 3–5 range.
+
+| Domain | Roles |
+| --- | --- |
+| General (default) | `architect, security, maintainability, test-strategist` |
+| Frontend | `frontend-architect, accessibility, performance, design-system-maintainer` |
+| Backend | `backend-architect, security, reliability, data-integrity` |
+| Migration / data move | `migration-architect, data-integrity, rollback-operator, compatibility` |
+| Library / public API | `api-designer, backward-compatibility, documentation, test-strategist` |
+| Infra / deploy | `platform-architect, reliability, observability, cost` |
+| ML / data pipeline | `data-engineer, ml-architect, reproducibility, evaluation` |
+
+A role label is just a kebab-case persona handed to the LLM — no validation, no special casing. Coin new ones freely (e.g. `i18n`, `bundle-size`, `fuzzing-strategist`) when the task warrants.
