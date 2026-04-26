@@ -37,7 +37,7 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
   after async operations. I was looking at the wrong thing entirely.
 ```
 
-[Quick start](#quick-start) · [Usage](#usage) · [Backends](#backends) · [Configuration](#configuration) · [Logging](#logging) · [Monitor](#monitor) · [Skills](#skills) · [Migrating](#migrating-from-mcp) · [Changelog](CHANGELOG.md)
+[Quick start](#quick-start) · [Usage](#usage) · [Backends](#backends) · [Skills](#skills) · [Configuration](#configuration) · [Logging](#logging) · [Monitor](#monitor) · [Changelog](CHANGELOG.md)
 
 > [!NOTE]
 > This project previously used MCP as its transport layer. If you were using that version, see the [migration guide](#migrating-from-mcp) below.
@@ -65,31 +65,19 @@ brew install raine/consult-llm/consult-llm
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install.sh | bash
 ```
 
-2. Pick a backend and scaffold your config:
-
-```bash
-consult-llm init-config
-```
-
-CLI backends are the easiest to start with if you have an existing subscription (no API key needed):
+2. Configure a backend. CLI backends are the easiest if you have an existing subscription (no API key needed):
 
 ```bash
 consult-llm config set gemini.backend gemini-cli   # requires: gemini login
 consult-llm config set openai.backend codex-cli    # requires: codex login
 ```
 
-Or set API keys in your user config:
+Or set API keys:
 
 ```bash
 consult-llm config set openai.api_key your_openai_key
 consult-llm config set gemini.api_key your_gemini_key
-```
-
-Or as environment variables:
-
-```bash
-export OPENAI_API_KEY=your_openai_key
-export GEMINI_API_KEY=your_gemini_key
+# or via environment variables: OPENAI_API_KEY, GEMINI_API_KEY, etc.
 ```
 
 3. Verify your setup:
@@ -413,12 +401,12 @@ A **backend** is how `consult-llm` reaches that model family:
 - **`api`**: direct HTTP calls using an API key
 - **CLI backends**: shell out to a local CLI tool already installed and logged in
 
-| Model family | `api` backend | CLI backends available | API key env var |
-| ------------ | ------------- | ---------------------- | --------------- |
-| Gemini       | yes           | `gemini-cli`, `cursor-cli`, `opencode` | `GEMINI_API_KEY` |
-| OpenAI       | yes           | `codex-cli`, `cursor-cli`, `opencode`  | `OPENAI_API_KEY` |
-| DeepSeek     | yes           | `opencode`                             | `DEEPSEEK_API_KEY` |
-| MiniMax      | yes           | `opencode`                             | `MINIMAX_API_KEY` |
+| Model family | `api` backend | CLI backends available                 | API key env var     |
+| ------------ | ------------- | -------------------------------------- | ------------------- |
+| Gemini       | yes           | `gemini-cli`, `cursor-cli`, `opencode` | `GEMINI_API_KEY`    |
+| OpenAI       | yes           | `codex-cli`, `cursor-cli`, `opencode`  | `OPENAI_API_KEY`    |
+| DeepSeek     | yes           | `opencode`                             | `DEEPSEEK_API_KEY`  |
+| MiniMax      | yes           | `opencode`                             | `MINIMAX_API_KEY`   |
 | Anthropic    | yes           | none                                   | `ANTHROPIC_API_KEY` |
 
 ### API backend
@@ -636,29 +624,29 @@ system_prompt_path: /path/to/project/.consult-llm/SYSTEM_PROMPT.md
 
 Environment variables override config file values.
 
-| Variable                                 | Description                                                   | Allowed values                                 | Default                           |
-| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
-| `OPENAI_API_KEY`                         | OpenAI API key                                                |                                                |                                   |
-| `GEMINI_API_KEY`                         | Gemini API key                                                |                                                |                                   |
-| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                |                                   |
-| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                |                                   |
-| `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                |                                   |
-| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use when `-m` is omitted                 | selector or exact model ID                     | first available                   |
-| `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`     | `api`                             |
-| `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`      | `api`                             |
-| `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                               | `api`                             |
-| `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                               | `api`                             |
-| `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                          | `api`                             |
-| `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                      | all                               |
-| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      |                                   |
-| `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh` | `high`                            |
-| `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                  | per-model default                 |
-| `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                  | `openai`                          |
-| `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                  | `google`                          |
-| `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                  | `deepseek`                        |
-| `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                  | `minimax`                         |
+| Variable                                 | Description                                                   | Allowed values                                 | Default                                  |
+| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `OPENAI_API_KEY`                         | OpenAI API key                                                |                                                |                                          |
+| `GEMINI_API_KEY`                         | Gemini API key                                                |                                                |                                          |
+| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                |                                          |
+| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                |                                          |
+| `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                |                                          |
+| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use when `-m` is omitted                 | selector or exact model ID                     | first available                          |
+| `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`     | `api`                                    |
+| `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`      | `api`                                    |
+| `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                               | `api`                                    |
+| `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                               | `api`                                    |
+| `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                          | `api`                                    |
+| `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                      | all                                      |
+| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                      |                                          |
+| `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh` | `high`                                   |
+| `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                  | per-model default                        |
+| `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                  | `openai`                                 |
+| `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                  | `google`                                 |
+| `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                  | `deepseek`                               |
+| `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                  | `minimax`                                |
 | `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                      | `~/.config/consult-llm/SYSTEM_PROMPT.md` |
-| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               |                                   |
+| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                               |                                          |
 
 </details>
 
