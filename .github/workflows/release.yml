@@ -169,7 +169,7 @@ jobs:
 
   update-tap:
     name: Update Homebrew tap
-    needs: [github-release, publish-crates]
+    needs: github-release
     runs-on: ubuntu-latest
     steps:
       - name: Download release artifacts
