@@ -324,10 +324,27 @@ pub fn run_background_check() -> Result<()> {
 /// Called on startup to check for updates in the background and log if one is available.
 /// Designed to be completely non-blocking and fail-silent.
 fn no_update_check_set() -> bool {
-    match std::env::var("CONSULT_LLM_NO_UPDATE_CHECK") {
-        Ok(v) => matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"),
-        Err(_) => false,
-    }
+    let raw = std::env::var("CONSULT_LLM_NO_UPDATE_CHECK")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(no_update_check_from_config);
+    matches!(
+        raw.as_deref().map(|v| v.trim().to_ascii_lowercase()),
+        Some(ref v) if matches!(v.as_str(), "1" | "true" | "yes")
+    )
+}
+
+/// Read `no_update_check` straight from the config files. The full config
+/// loader runs after the update check (it lives inside per-command handlers
+/// that haven't dispatched yet), so honor the YAML key by doing a focused
+/// discover-and-load here. Failures are swallowed: an unparseable config
+/// shouldn't crash startup before the user even sees the real error.
+fn no_update_check_from_config() -> Option<String> {
+    let cwd = std::env::current_dir().ok()?;
+    let home = dirs::home_dir();
+    let paths = crate::config_discovery::discover(&cwd, home.as_deref());
+    let env = crate::config_loader::LayeredEnv::load(&paths).ok()?;
+    env.lookup("CONSULT_LLM_NO_UPDATE_CHECK").map(|(v, _)| v)
 }
 
 pub fn check_and_notify() {
