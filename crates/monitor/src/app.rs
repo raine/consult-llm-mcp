@@ -282,7 +282,7 @@ impl AppState {
         if let Some(record) = self
             .history
             .iter()
-            .find(|record| record.consultation_id.as_deref() == Some(run_id.as_str()))
+            .find(|record| record.run_id.as_deref() == Some(run_id.as_str()))
         {
             apply_history_record_to_detail(&mut detail, record);
         }
@@ -312,7 +312,7 @@ impl AppState {
             .history
             .iter()
             .filter(|record| record.thread_id.as_deref() == Some(thread_id.as_str()))
-            .filter(|record| record.consultation_id.is_some())
+            .filter(|record| record.run_id.is_some())
             .collect();
         thread_records.sort_by(|a, b| a.ts.cmp(&b.ts));
 
@@ -334,7 +334,7 @@ impl AppState {
         let mut backends: Vec<String> = Vec::new();
 
         for record in &thread_records {
-            let Some(run_id) = record.consultation_id.clone() else {
+            let Some(run_id) = record.run_id.clone() else {
                 continue;
             };
             let (events, offset) = load_stream_events(&run_id);
@@ -419,7 +419,7 @@ impl AppState {
             if record.project != project {
                 continue;
             }
-            let Some(run_id) = record.consultation_id.clone() else {
+            let Some(run_id) = record.run_id.clone() else {
                 continue;
             };
             if !seen.insert(run_id.clone()) {
@@ -557,7 +557,7 @@ impl AppState {
         if self
             .history
             .iter()
-            .any(|record| record.consultation_id.as_deref() == Some(run_id))
+            .any(|record| record.run_id.as_deref() == Some(run_id))
         {
             let _ = std::fs::remove_file(active_dir().join(format!("{run_id}.json")));
             return;
@@ -597,7 +597,7 @@ impl AppState {
 
         let record = HistoryRecord {
             ts: finished_at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            consultation_id: Some(run_id.to_string()),
+            run_id: Some(run_id.to_string()),
             project: meta.project,
             model: meta.model,
             backend: meta.backend,

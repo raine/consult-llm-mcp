@@ -41,8 +41,12 @@ pub const HISTORY_FILE: &str = "history.jsonl";
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistoryRecord {
     pub ts: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub consultation_id: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "consultation_id"
+    )]
+    pub run_id: Option<String>,
     pub project: String,
     pub model: String,
     pub backend: String,
@@ -490,7 +494,7 @@ mod tests {
         spool.set_stage(ProgressStage::Thinking);
         let hist = HistoryRecord {
             ts: "t".into(),
-            consultation_id: Some("r1".into()),
+            run_id: Some("r1".into()),
             project: "p".into(),
             model: "m".into(),
             backend: "b".into(),

@@ -253,7 +253,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         )
     };
 
-    // Append a spinner when the consultation is still live
+    // Append a spinner when the run is still live
     if is_live {
         let spinner = SPINNER_FRAMES[tick % SPINNER_FRAMES.len()];
         let label = live_spinner_label(&detail.events);
@@ -282,7 +282,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
         detail.response_line_offset = response_offset;
     }
 
-    // Show error message when the consultation failed (after cache, like spinner)
+    // Show error message when the run failed (after cache, like spinner)
     if let Some(ref error) = detail_error {
         let prefix = "  Error: ";
         let cont = "         ";
@@ -318,7 +318,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
 
     let effective_scroll = if let AppMode::Detail(ref mut detail) = state.mode {
         detail.scroll = detail.scroll.min(max_scroll);
-        // Auto-enable follow when scrolled to bottom of a live consultation
+        // Auto-enable follow when scrolled to bottom of a live run
         if is_live && detail.scroll >= max_scroll {
             detail.auto_scroll = true;
         }
@@ -1016,7 +1016,7 @@ pub(super) fn render_thread_detail_view(
 
     let effective_scroll = if let AppMode::ThreadDetail(ref mut detail) = state.mode {
         detail.scroll = detail.scroll.min(max_scroll);
-        // Auto-enable follow when scrolled to bottom of a live consultation
+        // Auto-enable follow when scrolled to bottom of a live run
         if is_live && detail.scroll >= max_scroll {
             detail.auto_scroll = true;
         }

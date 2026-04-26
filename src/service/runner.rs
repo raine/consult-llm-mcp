@@ -29,7 +29,7 @@ pub async fn run_single_model(
         anyhow::bail!("thread_id is not supported by the configured backend for model: {model}");
     }
 
-    let consultation_id = uuid::Uuid::new_v4().simple().to_string();
+    let run_id = uuid::Uuid::new_v4().simple().to_string();
     let backend_name = executor.backend_name().to_string();
 
     let task_mode_str = match task_mode {
@@ -49,7 +49,7 @@ pub async fn run_single_model(
 
     let meta = consult_llm_core::monitoring::RunMeta {
         v: 1,
-        run_id: consultation_id.clone(),
+        run_id: run_id.clone(),
         pid: std::process::id(),
         started_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         project: project.clone(),
@@ -124,7 +124,7 @@ pub async fn run_single_model(
 
     let history = consult_llm_core::monitoring::HistoryRecord {
         ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-        consultation_id: Some(consultation_id),
+        run_id: Some(run_id),
         project,
         model: model.clone(),
         backend: backend_name,

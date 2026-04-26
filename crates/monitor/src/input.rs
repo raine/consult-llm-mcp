@@ -70,10 +70,10 @@ fn handle_table_key(
                 match display_rows.get(state.history_selected) {
                     Some(HistoryDisplayRow::Single(idx)) => {
                         let record = &state.history[*idx];
-                        if let Some(cid) = &record.consultation_id {
-                            let path = dir.join("runs").join(format!("{cid}.events.jsonl"));
+                        if let Some(run_id) = &record.run_id {
+                            let path = dir.join("runs").join(format!("{run_id}.events.jsonl"));
                             if path.exists() {
-                                Some(Action::EnterDetail(cid.clone()))
+                                Some(Action::EnterDetail(run_id.clone()))
                             } else {
                                 Some(Action::Flash("log file not found".into(), 20))
                             }

@@ -219,7 +219,7 @@ impl AppState {
                             .as_deref()
                             .is_some_and(|thread| thread.to_lowercase().contains(&needle))
                         || record
-                            .consultation_id
+                            .run_id
                             .as_deref()
                             .is_some_and(|run_id| run_id.to_lowercase().contains(&needle))
                         || (record.success && "success".contains(&needle))
