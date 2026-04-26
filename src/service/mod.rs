@@ -269,10 +269,14 @@ impl ConsultService {
                 .unwrap_or_default();
 
             for r in &results {
-                if !r.failed {
-                    if let Some(tid) = &r.thread_id {
-                        members.insert(r.model.clone(), tid.clone());
-                    }
+                // Only record a model in the group if we actually captured a
+                // thread id for it — otherwise a later resume that picks the
+                // model from member_order would fail in plan_resume because
+                // there's no member entry to look up.
+                if !r.failed
+                    && let Some(tid) = &r.thread_id
+                {
+                    members.insert(r.model.clone(), tid.clone());
                     if !member_order.contains(&r.model) {
                         member_order.push(r.model.clone());
                     }
