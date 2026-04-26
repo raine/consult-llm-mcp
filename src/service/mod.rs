@@ -234,7 +234,12 @@ impl ConsultService {
             }
         }
         if results.iter().all(|r| r.failed) {
-            anyhow::bail!("all model consultations failed");
+            let details = results
+                .iter()
+                .map(|r| format!("{}: {}", r.model, r.body))
+                .collect::<Vec<_>>()
+                .join("\n");
+            anyhow::bail!("all model consultations failed\n{details}");
         }
 
         let group_id = existing_group_id
