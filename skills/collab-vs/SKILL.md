@@ -1,6 +1,7 @@
 ---
 name: collab-vs
 description: The agent brainstorms with a partner LLM in alternating turns, building on each other's ideas. Synthesizes the best ideas into a plan.
+disable-model-invocation: true
 ---
 
 Brainstorm collaboratively with a partner LLM, building on each other's ideas in alternating turns, then synthesize the best ideas into a plan.

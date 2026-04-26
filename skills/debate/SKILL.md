@@ -1,6 +1,7 @@
 ---
 name: debate
 description: LLMs propose and critique approaches, agent moderates the debate and synthesizes the best solution, then implements.
+disable-model-invocation: true
 ---
 
 Have multiple LLMs debate the best approach, then synthesize and implement.

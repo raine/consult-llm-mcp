@@ -2,6 +2,7 @@
 name: review-panel
 description: Standalone multi-model code review of an existing diff. Multiple LLMs review in parallel; agent deduplicates, prioritizes by severity/confidence, and optionally applies localized fixes.
 allowed-tools: Bash, Glob, Grep, Read, Edit, Write
+disable-model-invocation: true
 ---
 
 Run a standalone multi-model review of a diff. Reviewers receive the same prompt independently; the agent synthesizes duplicate findings into a prioritized checklist and can optionally apply unambiguous fixes.

@@ -1,6 +1,7 @@
 ---
 name: collab
 description: Multiple LLMs collaboratively brainstorm solutions, building on each other's ideas across rounds. Agent synthesizes the best ideas into a plan.
+disable-model-invocation: true
 ---
 
 Have multiple LLMs collaboratively brainstorm solutions, then synthesize the best ideas into a plan. The LLMs build on each other's ideas across rounds rather than critiquing positions.
