@@ -2,13 +2,17 @@
 name = "consult-llm-monitor"
 version.workspace = true
 edition.workspace = true
+description = "Live TUI monitor for consult-llm runs"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "consult-llm-monitor"
 path = "src/main.rs"
 
 [dependencies]
-consult-llm-core = { path = "../core" }
+consult-llm-core = { path = "../core", version = "=3.0.0" }
 ratatui = "0.30"
 crossterm = "0.29"
 chrono = { workspace = true }

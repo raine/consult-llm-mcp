@@ -849,13 +849,7 @@ EOF
 
 ## Releasing
 
-```bash
-scripts/publish patch
-```
-
-This bumps the workspace version in `Cargo.toml`, optionally updates the
-changelog, commits, tags, and pushes. GitHub Actions builds and uploads the
-release archives.
+See [RELEASE.md](RELEASE.md).
 
 ## Related Projects
 

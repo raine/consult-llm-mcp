@@ -119,9 +119,57 @@ jobs:
               $PRERELEASE
           fi
 
+  publish-crates:
+    name: Publish to crates.io
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          CARGO_VERSION=$(cargo metadata --no-deps --format-version=1 \
+            | jq -r '.packages[] | select(.name=="consult-llm") | .version')
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$TAG" != "$CARGO_VERSION" ]; then
+            echo "Tag $TAG does not match Cargo.toml version $CARGO_VERSION" >&2
+            exit 1
+          fi
+
+          publish_if_missing() {
+            local crate="$1"
+            if cargo search "$crate" --limit 1 | grep -q "^$crate = \"$CARGO_VERSION\""; then
+              echo "$crate $CARGO_VERSION already published, skipping"
+            else
+              cargo publish -p "$crate"
+            fi
+          }
+
+          wait_for_crate() {
+            local crate="$1"
+            echo "Waiting for $crate $CARGO_VERSION to appear in crates.io index..."
+            for i in $(seq 1 60); do
+              if cargo search "$crate" --limit 1 | grep -q "^$crate = \"$CARGO_VERSION\""; then
+                echo "$crate $CARGO_VERSION is available"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "Timed out waiting for $crate $CARGO_VERSION" >&2
+            return 1
+          }
+
+          publish_if_missing consult-llm-core
+          wait_for_crate consult-llm-core
+          publish_if_missing consult-llm
+          publish_if_missing consult-llm-monitor
+
   update-tap:
     name: Update Homebrew tap
-    needs: github-release
+    needs: [github-release, publish-crates]
     runs-on: ubuntu-latest
     steps:
       - name: Download release artifacts
@@ -147,6 +195,7 @@ jobs:
           SHA_LINUX_X64=$(awk '{print $1}' artifacts/consult-llm-linux-x64.sha256)
           SHA_LINUX_ARM=$(awk '{print $1}' artifacts/consult-llm-linux-arm64.sha256)
 
+          mkdir -p tap/Formula
           cat > tap/Formula/consult-llm.rb << EOF
           class ConsultLlm < Formula
             desc "CLI for consulting LLMs from agent workflows"
@@ -180,7 +229,7 @@ jobs:
             end
 
             test do
-              assert_match version.to_s, shell_output("\#{bin}/consult-llm --version")
+              assert_match version.to_s, shell_output("#{bin}/consult-llm --version")
             end
           end
           EOF
@@ -190,6 +239,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/consult-llm.rb
+          git diff --cached --quiet && echo "Formula unchanged, skipping commit" && exit 0
           git commit -m "consult-llm ${VERSION}"
           git pull --rebase
           git push

@@ -4,6 +4,9 @@ members = [".", "crates/core", "crates/monitor"]
 [workspace.package]
 version = "3.0.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/raine/consult-llm"
+homepage = "https://github.com/raine/consult-llm"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -20,10 +23,16 @@ anyhow = "1"
 name = "consult-llm"
 version.workspace = true
 edition.workspace = true
+description = "CLI for consulting stronger LLMs from your agent workflow"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords = ["llm", "ai", "cli", "agent"]
+categories = ["command-line-utilities"]
 build = "build.rs"
 
 [dependencies]
-consult-llm-core = { path = "crates/core" }
+consult-llm-core = { path = "crates/core", version = "=3.0.0" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
