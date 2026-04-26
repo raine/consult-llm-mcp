@@ -54,6 +54,10 @@ impl ApiChatSession {
         }
 
         let mut s = spool.lock().unwrap();
+        s.stream_event(ParsedStreamEvent::SessionStarted {
+            id: session.thread_id.clone(),
+        });
+        s.resolve_thread_id(session.thread_id.clone());
         s.stream_event(ParsedStreamEvent::SystemPrompt {
             text: system_prompt.to_string(),
         });
@@ -68,33 +72,16 @@ impl ApiChatSession {
         &self.history
     }
 
-    pub fn finish(
+    /// Persist a completed turn to thread storage and return the result.
+    /// Spool events (AssistantText, Thinking, Usage) must be emitted by the
+    /// caller before this — this method only handles persistence.
+    pub fn commit_turn(
         &self,
-        spool: &Mutex<RunSpool>,
         prompt: String,
         model: String,
         response: String,
-        thinking: Option<String>,
         usage: Option<Usage>,
     ) -> anyhow::Result<ExecuteResult> {
-        {
-            let mut s = spool.lock().unwrap();
-            if let Some(ref thinking) = thinking {
-                s.stream_event(ParsedStreamEvent::Thinking {
-                    text: thinking.clone(),
-                });
-            }
-            s.stream_event(ParsedStreamEvent::AssistantText {
-                text: response.clone(),
-            });
-            if let Some(ref u) = usage {
-                s.stream_event(ParsedStreamEvent::Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                });
-            }
-        }
-
         thread_store::append_turn(
             &self.thread_id,
             thread_store::StoredTurn {

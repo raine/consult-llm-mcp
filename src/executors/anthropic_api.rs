@@ -1,5 +1,12 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
+use eventsource_stream::Eventsource;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+
+use consult_llm_core::monitoring::ProgressStage;
+use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
@@ -21,53 +28,119 @@ struct MessagesRequest {
     system: String,
     messages: Vec<Message>,
     max_tokens: u32,
+    stream: bool,
 }
 
-#[derive(Deserialize)]
-struct MessagesResponse {
-    content: Vec<ContentBlock>,
-    #[serde(default)]
-    usage: Option<AnthropicUsage>,
-    #[serde(default)]
-    stop_reason: Option<String>,
-}
+// --- Anthropic SSE event types ---
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-enum ContentBlock {
-    Text {
-        text: String,
+enum AnthropicEvent {
+    MessageStart {
+        message: MessageStartData,
     },
-    Thinking {
-        thinking: String,
+    ContentBlockStart {
+        content_block: ContentBlockKind,
+    },
+    ContentBlockDelta {
+        delta: ContentDelta,
+    },
+    ContentBlockStop,
+    MessageDelta {
+        delta: MessageDeltaData,
+        #[serde(default)]
+        usage: Option<MessageDeltaUsage>,
+    },
+    MessageStop,
+    Ping,
+    Error {
+        error: AnthropicError,
     },
     #[serde(other)]
-    Other,
+    Unknown,
 }
 
 #[derive(Deserialize)]
-struct AnthropicUsage {
+struct MessageStartData {
+    #[serde(default)]
+    usage: Option<MessageStartUsage>,
+}
+
+#[derive(Deserialize, Default)]
+struct MessageStartUsage {
+    #[serde(default)]
     input_tokens: u64,
-    output_tokens: u64,
     #[serde(default)]
     cache_creation_input_tokens: u64,
     #[serde(default)]
     cache_read_input_tokens: u64,
 }
 
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContentBlockKind {
+    Text,
+    Thinking,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContentDelta {
+    TextDelta {
+        text: String,
+    },
+    ThinkingDelta {
+        thinking: String,
+    },
+    SignatureDelta {
+        #[allow(dead_code)]
+        signature: String,
+    },
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Deserialize)]
+struct MessageDeltaData {
+    #[serde(default)]
+    stop_reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct MessageDeltaUsage {
+    #[serde(default)]
+    output_tokens: u64,
+}
+
+#[derive(Deserialize)]
+struct AnthropicError {
+    #[serde(rename = "type")]
+    error_type: String,
+    message: String,
+}
+
 pub struct AnthropicApiExecutor {
     client: reqwest::Client,
     api_key: String,
     base_url: String,
+    idle_timeout: Duration,
     capabilities: LlmExecutorCapabilities,
 }
 
 impl AnthropicApiExecutor {
-    pub fn new(client: reqwest::Client, api_key: String, base_url: Option<String>) -> Self {
+    pub fn new(
+        client: reqwest::Client,
+        api_key: String,
+        base_url: Option<String>,
+        idle_timeout: Duration,
+    ) -> Self {
         Self {
             client,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string()),
+            idle_timeout,
             capabilities: LlmExecutorCapabilities {
                 is_cli: false,
                 supports_threads: true,
@@ -125,6 +198,7 @@ impl LlmExecutor for AnthropicApiExecutor {
             system: system_prompt,
             messages,
             max_tokens: DEFAULT_MAX_TOKENS,
+            stream: true,
         };
 
         let resp = self
@@ -142,9 +216,87 @@ impl LlmExecutor for AnthropicApiExecutor {
             anyhow::bail!("Anthropic API request failed with status {status}: {body}");
         }
 
-        let msg_resp: MessagesResponse = resp.json().await?;
+        let mut event_stream = resp.bytes_stream().eventsource();
+        let mut response = String::new();
+        let mut thinking = String::new();
+        let mut input_tokens: u64 = 0;
+        let mut cache_creation_tokens: u64 = 0;
+        let mut cache_read_tokens: u64 = 0;
+        let mut output_tokens: u64 = 0;
+        let mut stop_reason: Option<String> = None;
+        let mut saw_message_stop = false;
+        let mut current_stage: Option<ProgressStage> = None;
+        let idle_timeout = self.idle_timeout;
+        let idle_secs = idle_timeout.as_secs();
 
-        match msg_resp.stop_reason.as_deref() {
+        loop {
+            match tokio::time::timeout(idle_timeout, event_stream.next()).await {
+                Err(_) => anyhow::bail!(
+                    "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
+                ),
+                Ok(None) => break,
+                Ok(Some(Err(e))) => anyhow::bail!("Anthropic stream error for {model}: {e}"),
+                Ok(Some(Ok(event))) => {
+                    let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&event.data) else {
+                        continue;
+                    };
+                    match parsed {
+                        AnthropicEvent::MessageStart { message } => {
+                            if let Some(u) = message.usage {
+                                input_tokens = u.input_tokens;
+                                cache_creation_tokens = u.cache_creation_input_tokens;
+                                cache_read_tokens = u.cache_read_input_tokens;
+                            }
+                        }
+                        AnthropicEvent::ContentBlockStart { content_block, .. } => {
+                            if matches!(content_block, ContentBlockKind::Thinking) {
+                                set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
+                            }
+                        }
+                        AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
+                            ContentDelta::ThinkingDelta { thinking: t } => {
+                                set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
+                                thinking.push_str(&t);
+                            }
+                            ContentDelta::TextDelta { text } => {
+                                set_stage_once(
+                                    &mut current_stage,
+                                    ProgressStage::Responding,
+                                    &spool,
+                                );
+                                response.push_str(&text);
+                            }
+                            ContentDelta::SignatureDelta { .. } | ContentDelta::Other => {}
+                        },
+                        AnthropicEvent::ContentBlockStop => {}
+                        AnthropicEvent::MessageDelta { delta, usage } => {
+                            stop_reason = delta.stop_reason;
+                            if let Some(u) = usage {
+                                output_tokens = u.output_tokens;
+                            }
+                        }
+                        AnthropicEvent::MessageStop => {
+                            saw_message_stop = true;
+                            break;
+                        }
+                        AnthropicEvent::Error { error } => {
+                            anyhow::bail!(
+                                "Anthropic stream error {}: {}",
+                                error.error_type,
+                                error.message
+                            );
+                        }
+                        AnthropicEvent::Ping | AnthropicEvent::Unknown => {}
+                    }
+                }
+            }
+        }
+
+        if !saw_message_stop {
+            anyhow::bail!("Anthropic stream for {model} ended without message_stop");
+        }
+
+        match stop_reason.as_deref() {
             Some("pause_turn") => anyhow::bail!(
                 "Anthropic API returned pause_turn — long-running turn was paused mid-stream"
             ),
@@ -169,34 +321,55 @@ impl LlmExecutor for AnthropicApiExecutor {
             _ => {}
         }
 
-        let mut thinking = String::new();
-        let mut response = String::new();
-        for block in msg_resp.content {
-            match block {
-                ContentBlock::Text { text } => response.push_str(&text),
-                ContentBlock::Thinking { thinking: t } => thinking.push_str(&t),
-                ContentBlock::Other => {}
-            }
-        }
-
         if response.is_empty() {
             anyhow::bail!("No text content in Anthropic API response");
         }
 
-        let usage = msg_resp.usage.map(|u| Usage {
-            prompt_tokens: u.input_tokens
-                + u.cache_creation_input_tokens
-                + u.cache_read_input_tokens,
-            completion_tokens: u.output_tokens,
+        let usage = Some(Usage {
+            prompt_tokens: input_tokens + cache_creation_tokens + cache_read_tokens,
+            completion_tokens: output_tokens,
         });
-
-        let thinking = if thinking.is_empty() {
+        let thinking_opt = if thinking.is_empty() {
             None
         } else {
             Some(thinking)
         };
 
-        session.finish(&spool, prompt, model, response, thinking, usage)
+        {
+            let mut s = spool.lock().unwrap();
+            if let Some(ref t) = thinking_opt {
+                s.stream_event(ParsedStreamEvent::Thinking { text: t.clone() });
+            }
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
+            });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
+        }
+
+        session.commit_turn(prompt, model, response, usage)
+    }
+}
+
+/// Update the spool stage only when it differs from the current value.
+fn set_stage_once(
+    current: &mut Option<ProgressStage>,
+    next: ProgressStage,
+    spool: &std::sync::Mutex<consult_llm_core::monitoring::RunSpool>,
+) {
+    let needs_update = match current {
+        None => true,
+        Some(ProgressStage::Thinking) => !matches!(next, ProgressStage::Thinking),
+        Some(ProgressStage::Responding) => !matches!(next, ProgressStage::Responding),
+        _ => true,
+    };
+    if needs_update {
+        spool.lock().unwrap().set_stage(next.clone());
+        *current = Some(next);
     }
 }
 
@@ -205,88 +378,71 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deserializes_text_only_response() {
-        let json = r#"{
-            "id": "msg_1",
-            "type": "message",
-            "role": "assistant",
-            "content": [{"type": "text", "text": "hello"}],
-            "stop_reason": "end_turn",
-            "usage": {"input_tokens": 10, "output_tokens": 5}
-        }"#;
-        let r: MessagesResponse = serde_json::from_str(json).unwrap();
-        assert!(matches!(r.content[0], ContentBlock::Text { ref text } if text == "hello"));
-        let u = r.usage.unwrap();
-        assert_eq!(u.input_tokens, 10);
-        assert_eq!(u.output_tokens, 5);
-        assert_eq!(u.cache_read_input_tokens, 0);
-        assert_eq!(r.stop_reason.as_deref(), Some("end_turn"));
-    }
-
-    #[test]
-    fn deserializes_thinking_and_cache_tokens() {
-        let json = r#"{
-            "content": [
-                {"type": "thinking", "thinking": "step 1"},
-                {"type": "text", "text": "final"}
-            ],
-            "stop_reason": "end_turn",
-            "usage": {
-                "input_tokens": 2,
-                "output_tokens": 3,
-                "cache_creation_input_tokens": 100,
-                "cache_read_input_tokens": 500
-            }
-        }"#;
-        let r: MessagesResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(r.content.len(), 2);
+    fn parses_content_block_delta_text() {
+        let json = r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
         assert!(
-            matches!(r.content[0], ContentBlock::Thinking { ref thinking } if thinking == "step 1")
+            matches!(e, AnthropicEvent::ContentBlockDelta { delta: ContentDelta::TextDelta { ref text }, .. } if text == "hello")
         );
-        assert!(matches!(r.content[1], ContentBlock::Text { ref text } if text == "final"));
-        let u = r.usage.unwrap();
-        assert_eq!(u.cache_creation_input_tokens, 100);
-        assert_eq!(u.cache_read_input_tokens, 500);
     }
 
     #[test]
-    fn deserializes_unknown_block_as_other() {
-        let json = r#"{
-            "content": [{"type": "tool_use", "id": "x", "name": "y", "input": {}}],
-            "usage": {"input_tokens": 1, "output_tokens": 1}
-        }"#;
-        let r: MessagesResponse = serde_json::from_str(json).unwrap();
-        assert!(matches!(r.content[0], ContentBlock::Other));
-    }
-
-    #[test]
-    fn deserializes_refusal_with_content() {
-        // Refusals come back as a successful response with content; we should
-        // surface the content rather than drop it.
-        let json = r#"{
-            "content": [{"type": "text", "text": "I can't help with that."}],
-            "stop_reason": "refusal",
-            "usage": {"input_tokens": 5, "output_tokens": 7}
-        }"#;
-        let r: MessagesResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(r.stop_reason.as_deref(), Some("refusal"));
+    fn parses_thinking_delta() {
+        let json = r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"step1"}}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
         assert!(
-            matches!(r.content[0], ContentBlock::Text { ref text } if text.contains("can't help"))
+            matches!(e, AnthropicEvent::ContentBlockDelta { delta: ContentDelta::ThinkingDelta { ref thinking }, .. } if thinking == "step1")
         );
     }
 
     #[test]
-    fn deserializes_context_window_exceeded() {
-        let json = r#"{
-            "content": [{"type": "text", "text": "partial"}],
-            "stop_reason": "model_context_window_exceeded",
-            "usage": {"input_tokens": 100, "output_tokens": 50}
-        }"#;
-        let r: MessagesResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            r.stop_reason.as_deref(),
-            Some("model_context_window_exceeded")
+    fn parses_message_delta_stop_reason() {
+        let json = r#"{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42}}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(
+            matches!(e, AnthropicEvent::MessageDelta { ref delta, ref usage }
+                if delta.stop_reason.as_deref() == Some("end_turn")
+                && usage.as_ref().map(|u| u.output_tokens) == Some(42))
         );
+    }
+
+    #[test]
+    fn parses_message_stop() {
+        let json = r#"{"type":"message_stop"}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(e, AnthropicEvent::MessageStop));
+    }
+
+    #[test]
+    fn parses_ping() {
+        let json = r#"{"type":"ping"}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(e, AnthropicEvent::Ping));
+    }
+
+    #[test]
+    fn parses_error_event() {
+        let json = r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(
+            matches!(e, AnthropicEvent::Error { ref error } if error.error_type == "overloaded_error")
+        );
+    }
+
+    #[test]
+    fn parses_message_start_usage() {
+        let json = r#"{"type":"message_start","message":{"usage":{"input_tokens":10,"cache_creation_input_tokens":5,"cache_read_input_tokens":2}}}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(e, AnthropicEvent::MessageStart { ref message }
+                if message.usage.as_ref().map(|u| u.input_tokens) == Some(10)
+                && message.usage.as_ref().map(|u| u.cache_creation_input_tokens) == Some(5)));
+    }
+
+    #[test]
+    fn unknown_event_type_is_ignored() {
+        let json = r#"{"type":"some_future_event","data":"whatever"}"#;
+        let e: AnthropicEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(e, AnthropicEvent::Unknown));
     }
 
     #[test]
@@ -299,8 +455,10 @@ mod tests {
                 content: "hi".into(),
             }],
             max_tokens: 1024,
+            stream: true,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("\"system\""), "empty system must be omitted");
+        assert!(json.contains("\"stream\":true"));
     }
 }

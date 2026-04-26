@@ -16,7 +16,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 uuid = { version = "1", features = ["v4"] }
 dirs = "6"
 libc = "0.2"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "fs", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "io-util", "sync", "fs", "signal", "time"] }
 anyhow = "1"
 
 [package]
@@ -37,7 +37,8 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "stream"] }
+eventsource-stream = "0.2"
 async-trait = "0.1"
 thiserror = "2"
 anyhow = { workspace = true }

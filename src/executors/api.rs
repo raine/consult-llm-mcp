@@ -1,5 +1,12 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
+use eventsource_stream::Eventsource;
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
+
+use consult_llm_core::monitoring::ProgressStage;
+use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
@@ -14,21 +21,29 @@ struct ChatMessage {
 struct ChatRequest {
     model: String,
     messages: Vec<ChatMessage>,
+    stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream_options: Option<StreamOptions>,
+}
+
+#[derive(Serialize)]
+struct StreamOptions {
+    include_usage: bool,
 }
 
 #[derive(Deserialize)]
-struct ChatResponse {
-    choices: Vec<ChatChoice>,
+struct ChatChunk {
+    choices: Vec<ChatChunkChoice>,
     usage: Option<ApiUsage>,
 }
 
 #[derive(Deserialize)]
-struct ChatChoice {
-    message: ChatChoiceMessage,
+struct ChatChunkChoice {
+    delta: ChatDelta,
 }
 
-#[derive(Deserialize)]
-struct ChatChoiceMessage {
+#[derive(Deserialize, Default)]
+struct ChatDelta {
     content: Option<String>,
 }
 
@@ -46,15 +61,22 @@ pub struct ApiExecutor {
     client: reqwest::Client,
     api_key: String,
     base_url: String,
+    idle_timeout: Duration,
     capabilities: LlmExecutorCapabilities,
 }
 
 impl ApiExecutor {
-    pub fn new(client: reqwest::Client, api_key: String, base_url: Option<String>) -> Self {
+    pub fn new(
+        client: reqwest::Client,
+        api_key: String,
+        base_url: Option<String>,
+        idle_timeout: Duration,
+    ) -> Self {
         Self {
             client,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1/".to_string()),
+            idle_timeout,
             capabilities: LlmExecutorCapabilities {
                 is_cli: false,
                 supports_threads: true,
@@ -117,6 +139,10 @@ impl LlmExecutor for ApiExecutor {
         let request = ChatRequest {
             model: model.clone(),
             messages,
+            stream: true,
+            stream_options: Some(StreamOptions {
+                include_usage: true,
+            }),
         };
 
         let resp = self
@@ -133,33 +159,91 @@ impl LlmExecutor for ApiExecutor {
             anyhow::bail!("API request failed with status {status}: {body}");
         }
 
-        let chat_resp: ChatResponse = resp.json().await?;
-        let raw_content = chat_resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_default();
+        let mut event_stream = resp.bytes_stream().eventsource();
+        let mut raw_content = String::new();
+        let mut usage: Option<Usage> = None;
+        let mut saw_done = false;
+        let mut responding = false;
+        let idle_timeout = self.idle_timeout;
+        let idle_secs = idle_timeout.as_secs();
+
+        loop {
+            match tokio::time::timeout(idle_timeout, event_stream.next()).await {
+                Err(_) => {
+                    anyhow::bail!("API stream idle timeout: no data from {model} for {idle_secs}s")
+                }
+                Ok(None) => break,
+                Ok(Some(Err(e))) => anyhow::bail!("API stream error for {model}: {e}"),
+                Ok(Some(Ok(event))) => {
+                    if event.data == "[DONE]" {
+                        saw_done = true;
+                        break;
+                    }
+                    let Ok(chunk) = serde_json::from_str::<ChatChunk>(&event.data) else {
+                        continue;
+                    };
+                    // Usage-only chunk (empty choices) from stream_options.include_usage
+                    if chunk.choices.is_empty() {
+                        if let Some(u) = chunk.usage {
+                            usage = Some(effective_usage(u));
+                        }
+                        continue;
+                    }
+                    if let Some(text) = chunk
+                        .choices
+                        .first()
+                        .and_then(|c| c.delta.content.as_deref())
+                        && !text.is_empty()
+                    {
+                        if !responding {
+                            spool.lock().unwrap().set_stage(ProgressStage::Responding);
+                            responding = true;
+                        }
+                        raw_content.push_str(text);
+                    }
+                }
+            }
+        }
+
+        if !saw_done {
+            anyhow::bail!("API stream for {model} ended without [DONE] terminator");
+        }
+
         let (thinking, response) = extract_think_tags(&raw_content);
         if response.is_empty() {
             anyhow::bail!("No response from the model via API");
         }
 
-        let usage = chat_resp.usage.map(|u| {
-            // Gemini thinking models report thinking tokens only in total_tokens,
-            // not in completion_tokens. Derive the full output cost from total.
-            let effective_completion = match u.total_tokens {
-                Some(total) if total > u.prompt_tokens + u.completion_tokens => {
-                    total - u.prompt_tokens
-                }
-                _ => u.completion_tokens,
-            };
-            Usage {
-                prompt_tokens: u.prompt_tokens,
-                completion_tokens: effective_completion,
+        {
+            let mut s = spool.lock().unwrap();
+            if let Some(ref t) = thinking {
+                s.stream_event(ParsedStreamEvent::Thinking { text: t.clone() });
             }
-        });
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
+            });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
+        }
 
-        session.finish(&spool, prompt, model, response, thinking, usage)
+        session.commit_turn(prompt, model, response, usage)
+    }
+}
+
+fn effective_usage(u: ApiUsage) -> Usage {
+    // Gemini thinking models report thinking tokens only in total_tokens,
+    // not in completion_tokens. Derive the full output cost from total.
+    let effective_completion = match u.total_tokens {
+        Some(total) if total > u.prompt_tokens + u.completion_tokens => total - u.prompt_tokens,
+        _ => u.completion_tokens,
+    };
+    Usage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: effective_completion,
     }
 }
 

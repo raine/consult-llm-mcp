@@ -14,6 +14,7 @@ use crate::models::{ApiProtocol, Provider};
 pub struct ExecutorProvider {
     cache: Mutex<HashMap<String, Arc<dyn LlmExecutor>>>,
     http_client: reqwest::Client,
+    idle_timeout: std::time::Duration,
 }
 
 impl ExecutorProvider {
@@ -26,11 +27,14 @@ impl ExecutorProvider {
             .and_then(|s| s.parse().ok())
             .unwrap_or(120);
 
+        let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
+
         Self {
             cache: Mutex::new(HashMap::new()),
+            idle_timeout,
             http_client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(30))
-                .read_timeout(std::time::Duration::from_secs(idle_timeout_secs))
+                .read_timeout(idle_timeout)
                 .timeout(std::time::Duration::from_secs(600))
                 .build()
                 .expect("failed to build HTTP client"),
@@ -57,16 +61,19 @@ impl ExecutorProvider {
                     anyhow::anyhow!("API key is required for {provider:?} models in API mode")
                 })?;
                 let base = provider.api_base_url().map(|s| s.to_string());
+                let idle_timeout = self.idle_timeout;
                 match provider.api_protocol() {
                     ApiProtocol::OpenAiCompat => Arc::new(ApiExecutor::new(
                         self.http_client.clone(),
                         key.to_string(),
                         base,
+                        idle_timeout,
                     )),
                     ApiProtocol::AnthropicMessages => Arc::new(AnthropicApiExecutor::new(
                         self.http_client.clone(),
                         key.to_string(),
                         base,
+                        idle_timeout,
                     )),
                 }
             }
