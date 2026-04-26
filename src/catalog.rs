@@ -79,20 +79,18 @@ pub fn build_model_catalog(
         }
     }
 
-    let allowed: Vec<String> = allowed_raw
-        .map(|s| {
-            s.split(',')
-                .map(|m| m.trim().to_string())
-                .filter(|m| !m.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if allowed.is_empty() {
-        all
-    } else {
-        all.into_iter().filter(|m| allowed.contains(m)).collect()
-    }
+    // `None` means no allowlist was configured (every model is allowed).
+    // `Some(_)` means the user explicitly set one — even if it's empty,
+    // which then disables every model rather than silently re-enabling all.
+    let Some(raw) = allowed_raw else {
+        return all;
+    };
+    let allowed: Vec<String> = raw
+        .split(',')
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty())
+        .collect();
+    all.into_iter().filter(|m| allowed.contains(m)).collect()
 }
 
 #[cfg(test)]
@@ -121,6 +119,14 @@ mod tests {
     fn test_build_model_catalog_extras_and_allowlist() {
         let result = build_model_catalog(&["a", "b"], Some("c, d"), Some("b, c"));
         assert_eq!(result, vec!["b", "c"]);
+    }
+
+    #[test]
+    fn test_build_model_catalog_explicit_empty_allowlist_disables_all() {
+        // `allowed_models: []` in YAML serializes to an empty env value;
+        // it must be honored as "deny all", not silently treated as unset.
+        let result = build_model_catalog(&["a", "b", "c"], None, Some(""));
+        assert!(result.is_empty());
     }
 
     #[test]
