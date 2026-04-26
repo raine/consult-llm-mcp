@@ -57,19 +57,24 @@ where
         cb(pid);
     }
 
-    // Write prompt to stdin and close it so the child sees EOF.
-    if let Some(data) = stdin_data
-        && let Some(mut stdin) = child.stdin.take()
-    {
-        stdin.write_all(data.as_bytes()).await?;
-        stdin.shutdown().await?;
-    }
-
     let stdout = child.stdout.take().expect("stdout was piped");
     let stderr_pipe = child.stderr.take().expect("stderr was piped");
+    let stdin_pipe = child.stdin.take();
 
-    // Read stdout and stderr concurrently to avoid deadlock when
-    // the child fills one pipe buffer while we're blocking on the other.
+    // Write stdin, read stdout, and read stderr concurrently. Writing the
+    // full prompt synchronously before reading stdout/stderr deadlocks when
+    // the child emits enough output to fill its pipe buffer (typically
+    // ~64KB) before draining stdin — both sides end up waiting on each
+    // other. Running all three on the same task pool avoids that.
+    let stdin_owned: Option<Vec<u8>> = stdin_data.map(|s| s.as_bytes().to_vec());
+    let stdin_task = tokio::spawn(async move {
+        if let (Some(data), Some(mut stdin)) = (stdin_owned, stdin_pipe) {
+            stdin.write_all(&data).await?;
+            stdin.shutdown().await?;
+        }
+        Ok::<_, std::io::Error>(())
+    });
+
     let stderr_task = tokio::spawn(async move {
         let mut buf = String::new();
         let mut reader = BufReader::new(stderr_pipe);
@@ -88,6 +93,7 @@ where
     let status = child.wait().await?;
     let duration_ms = start.elapsed().as_millis();
     let stderr = stderr_task.await??;
+    stdin_task.await??;
 
     let result = CliResult {
         stdout_bytes,
