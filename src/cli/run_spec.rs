@@ -24,6 +24,7 @@ impl std::str::FromStr for RunSpec {
                 Some(i) => (&rest[..i], &rest[i + 1..]),
                 None => (rest, ""),
             };
+            let value = value.trim();
             match key.trim() {
                 "model" => {
                     anyhow::ensure!(model.is_none(), "duplicate 'model' key in --run {:?}", s);
@@ -37,7 +38,7 @@ impl std::str::FromStr for RunSpec {
                         s
                     );
                     anyhow::ensure!(
-                        !value.trim().is_empty(),
+                        !value.is_empty(),
                         "'thread' value is empty in --run {:?}",
                         s
                     );
@@ -140,5 +141,30 @@ mod tests {
             .parse::<RunSpec>()
             .unwrap_err();
         assert!(err.to_string().contains("'thread' value is empty"));
+    }
+
+    #[test]
+    fn run_spec_trims_values() {
+        let s: RunSpec = "model=  gemini  ,thread=  abc  ,prompt-file=  /tmp/p.md  "
+            .parse()
+            .unwrap();
+        assert_eq!(s.model, "gemini");
+        assert_eq!(s.thread_id.as_deref(), Some("abc"));
+        assert_eq!(s.prompt_file, "/tmp/p.md");
+    }
+
+    #[test]
+    fn run_spec_whitespace_only_values_rejected() {
+        assert!(
+            "model=   ,prompt-file=/tmp/p.md"
+                .parse::<RunSpec>()
+                .is_err()
+        );
+        assert!("model=gemini,prompt-file=   ".parse::<RunSpec>().is_err());
+        assert!(
+            "model=gemini,thread=   ,prompt-file=/tmp/p.md"
+                .parse::<RunSpec>()
+                .is_err()
+        );
     }
 }
