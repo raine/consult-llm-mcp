@@ -49,6 +49,10 @@ install:
     cargo install --offline --path . --locked
     cargo install --offline --path crates/monitor --locked
 
+# Release a new version (patch, minor, or major)
+release bump="patch":
+    cargo-release --skip-publish {{bump}}
+
 # Run the application
 run *ARGS:
     cargo run -- "$@"
