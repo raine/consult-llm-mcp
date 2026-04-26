@@ -33,6 +33,7 @@ struct StreamOptions {
 
 #[derive(Deserialize)]
 struct ChatChunk {
+    #[serde(default)]
     choices: Vec<ChatChunkChoice>,
     usage: Option<ApiUsage>,
 }
@@ -40,6 +41,8 @@ struct ChatChunk {
 #[derive(Deserialize)]
 struct ChatChunkChoice {
     delta: ChatDelta,
+    #[serde(default)]
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -167,6 +170,7 @@ impl LlmExecutor for ApiExecutor {
         let mut raw_thinking = String::new();
         let mut usage: Option<Usage> = None;
         let mut current_stage: Option<ProgressStage> = None;
+        let mut finish_reason: Option<String> = None;
         let idle_timeout = self.idle_timeout;
         let idle_secs = idle_timeout.as_secs();
 
@@ -192,7 +196,11 @@ impl LlmExecutor for ApiExecutor {
                     if chunk.choices.is_empty() {
                         continue;
                     }
-                    let delta = &chunk.choices[0].delta;
+                    let choice = &chunk.choices[0];
+                    if let Some(ref r) = choice.finish_reason {
+                        finish_reason = Some(r.clone());
+                    }
+                    let delta = &choice.delta;
                     if let Some(t) = delta.reasoning_content.as_deref()
                         && !t.is_empty()
                     {
@@ -212,6 +220,22 @@ impl LlmExecutor for ApiExecutor {
         let (tag_thinking, response) = extract_think_tags(&raw_content);
         if response.is_empty() {
             anyhow::bail!("No response from the model via API");
+        }
+
+        match finish_reason.as_deref() {
+            Some("length") => {
+                crate::logger::log_to_file(&format!(
+                    "WARNING: API response for {model} truncated by max_tokens"
+                ));
+                eprintln!("Warning: response truncated by max_tokens");
+            }
+            Some("content_filter") => {
+                crate::logger::log_to_file(&format!(
+                    "WARNING: API response for {model} stopped by content filter"
+                ));
+                eprintln!("Warning: response stopped by content filter");
+            }
+            _ => {}
         }
 
         // Merge DeepSeek-style reasoning_content with <think>-tag thinking (e.g. MiniMax).
@@ -261,8 +285,9 @@ fn extract_think_tags(s: &str) -> (Option<String>, String) {
     let mut thinking = String::new();
     let mut result = s.to_string();
     while let Some(start) = result.find("<think>") {
-        if let Some(end) = result.find("</think>") {
-            let content_start = start + "<think>".len();
+        let content_start = start + "<think>".len();
+        if let Some(rel_end) = result[content_start..].find("</think>") {
+            let end = content_start + rel_end;
             thinking.push_str(result[content_start..end].trim());
             let end = end + "</think>".len();
             let end = if result.as_bytes().get(end) == Some(&b'\n') {

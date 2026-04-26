@@ -35,7 +35,6 @@ impl ExecutorProvider {
             http_client: reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(30))
                 .read_timeout(idle_timeout)
-                .timeout(std::time::Duration::from_secs(600))
                 .build()
                 .expect("failed to build HTTP client"),
         }
