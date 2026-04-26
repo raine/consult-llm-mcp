@@ -795,6 +795,8 @@ All workflow skills accept `--<selector>` flags matching the selectors reported 
 - [`collab-vs`](skills/collab-vs/SKILL.md): the agent brainstorms with one partner LLM (`--<selector>` required) in alternating turns
 - [`debate`](skills/debate/SKILL.md): multiple LLMs propose and critique competing approaches
 - [`debate-vs`](skills/debate-vs/SKILL.md): the agent debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
+- [`panel`](skills/panel/SKILL.md): role-asymmetric advisory panel (architect, security, maintainability, test-strategist by default); each model speaks from one expert lens, agent synthesizes a trade-off resolution. Domain presets: `--frontend`, `--backend`, `--migration`, `--library`. Modes: `--mode design` (default) or `--mode review` for diff critique
+- [`review-panel`](skills/review-panel/SKILL.md): standalone multi-model code review of a diff with identical prompts; agent dedupes findings by severity/confidence. Read-only by default; `--fix` opt-in for localized must-fix items
 
 See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 
