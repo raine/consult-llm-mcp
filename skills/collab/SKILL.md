@@ -67,7 +67,7 @@ Brainstorm implementation ideas:
 Think creatively. Share rough ideas — we're exploring, not committing.
 ```
 
-Invoke `consult-llm` with one `-m <selector>` per collaborator and `-f <path>` for each relevant source file. Send the seed prompt on stdin via quoted heredoc. All models are queried in parallel in a single call.
+Invoke `consult-llm` with one `-m <selector>` per collaborator and `-f <path>` for each relevant source file, sending the seed prompt per the consult-llm invocation contract. All models are queried in parallel in a single call.
 
 **Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives a different prompt.
 

@@ -79,7 +79,7 @@ response. Continue until the ideas converge into a clear approach — typically
 
 **Step 1 — PARTNER responds** to the agent's seed:
 
-Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the build-on prompt below (with the agent's seed ideas embedded) on stdin via quoted heredoc.
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the build-on prompt below (with the agent's seed ideas embedded) per the consult-llm invocation contract.
 
 **Build-on prompt:**
 ```
@@ -97,7 +97,7 @@ Build on their thinking:
 Keep building — don't tear down. Refine toward the best solution.
 ```
 
-Save `partner_thread_id` from the `[thread_id:xxx]` prefix on line 1 of stdout.
+Save the returned thread_id as `partner_thread_id` (see consult-llm's multi-turn section).
 
 Present PARTNER's response to the user as `## PARTNER's Ideas (Round 1)`.
 
@@ -119,7 +119,7 @@ Present this to the user.
 
 ### Subsequent rounds
 
-Continue alternating (PARTNER → agent). On each PARTNER turn, invoke `consult-llm` with `-m <MODEL>` and `-t <partner_thread_id>` to continue the conversation, sending the build-on prompt (with the agent's latest response embedded) on stdin via quoted heredoc.
+Continue alternating (PARTNER → agent). On each PARTNER turn, invoke `consult-llm` with `-m <MODEL>` and `-t <partner_thread_id>` to continue the conversation, sending the build-on prompt (with the agent's latest response embedded).
 
 **When to stop:** Both sides are refining details rather than introducing new
 ideas, and a clear approach has emerged. Don't stop while there are still

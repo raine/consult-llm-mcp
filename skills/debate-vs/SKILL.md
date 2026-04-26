@@ -86,7 +86,7 @@ Present this to the user so they can see your position.
 
 ### Step 2: Opponent's Opening Argument
 
-Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the opening prompt below on stdin via quoted heredoc.
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-f <path>` for each relevant source file discovered in Phase 1. Send the opening prompt below per the consult-llm invocation contract.
 
 **Opening prompt:**
 
@@ -108,8 +108,7 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-**Extract the thread_id** from the response prefix `[thread_id:xxx]` on line 1
-of stdout. Store it for subsequent rounds.
+**Save the returned thread_id** for subsequent rounds (see consult-llm's multi-turn section).
 
 Present the opponent's opening argument to the user as
 `## OPPONENT's Opening Argument`.
@@ -135,7 +134,7 @@ Present this to the user.
 
 ### Opponent's Turn
 
-Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-t <thread_id>` (from the previous response). Send the rebuttal prompt below on stdin via quoted heredoc.
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>` and `-t <thread_id>` (from the previous response), sending the rebuttal prompt below.
 
 **Rebuttal prompt:**
 
@@ -153,8 +152,7 @@ Provide your counter-argument:
 Be constructive but thorough in your critique.
 ```
 
-**Update the thread_id** from the response prefix on line 1 if a new one is
-returned.
+**Update the thread_id** if a new one is returned.
 
 Present the opponent's rebuttal to the user as
 `## OPPONENT's Rebuttal (Round N)`.
@@ -260,7 +258,7 @@ Implementation rules:
 After implementation, have the opponent review using the existing thread (full
 debate context):
 
-Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>`, `--task review`, `-t <thread_id>` (from the debate), `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`. Send the final review prompt below on stdin via quoted heredoc.
+Invoke `consult-llm` per the `consult-llm` skill with `-m <MODEL>`, `--task review`, `-t <thread_id>` (from the debate), `--diff-files <path>` for each changed file, and `--diff-base HEAD~N`, sending the final review prompt below.
 
 **Final review prompt:**
 

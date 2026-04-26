@@ -79,7 +79,7 @@ Propose your implementation approach:
 Be specific and opinionated. Defend your choices.
 ```
 
-Invoke `consult-llm` with one `-m <selector>` per debater and `-f <path>` for each relevant source file. Send the opening prompt on stdin via quoted heredoc. All models are queried in parallel in a single call.
+Invoke `consult-llm` with one `-m <selector>` per debater and `-f <path>` for each relevant source file, sending the opening prompt per the consult-llm invocation contract. All models are queried in parallel in a single call.
 
 **Extract per-model thread IDs** from the response — needed for Phase 3 since each model receives the others' rebuttals.
 
