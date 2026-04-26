@@ -5,3 +5,4 @@ panes:
 files:
   symlink:
     - history
+    - hooks
