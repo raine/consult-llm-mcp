@@ -251,6 +251,17 @@ impl ConsultService {
                 .transpose()?
                 .flatten();
 
+            // Resume case where the group file vanished between when we picked
+            // it up and when we got the lock (e.g. cleanup_expired raced).
+            // Saving fresh would drop every prior member; bail instead.
+            if let Some(id) = existing_group_id.as_deref()
+                && existing_group.is_none()
+            {
+                anyhow::bail!(
+                    "Group '{id}' disappeared during the call (likely cleaned up); refusing to recreate with only the new turn"
+                );
+            }
+
             let mut members = existing_group
                 .as_ref()
                 .map(|g| g.members.clone())

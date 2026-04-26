@@ -61,10 +61,20 @@ pub fn append_turn(thread_id: &str, turn: StoredTurn, is_new_thread: bool) -> an
     lock_file.lock_exclusive()?;
 
     let result = (|| -> anyhow::Result<()> {
-        let mut thread = load(thread_id)?.unwrap_or_else(|| StoredThread {
-            id: thread_id.to_string(),
-            turns: Vec::new(),
-        });
+        let mut thread = match load(thread_id)? {
+            Some(t) => t,
+            None if is_new_thread => StoredThread {
+                id: thread_id.to_string(),
+                turns: Vec::new(),
+            },
+            // Resume case: the file existed when start() loaded history but
+            // is gone now (e.g. cleanup_expired raced with us). Recreating it
+            // here would persist a thread containing only the new turn,
+            // silently losing every prior turn the model just saw. Bail.
+            None => anyhow::bail!(
+                "Thread '{thread_id}' disappeared during the call (likely cleaned up); refusing to recreate with only the new turn"
+            ),
+        };
         thread.turns.push(turn);
         save(&thread)
     })();
