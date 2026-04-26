@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.5 (2026-04-26)
+
+- Added new skills: `implement`, `workshop`, `panel`, and `review-panel`
+- Config discovery now walks past nested `.git` directories so configs in parent repos are found from inside submodules or worktrees
+- Workflow skills set `disable-model-invocation` so they only run when explicitly invoked
+
 ## v3.0.4 (2026-04-26)
 
 - Added support for passing extra CLI arguments to the `codex` and `gemini` backends
