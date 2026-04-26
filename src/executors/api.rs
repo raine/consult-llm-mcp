@@ -162,7 +162,6 @@ impl LlmExecutor for ApiExecutor {
         let mut event_stream = resp.bytes_stream().eventsource();
         let mut raw_content = String::new();
         let mut usage: Option<Usage> = None;
-        let mut saw_done = false;
         let mut responding = false;
         let idle_timeout = self.idle_timeout;
         let idle_secs = idle_timeout.as_secs();
@@ -176,17 +175,17 @@ impl LlmExecutor for ApiExecutor {
                 Ok(Some(Err(e))) => anyhow::bail!("API stream error for {model}: {e}"),
                 Ok(Some(Ok(event))) => {
                     if event.data == "[DONE]" {
-                        saw_done = true;
                         break;
                     }
                     let Ok(chunk) = serde_json::from_str::<ChatChunk>(&event.data) else {
                         continue;
                     };
-                    // Usage-only chunk (empty choices) from stream_options.include_usage
+                    // Capture usage wherever it appears — some providers (e.g. MiniMax) include
+                    // it on the final content chunk rather than a separate empty-choices chunk.
+                    if let Some(u) = chunk.usage {
+                        usage = Some(effective_usage(u));
+                    }
                     if chunk.choices.is_empty() {
-                        if let Some(u) = chunk.usage {
-                            usage = Some(effective_usage(u));
-                        }
                         continue;
                     }
                     if let Some(text) = chunk
@@ -203,10 +202,6 @@ impl LlmExecutor for ApiExecutor {
                     }
                 }
             }
-        }
-
-        if !saw_done {
-            anyhow::bail!("API stream for {model} ended without [DONE] terminator");
         }
 
         let (thinking, response) = extract_think_tags(&raw_content);
