@@ -58,6 +58,10 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 1. Install the binaries:
 
 ```bash
+# Homebrew
+brew install raine/consult-llm/consult-llm
+
+# Shell script (macOS/Linux)
 curl -fsSL https://raw.githubusercontent.com/raine/consult-llm/main/scripts/install.sh | bash
 ```
 

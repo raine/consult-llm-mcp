@@ -118,3 +118,78 @@ jobs:
               --generate-notes \
               $PRERELEASE
           fi
+
+  update-tap:
+    name: Update Homebrew tap
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: artifacts
+          pattern: gh-release-*
+          merge-multiple: true
+
+      - uses: actions/checkout@v5
+        with:
+          repository: raine/homebrew-consult-llm
+          token: ${{ secrets.RELEASE_TOKEN }}
+          path: tap
+
+      - name: Generate formula and push to tap
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION#v}"
+          SHA_MAC_ARM=$(awk '{print $1}' artifacts/consult-llm-darwin-arm64.sha256)
+          SHA_MAC_X64=$(awk '{print $1}' artifacts/consult-llm-darwin-x64.sha256)
+          SHA_LINUX_X64=$(awk '{print $1}' artifacts/consult-llm-linux-x64.sha256)
+          SHA_LINUX_ARM=$(awk '{print $1}' artifacts/consult-llm-linux-arm64.sha256)
+
+          cat > tap/Formula/consult-llm.rb << EOF
+          class ConsultLlm < Formula
+            desc "CLI for consulting LLMs from agent workflows"
+            homepage "https://github.com/raine/consult-llm"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/raine/consult-llm/releases/download/v${VERSION}/consult-llm-darwin-arm64.tar.gz"
+                sha256 "${SHA_MAC_ARM}"
+              else
+                url "https://github.com/raine/consult-llm/releases/download/v${VERSION}/consult-llm-darwin-x64.tar.gz"
+                sha256 "${SHA_MAC_X64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm? && Hardware::CPU.is_64_bit?
+                url "https://github.com/raine/consult-llm/releases/download/v${VERSION}/consult-llm-linux-arm64.tar.gz"
+                sha256 "${SHA_LINUX_ARM}"
+              else
+                url "https://github.com/raine/consult-llm/releases/download/v${VERSION}/consult-llm-linux-x64.tar.gz"
+                sha256 "${SHA_LINUX_X64}"
+              end
+            end
+
+            def install
+              bin.install "consult-llm"
+              bin.install "consult-llm-monitor"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("\#{bin}/consult-llm --version")
+            end
+          end
+          EOF
+          sed -i 's/^          //' tap/Formula/consult-llm.rb
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/consult-llm.rb
+          git commit -m "consult-llm ${VERSION}"
+          git pull --rebase
+          git push
