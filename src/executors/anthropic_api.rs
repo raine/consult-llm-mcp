@@ -223,6 +223,7 @@ impl LlmExecutor for AnthropicApiExecutor {
         let mut cache_creation_tokens: u64 = 0;
         let mut cache_read_tokens: u64 = 0;
         let mut output_tokens: u64 = 0;
+        let mut got_usage = false;
         let mut stop_reason: Option<String> = None;
         let mut saw_message_stop = false;
         let mut current_stage: Option<ProgressStage> = None;
@@ -246,6 +247,7 @@ impl LlmExecutor for AnthropicApiExecutor {
                                 input_tokens = u.input_tokens;
                                 cache_creation_tokens = u.cache_creation_input_tokens;
                                 cache_read_tokens = u.cache_read_input_tokens;
+                                got_usage = true;
                             }
                         }
                         AnthropicEvent::ContentBlockStart { content_block, .. } => {
@@ -273,6 +275,7 @@ impl LlmExecutor for AnthropicApiExecutor {
                             stop_reason = delta.stop_reason;
                             if let Some(u) = usage {
                                 output_tokens = u.output_tokens;
+                                got_usage = true;
                             }
                         }
                         AnthropicEvent::MessageStop => {
@@ -325,7 +328,7 @@ impl LlmExecutor for AnthropicApiExecutor {
             anyhow::bail!("No text content in Anthropic API response");
         }
 
-        let usage = Some(Usage {
+        let usage = got_usage.then(|| Usage {
             prompt_tokens: input_tokens + cache_creation_tokens + cache_read_tokens,
             completion_tokens: output_tokens,
         });
