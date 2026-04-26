@@ -45,6 +45,7 @@ where
         })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
         .spawn()
         .map_err(|e| {
             anyhow::anyhow!(
@@ -93,7 +94,16 @@ where
     let status = child.wait().await?;
     let duration_ms = start.elapsed().as_millis();
     let stderr = stderr_task.await??;
-    stdin_task.await??;
+    // The child has already exited at this point. If it exited without
+    // consuming all of stdin (e.g. it rejected the prompt early and printed a
+    // diagnostic to stderr), the stdin write will fail with BrokenPipe. Don't
+    // surface that as the top-level error — the real failure is in `stderr`
+    // and `status`, and they should reach the caller intact.
+    match stdin_task.await? {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+        Err(e) => return Err(e.into()),
+    }
 
     let result = CliResult {
         stdout_bytes,
