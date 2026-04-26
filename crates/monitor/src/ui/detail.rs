@@ -4,6 +4,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use unicode_width::UnicodeWidthChar;
 
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
@@ -14,6 +15,23 @@ use crate::state::{
     AppMode, AppState, BG, DIM, DIM_WHITE, GREEN, RED, SEPARATOR, SPINNER_FRAMES, TEAL, WHITE,
     YELLOW, task_mode_color,
 };
+
+/// Split off the longest prefix whose display width fits in `max_cols`.
+/// Returns at least one char so the caller's loop always makes progress
+/// even when a single wide char is wider than the budget.
+fn split_at_width(text: &str, max_cols: usize) -> (&str, &str) {
+    let mut used = 0usize;
+    let mut byte_end = 0usize;
+    for (i, ch) in text.char_indices() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if byte_end > 0 && used + w > max_cols {
+            break;
+        }
+        byte_end = i + ch.len_utf8();
+        used += w;
+    }
+    text.split_at(byte_end)
+}
 
 // ── Intermediate representation ─────────────────────────────────────────
 
@@ -294,8 +312,7 @@ pub(super) fn render_detail_view(frame: &mut ratatui::Frame, area: Rect, state: 
             while !remaining.is_empty() {
                 let indent = if first { prefix } else { cont };
                 first = false;
-                let chunk_len = remaining.len().min(wrap_width);
-                let (chunk, rest) = remaining.split_at(chunk_len);
+                let (chunk, rest) = split_at_width(remaining, wrap_width);
                 lines.push(Line::from(vec![Span::styled(
                     format!("{indent}{chunk}"),
                     Style::default().fg(RED),
@@ -587,13 +604,12 @@ fn render_blocks(
                         // Simple word-wrap for system prompt (no markdown)
                         let mut remaining = raw_line;
                         while !remaining.is_empty() {
-                            let chunk_len = remaining.len().min(wrap_width);
-                            let chunk = &remaining[..chunk_len];
+                            let (chunk, rest) = split_at_width(remaining, wrap_width);
                             lines.push(Line::from(vec![
                                 Span::raw(indent.to_string()),
                                 Span::styled(chunk.to_string(), dim_style),
                             ]));
-                            remaining = &remaining[chunk_len..];
+                            remaining = rest;
                         }
                     }
                 }
@@ -1109,4 +1125,35 @@ fn render_usage_line(
         Span::styled(label, dim),
         Span::styled(right_dashes, dim),
     ])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::split_at_width;
+
+    #[test]
+    fn split_at_width_does_not_panic_inside_multibyte_char() {
+        // "café" is 5 bytes. Byte-level slicing at offset 4 panics ("byte
+        // index 4 is not a char boundary; it is inside 'é'"). The
+        // width-aware splitter must land on a char boundary.
+        let (chunk, rest) = split_at_width("café", 4);
+        assert_eq!(chunk, "café");
+        assert_eq!(rest, "");
+    }
+
+    #[test]
+    fn split_at_width_respects_display_width() {
+        let (chunk, rest) = split_at_width("hello world", 5);
+        assert_eq!(chunk, "hello");
+        assert_eq!(rest, " world");
+    }
+
+    #[test]
+    fn split_at_width_advances_on_oversized_char() {
+        // A wide char (CJK = 2 cols) wider than the budget still consumes
+        // one char so callers don't loop forever.
+        let (chunk, rest) = split_at_width("日本語", 1);
+        assert_eq!(chunk, "日");
+        assert_eq!(rest, "本語");
+    }
 }
