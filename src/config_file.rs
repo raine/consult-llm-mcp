@@ -256,10 +256,18 @@ mod tests {
             };
             // Not an error even with Forbid — blank key is not a secret
             let m = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap();
-            assert!(!m.contains_key("OPENAI_API_KEY"), "blank {:?} should be skipped", blank);
+            assert!(
+                !m.contains_key("OPENAI_API_KEY"),
+                "blank {:?} should be skipped",
+                blank
+            );
             // Also skipped with Allow
             let m2 = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
-            assert!(!m2.contains_key("OPENAI_API_KEY"), "blank {:?} should be skipped", blank);
+            assert!(
+                !m2.contains_key("OPENAI_API_KEY"),
+                "blank {:?} should be skipped",
+                blank
+            );
         }
     }
 
