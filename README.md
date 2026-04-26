@@ -782,11 +782,11 @@ Platforms supported:
 
 All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, the multi-model skills default to consulting all available selectors.
 
-- `consult`: ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
-- `collab`: multiple LLMs brainstorm together, building on each other's ideas
-- `collab-vs`: the agent brainstorms with one partner LLM (`--<selector>` required) in alternating turns
-- `debate`: multiple LLMs propose and critique competing approaches
-- `debate-vs`: the agent debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
+- [`consult`](skills/consult/SKILL.md): ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
+- [`collab`](skills/collab/SKILL.md): multiple LLMs brainstorm together, building on each other's ideas
+- [`collab-vs`](skills/collab-vs/SKILL.md): the agent brainstorms with one partner LLM (`--<selector>` required) in alternating turns
+- [`debate`](skills/debate/SKILL.md): multiple LLMs propose and critique competing approaches
+- [`debate-vs`](skills/debate-vs/SKILL.md): the agent debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
 
 See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 
