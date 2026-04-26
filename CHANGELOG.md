@@ -2,10 +2,39 @@
 
 ## Unreleased
 
-- Moved user config directory from `~/.consult-llm/` to `~/.config/consult-llm/`
-  for XDG Base Directory compliance. Supports `$XDG_CONFIG_HOME`. The legacy
-  `~/.consult-llm/` path is still read for backward compatibility, and existing
-  configs are auto-migrated on first write.
+- **Migrated from MCP server to standalone CLI.** `consult-llm` is now a
+  native binary invoked directly in the terminal or from agent skills via
+  Bash. The MCP server, rmcp runtime, and npm packaging have been removed.
+  Skills have been rewritten to invoke the CLI instead of the MCP tool.
+- Package renamed from `consult-llm-mcp` to `consult-llm`
+- Added Homebrew tap: `brew install raine/consult-llm/consult-llm`
+- Added layered YAML config file support. Settings can now be declared in
+  `~/.config/consult-llm/config.yaml` (user), `.consult-llm.yaml`
+  (project, committed), or `.consult-llm.local.yaml` (local overrides, not
+  committed). Environment variables still take highest precedence
+- API keys can now be stored in `.consult-llm.local.yaml` or the user
+  config file. Writing `api_key` to the committed project config is blocked
+  to prevent accidental secret exposure
+- Added `consult-llm config set <key> <value>` subcommand for editing YAML
+  config from the CLI using dot-notation keys (e.g.
+  `consult-llm config set gemini.backend gemini-cli`)
+- Added `consult-llm install-skills` subcommand. Replaces the curl-piped
+  shell script; skill files are bundled at compile time and written to the
+  detected platform directories (`~/.claude/skills/`,
+  `~/.config/opencode/skills/`, `~/.codex/skills/`)
+- Added `consult-llm docs` subcommand that prints the bundled README to
+  stdout
+- Added parallel multi-model support: pass `-m` multiple times
+  (e.g. `-m gemini -m openai`) to query models concurrently in a single
+  call. Multi-turn group threads are supported via the returned
+  `group_<uuid>` thread ID
+- Added `--run <spec>` flag for per-model runs, enabling different prompt
+  bodies to be sent to different models in a single invocation
+- Moved user config directory from `~/.consult-llm/` to
+  `~/.config/consult-llm/` for XDG Base Directory compliance. Supports
+  `$XDG_CONFIG_HOME`. The legacy `~/.consult-llm/` path is still read for
+  backward compatibility, and existing configs are auto-migrated on startup
+- Monitor: use full worktree name as project identifier in the TUI
 
 ## v2.13.4 (2026-04-24)
 
