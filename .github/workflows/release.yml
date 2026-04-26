@@ -139,27 +139,25 @@ jobs:
             exit 1
           fi
 
-          crate_published() {
+          publish_or_skip() {
             local crate="$1"
-            curl -sf -o /dev/null \
-              -H "User-Agent: consult-llm-release-workflow" \
-              "https://crates.io/api/v1/crates/$crate/$CARGO_VERSION"
-          }
-
-          publish_if_missing() {
-            local crate="$1"
-            if crate_published "$crate"; then
+            local out
+            out=$(cargo publish -p "$crate" 2>&1) && printf '%s\n' "$out" && return 0
+            if printf '%s\n' "$out" | grep -q "already exists"; then
               echo "$crate $CARGO_VERSION already published, skipping"
-            else
-              cargo publish -p "$crate"
+              return 0
             fi
+            printf '%s\n' "$out" >&2
+            return 1
           }
 
           wait_for_crate() {
             local crate="$1"
-            echo "Waiting for $crate $CARGO_VERSION to appear on crates.io..."
+            echo "Waiting for $crate $CARGO_VERSION to become available..."
             for i in $(seq 1 60); do
-              if crate_published "$crate"; then
+              if curl -sf -o /dev/null \
+                -H "User-Agent: consult-llm-release-workflow" \
+                "https://crates.io/api/v1/crates/$crate/$CARGO_VERSION"; then
                 echo "$crate $CARGO_VERSION is available"
                 return 0
               fi
@@ -169,10 +167,10 @@ jobs:
             return 1
           }
 
-          publish_if_missing consult-llm-core
+          publish_or_skip consult-llm-core
           wait_for_crate consult-llm-core
-          publish_if_missing consult-llm
-          publish_if_missing consult-llm-monitor
+          publish_or_skip consult-llm
+          publish_or_skip consult-llm-monitor
 
   update-tap:
     name: Update Homebrew tap
