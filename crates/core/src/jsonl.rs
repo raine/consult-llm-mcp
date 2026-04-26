@@ -12,11 +12,20 @@ pub fn read_jsonl_from_offset<T: DeserializeOwned>(path: &Path, offset: &mut u64
     let Ok(file) = File::open(path) else {
         return items;
     };
+    // If the file shrank below our recorded offset (truncated, rotated,
+    // or replaced), `Seek::seek(Start(n))` past EOF actually succeeds on
+    // most platforms and we'd silently sit at EOF forever, missing every
+    // future write. Compare lengths up front and reset to 0 so the next
+    // poll re-reads the new file from the beginning.
+    if let Ok(meta) = file.metadata()
+        && meta.len() < *offset
+    {
+        *offset = 0;
+    }
     let mut reader = BufReader::new(file);
-    // Bail if seek fails (e.g. the file was truncated below `*offset`):
-    // returning here leaves `*offset` unchanged so the caller can retry,
-    // and crucially avoids reading from byte 0 while pretending we
-    // resumed at `*offset` — which would silently double-emit lines.
+    // Bail if seek fails: returning here leaves `*offset` unchanged so the
+    // caller can retry, and crucially avoids reading from byte 0 while
+    // pretending we resumed at `*offset` — which would silently double-emit.
     if reader.seek(SeekFrom::Start(*offset)).is_err() {
         return items;
     }
@@ -75,5 +84,34 @@ mod tests {
         let items: Vec<serde_json::Value> = read_jsonl_from_offset(&path, &mut offset);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["a"], 3);
+    }
+
+    #[test]
+    fn recovers_when_file_is_truncated_below_offset() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rotated.jsonl");
+        let mut f = File::create(&path).unwrap();
+        writeln!(f, r#"{{"a":1}}"#).unwrap();
+        writeln!(f, r#"{{"a":2}}"#).unwrap();
+        f.flush().unwrap();
+
+        let mut offset = 0u64;
+        let items: Vec<serde_json::Value> = read_jsonl_from_offset(&path, &mut offset);
+        assert_eq!(items.len(), 2);
+        let stale_offset = offset;
+
+        // Rotate: replace the file with shorter content
+        File::create(&path).unwrap();
+        let mut f = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .unwrap();
+        writeln!(f, r#"{{"a":99}}"#).unwrap();
+        f.flush().unwrap();
+
+        let items: Vec<serde_json::Value> = read_jsonl_from_offset(&path, &mut offset);
+        assert_eq!(items.len(), 1, "should recover after rotation");
+        assert_eq!(items[0]["a"], 99);
+        assert!(offset < stale_offset, "offset reset to read new file");
     }
 }
