@@ -10,7 +10,7 @@ use crate::format::{
 };
 use crate::state::{
     AppState, BG, DIM, DIM_WHITE, Focus, GREEN, HistoryDisplayRow, RED, SELECTED_BG, SEPARATOR,
-    TEAL, WHITE, YELLOW, task_mode_color,
+    SPINNER_FRAMES, TEAL, WHITE, YELLOW, task_mode_color,
 };
 
 pub(super) fn render_table_view(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
@@ -139,8 +139,12 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
             )),
             Line::from(vec![
                 Span::styled(
-                    if run.orphaned { "\u{26a0} " } else { "" },
-                    Style::default().fg(YELLOW),
+                    if run.orphaned {
+                        "\u{26a0} ".to_string()
+                    } else {
+                        format!("{} ", SPINNER_FRAMES[state.tick % SPINNER_FRAMES.len()])
+                    },
+                    Style::default().fg(if run.orphaned { YELLOW } else { TEAL }),
                 ),
                 Span::styled(
                     stage,
