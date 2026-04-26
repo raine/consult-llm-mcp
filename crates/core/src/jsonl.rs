@@ -13,7 +13,13 @@ pub fn read_jsonl_from_offset<T: DeserializeOwned>(path: &Path, offset: &mut u64
         return items;
     };
     let mut reader = BufReader::new(file);
-    let _ = reader.seek(SeekFrom::Start(*offset));
+    // Bail if seek fails (e.g. the file was truncated below `*offset`):
+    // returning here leaves `*offset` unchanged so the caller can retry,
+    // and crucially avoids reading from byte 0 while pretending we
+    // resumed at `*offset` — which would silently double-emit lines.
+    if reader.seek(SeekFrom::Start(*offset)).is_err() {
+        return items;
+    }
 
     let mut buf = String::new();
     loop {
