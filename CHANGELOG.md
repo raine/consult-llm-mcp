@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.0.4 (2026-04-26)
+
+- Added support for passing extra CLI arguments to the `codex` and `gemini` backends
+- `XDG_CONFIG_HOME` is now honored when resolving the user config file
+- Monitor: detail view now wraps text based on terminal width, and the Model column is sized to fit the longest model name
+- When all consultations fail, per-model error messages are now included in the output
+
 ## v3.0.3 (2026-04-26)
 
 - API executors now stream responses via SSE for faster, incremental output
