@@ -408,6 +408,7 @@ dependencies = [
  "consult-llm-core",
  "dirs",
  "eventsource-stream",
+ "fs2",
  "futures",
  "inquire",
  "pathdiff",

@@ -2,6 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 
 use super::types::Usage;
@@ -56,12 +57,28 @@ pub fn save(thread: &StoredThread) -> anyhow::Result<()> {
 }
 
 pub fn append_turn(thread_id: &str, turn: StoredTurn, is_new_thread: bool) -> anyhow::Result<()> {
-    let mut thread = load(thread_id)?.unwrap_or_else(|| StoredThread {
-        id: thread_id.to_string(),
-        turns: Vec::new(),
-    });
-    thread.turns.push(turn);
-    save(&thread)?;
+    let dir = threads_dir();
+    fs::create_dir_all(&dir)?;
+    let lock_path = dir.join(format!("{thread_id}.lock"));
+    let lock_file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)?;
+    lock_file.lock_exclusive()?;
+
+    let result = (|| -> anyhow::Result<()> {
+        let mut thread = load(thread_id)?.unwrap_or_else(|| StoredThread {
+            id: thread_id.to_string(),
+            turns: Vec::new(),
+        });
+        thread.turns.push(turn);
+        save(&thread)
+    })();
+
+    let _ = FileExt::unlock(&lock_file);
+
+    result?;
 
     if is_new_thread {
         // Fire-and-forget cleanup of expired threads
