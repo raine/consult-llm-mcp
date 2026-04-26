@@ -18,9 +18,19 @@ pub struct ExecutorProvider {
 
 impl ExecutorProvider {
     pub fn new() -> Self {
+        // Idle timeout: fires if no data is received for this long, resetting on each chunk.
+        // Catches hung requests where the server accepts the connection but sends nothing.
+        // Configurable via CONSULT_LLM_API_IDLE_TIMEOUT_SECS; defaults to 120s.
+        let idle_timeout_secs: u64 = std::env::var("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(120);
+
         Self {
             cache: Mutex::new(HashMap::new()),
             http_client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(30))
+                .read_timeout(std::time::Duration::from_secs(idle_timeout_secs))
                 .timeout(std::time::Duration::from_secs(600))
                 .build()
                 .expect("failed to build HTTP client"),
