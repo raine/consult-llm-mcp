@@ -397,7 +397,6 @@ If implementation drifted from the plan, list the deviations so the plan and the
 
 ## Critical rules
 
-- **Defer mechanics to `consult-llm`.** Don't restate heredoc terminator, timeouts, or stdout layout.
 - **Spec is mandatory.** Phase 2 always produces a Behavioral Spec and Test Matrix. There is no flag to disable it.
 - **Reviewers always produce structured output.** Free-form review is not accepted at any rigor level.
 - **No silent judging.** Every reviewer conflict and every rejected suggestion is recorded in the Feedback Ledger with rationale and tiebreaker.

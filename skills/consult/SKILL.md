@@ -60,7 +60,6 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 ## Critical rules
 
-- **Defer mechanics to `consult-llm`.** Don't restate the heredoc terminator, timeout, or stdout layout — they're documented there.
 - ALWAYS gather file context before consulting.
 - **Pass through the user's query faithfully** — do NOT add your own theories, suspects, analysis, or suggested solutions to the prompt. The user's intent is the prompt. Rephrase as needed so the prompt reads as a direct question to the LLM, not a meta-instruction to you. You may add brief factual context (e.g. "we recently changed X to Y"), but never inject your own diagnostic opinions or hypotheses. Do not pass the user's query verbatim if it is phrased as an instruction to you rather than a question for the LLM.
 - Provide focused, relevant files (quality over quantity).

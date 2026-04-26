@@ -209,7 +209,6 @@ If any `must-fix` items remain, hand off to the user — do not loop.
 
 ## Critical rules
 
-- **Defer mechanics to `consult-llm`.** Don't restate the heredoc terminator, timeout, or stdout layout — they're documented there.
 - Reviewers receive identical prompts. **Independence is the feature** — do not assign roles, do not show one reviewer's findings to another, do not add a cross-review step. Use `/panel` for role-asymmetric review or `/debate` for adversarial cross-critique.
 - The reviewer prompt must require `severity`, `confidence`, `location`, `issue_identity`, and one-paragraph `rationale`. Never accept free-form review.
 - The skill does not modify source files unless `--fix` is explicitly passed. The synthesized report is always saved to `history/`.

@@ -210,7 +210,6 @@ Print the saved path and a short final-recommendation summary to the user.
 
 - **Strict asymmetry.** Each role gets only its own persona prompt. Never leak other roles' prompts. Roles drifting into general commentary weaken the panel — enforce focus through the persona framing.
 - **Distinct models per role.** `--run` rejects duplicates. Fail fast with the error format above.
-- **Defer mechanics to `consult-llm`.** Don't restate the heredoc terminator or timeout — they're documented there.
 - **Mode → task mapping.** `design` ⇒ `--task plan`. `review` ⇒ `--task review` plus `--diff-files`/`--diff-base`.
 - **`--react` continues threads.** Do not start fresh threads for the reaction round.
 - **Defer to security on safety conflicts. Prefer simpler when trade-offs balance.**

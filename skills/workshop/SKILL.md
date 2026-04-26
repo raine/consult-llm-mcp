@@ -224,7 +224,6 @@ Print the saved path and a one-paragraph recap of the chosen approach to the use
 - **Phase 2 experts are independent.** A single parallel `consult-llm` call with one `-m` per expert; never show one expert's proposals to another in this phase. Anchoring defeat is the whole point.
 - **Phase 3 is LLM-free.** The user is the human-in-the-loop. No mid-phase LLM interruptions.
 - **One question at a time.** All `AskUserQuestion` calls follow the brainstorm rule — single question, 2–4 options, "Other" available.
-- **Defer mechanics to `consult-llm`.** Don't restate heredoc terminator, timeouts, or stdout layout.
 - **Reuse Phase 2 threads in Phase 4.** Pass `-t <group_thread_id>` so experts retain problem-statement context without resending it.
 - **Advisory critique, not rewrite.** Phase 4 surfaces blind spots and risks; the user (with the agent) decides what to adopt. Do not let an expert's critique silently overwrite the user's chosen design.
 - **YAGNI ruthlessly.** Cut features not justified by the success criteria. Acknowledge unknowns explicitly instead of inventing plausible answers.
