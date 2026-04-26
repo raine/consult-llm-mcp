@@ -7,9 +7,8 @@
 <br>
 
 `consult-llm` is a tool for getting a second opinion from another AI model,
-right inside your existing agent workflow. Use it to review plans, debate
-approaches, sanity-check tricky bugs, or explore alternatives you
-might have missed. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
+right inside your existing agent workflow. Use it to plan architecture,
+review changes, debate approaches, or sanity-check tricky bugs. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
@@ -757,9 +756,9 @@ All workflow skills accept `--<selector>` flags matching the selectors reported 
 
 - `consult`: ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
 - `collab`: multiple LLMs brainstorm together, building on each other's ideas
-- `collab-vs`: Claude brainstorms with one partner LLM (`--<selector>` required) in alternating turns
+- `collab-vs`: the agent brainstorms with one partner LLM (`--<selector>` required) in alternating turns
 - `debate`: multiple LLMs propose and critique competing approaches
-- `debate-vs`: Claude debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
+- `debate-vs`: the agent debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
 
 See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 
