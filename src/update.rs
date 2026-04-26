@@ -257,10 +257,19 @@ fn save_cache(path: &std::path::Path, cache: &UpdateCache) {
 }
 
 /// Compare two version strings as numeric tuples (e.g. "0.1.10" > "0.1.9").
+/// Pads to a common length so "1" and "1.0.0" compare equal. An empty or
+/// otherwise unparseable `latest` is treated as "not newer" so a malformed
+/// upstream response can't silently flip the comparison.
 fn is_newer_version(latest: &str, current: &str) -> bool {
     let parse = |v: &str| -> Vec<u64> { v.split('.').filter_map(|s| s.parse().ok()).collect() };
-    let l = parse(latest);
-    let c = parse(current);
+    let mut l = parse(latest);
+    let mut c = parse(current);
+    if l.is_empty() {
+        return false;
+    }
+    let n = l.len().max(c.len());
+    l.resize(n, 0);
+    c.resize(n, 0);
     l > c
 }
 
@@ -402,5 +411,20 @@ mod tests {
     #[test]
     fn test_is_not_newer_older() {
         assert!(!is_newer_version("2.7.0", "2.8.0"));
+    }
+
+    #[test]
+    fn test_padded_equal_lengths() {
+        // "1" and "1.0.0" are the same release.
+        assert!(!is_newer_version("1", "1.0.0"));
+        assert!(!is_newer_version("1.0.0", "1"));
+        assert!(is_newer_version("1.0.1", "1"));
+        assert!(!is_newer_version("1", "1.0.1"));
+    }
+
+    #[test]
+    fn test_empty_latest_treated_as_not_newer() {
+        assert!(!is_newer_version("", "1.0.0"));
+        assert!(!is_newer_version("not-a-version", "1.0.0"));
     }
 }
