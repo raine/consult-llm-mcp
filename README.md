@@ -753,11 +753,13 @@ Platforms supported:
 
 ### Included skills
 
-- `consult`: ask Gemini, Codex, or both; supports `--gemini`, `--codex`, and `--browser` flags
-- `collab`: Gemini and Codex brainstorm together, building on each other's ideas
-- `collab-vs`: Claude brainstorms with one opponent LLM in alternating turns
-- `debate`: Gemini and Codex propose and critique competing approaches
-- `debate-vs`: Claude debates one opponent LLM, then synthesizes the best answer
+All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, the multi-model skills default to consulting all available selectors.
+
+- `consult`: ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
+- `collab`: multiple LLMs brainstorm together, building on each other's ideas
+- `collab-vs`: Claude brainstorms with one partner LLM (`--<selector>` required) in alternating turns
+- `debate`: multiple LLMs propose and critique competing approaches
+- `debate-vs`: Claude debates one opponent LLM (`--<selector>` required), then synthesizes the best answer
 
 See `skills/*/SKILL.md` for the exact prompts and invocation patterns.
 
