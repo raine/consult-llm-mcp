@@ -6,8 +6,10 @@
 </div>
 <br>
 
-`consult-llm` is a tool for consulting stronger AI models from your existing
-agent workflow. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
+`consult-llm` is a tool for getting a second opinion from another AI model,
+right inside your existing agent workflow. Use it to review plans, debate
+approaches, sanity-check tricky bugs, or explore alternatives you
+might have missed. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
 DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
 threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
@@ -44,7 +46,7 @@ threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
 ## What you can do
 
-- **Consult a stronger model** from your agent with relevant file context (`/consult`)
+- **Get a second opinion from another model** from your agent with relevant file context (`/consult`)
 - **Have models debate the best approach** and synthesize a consensus (`/debate`)
 - **Use existing subscriptions** via CLI backends without API keys ([Gemini CLI](#gemini-cli), [Codex CLI](#codex-cli), [Cursor CLI](#cursor-cli), [OpenCode](#opencode))
 - **Continue conversations across requests** with `thread_id`
