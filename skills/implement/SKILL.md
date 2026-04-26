@@ -32,8 +32,6 @@ Check `$ARGUMENTS` for flags:
   - `standard` — shared-prompt review with structured premortem and independent-alternative sections, evidence-gated final review with attack lenses, debug consult after 2 failed hypotheses.
   - `deep` — Phase 3 and Phase 6 use `--run` with role-asymmetric prompts (security, test-strategist, data-integrity, fuzzing-strategist). Same number of reviewer calls but each model gets a focused persona.
 
-`--spec`, `--premortem`, `--red-team` flags are deliberately **not** offered. Spec, premortem, and red-team are quality gates baked into the rigor levels — exposing them as toggles invites accidentally disabling core review steps.
-
 **Mode flags:**
 
 - `--rounds N` — repeat the review-refine cycle (Phases 3–4) N times. Default `1`. Max `3`.
@@ -145,9 +143,7 @@ Guidelines:
 
 ## Phase 3: Plan review
 
-**Mandatory unless `--no-review` was passed.** See "Review phases are mandatory" in Critical rules.
-
-Reviewers receive the plan file and the relevant source files. They must produce structured output — never accept free-form review.
+Skip only if `--no-review` was passed. Reviewers receive the plan file and the relevant source files and must produce structured output — never accept free-form review.
 
 ### Standard rigor — shared prompt to all reviewers
 
@@ -317,7 +313,7 @@ If the third hypothesis fails, stop. Record the blocker, the hypotheses tried, a
 
 ## Phase 6: Red-team review
 
-**Mandatory unless `--no-review` or `--skip-final` was passed.** Whether the diff is too narrow for adversarial review is the reviewer's call (it exits cleanly), not the agent's. See "Review phases are mandatory" in Critical rules.
+Skip only if `--no-review` or `--skip-final` was passed. Whether the diff is too narrow for adversarial review is the reviewer's call (it exits cleanly), not the agent's.
 
 Resolve the diff base: use `--diff-base` if passed, otherwise the `START_HEAD` snapshot from Phase 0. Re-list changed files (mirror `review-panel/SKILL.md` Phase 1):
 
@@ -429,7 +425,7 @@ If implementation drifted from the plan, list the deviations so the plan and the
 ## Critical rules
 
 - **Spec is mandatory.** Phase 2 always produces a Behavioral Spec and Test Matrix. There is no flag to disable it.
-- **Review phases are mandatory.** Phases 3 and 6 run on every invocation unless the user passed `--no-review` (both) or `--skip-final` (Phase 6 only). "The change is small / obvious / low-risk" is not a valid reason to skip — drop to `--rigor lite` for lighter review, but do not skip. Whether the diff is too narrow for adversarial review is the Phase 6 reviewer's call (it exits cleanly), not the agent's. Skipping a phase without an explicit user flag is a contract violation and must be reported in the Phase 7 summary.
+- **Review phases are mandatory.** Phases 3 and 6 run unless the user passed `--no-review` or `--skip-final`. "Small / obvious / low-risk" is not a reason to skip — drop to `--rigor lite` for lighter review.
 - **Reviewers always produce structured output.** Free-form review is not accepted at any rigor level.
 - **Findings are claims, not facts.** Verify every finding before adopting it — re-read the cited code, run the PoC, check the library source. Findings that are real but only fire on contrived inputs or impossible timing are recorded as Watched Risks rather than fixed. Complexity has its own cost.
 - **No silent judging.** Every reviewer conflict and every rejected suggestion is recorded in the Feedback Ledger with rationale and tiebreaker.
