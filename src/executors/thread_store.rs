@@ -22,14 +22,7 @@ pub struct StoredTurn {
 }
 
 fn threads_dir() -> PathBuf {
-    let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = dirs::home_dir().unwrap_or_default();
-        home.join(".local")
-            .join("state")
-            .to_string_lossy()
-            .to_string()
-    });
-    PathBuf::from(state_home).join("consult-llm/threads")
+    consult_llm_core::paths::state_home().join("consult-llm/threads")
 }
 
 pub fn generate_thread_id() -> String {

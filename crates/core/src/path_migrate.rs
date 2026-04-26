@@ -18,9 +18,7 @@ pub fn migrate_if_needed() {
 }
 
 fn collect_pairs() -> Vec<(PathBuf, PathBuf)> {
-    let state_home = std::env::var("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| dirs::home_dir().unwrap_or_default().join(".local/state"));
+    let state_home = crate::paths::state_home();
     let home = dirs::home_dir().unwrap_or_default();
 
     collect_pairs_from(&state_home, &home)

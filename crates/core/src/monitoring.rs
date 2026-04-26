@@ -88,11 +88,7 @@ pub fn append_history(record: &HistoryRecord) {
 }
 
 pub fn sessions_dir() -> PathBuf {
-    let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = dirs::home_dir().unwrap_or_default();
-        home.join(".local/state").to_string_lossy().to_string()
-    });
-    PathBuf::from(state_home).join("consult-llm/sessions")
+    crate::paths::state_home().join("consult-llm/sessions")
 }
 
 pub fn active_dir() -> PathBuf {

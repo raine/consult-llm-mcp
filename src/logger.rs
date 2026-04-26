@@ -1,6 +1,5 @@
 use std::fs::{OpenOptions, create_dir_all};
 use std::io::Write;
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use chrono::Local;
@@ -8,14 +7,7 @@ use chrono::Local;
 static LOG_FILE: OnceLock<Mutex<std::fs::File>> = OnceLock::new();
 
 fn init_log_file() -> Mutex<std::fs::File> {
-    let state_home = std::env::var("XDG_STATE_HOME").unwrap_or_else(|_| {
-        let home = dirs::home_dir().unwrap_or_default();
-        home.join(".local")
-            .join("state")
-            .to_string_lossy()
-            .to_string()
-    });
-    let dir = PathBuf::from(state_home).join("consult-llm");
+    let dir = consult_llm_core::paths::state_home().join("consult-llm");
     let _ = create_dir_all(&dir);
     let path = dir.join("consult-llm.log");
     let file = OpenOptions::new()
