@@ -25,8 +25,6 @@ struct ChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reasoning_effort: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     extra_body: Option<serde_json::Value>,
 }
 
@@ -52,7 +50,7 @@ struct ChatChunkChoice {
 #[derive(Deserialize, Default)]
 struct ChatDelta {
     content: Option<String>,
-    /// DeepSeek-style chain-of-thought field, separate from the response content.
+    /// DeepSeek-style chain-of-thought field, separate from response content.
     #[serde(default)]
     reasoning_content: Option<String>,
 }
@@ -65,6 +63,117 @@ struct ApiUsage {
     /// token count for models (like Gemini) where `completion_tokens` excludes
     /// thinking tokens.
     total_tokens: Option<u64>,
+}
+
+/// Per-provider quirks of the OpenAI-compatible chat-completions stream.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Dialect {
+    /// No tag-based thinking in content.
+    Generic,
+    /// Gemini wraps thought summaries in <thought>...</thought> in `delta.content`.
+    Gemini,
+    /// MiniMax M2 embeds <think>...</think> in `delta.content`.
+    MiniMax,
+}
+
+fn detect_dialect(base_url: &str) -> Dialect {
+    if base_url.contains("generativelanguage.googleapis.com") {
+        Dialect::Gemini
+    } else if base_url.contains("api.minimax.io") {
+        Dialect::MiniMax
+    } else {
+        Dialect::Generic
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum Segment {
+    Thinking(String),
+    Answer(String),
+}
+
+/// Stateful parser that splits a streamed content body on tag boundaries.
+/// Carries a small buffer between chunks so that tags split across chunk
+/// boundaries (e.g. "<tho" + "ught>") are still detected.
+struct TagSplitter {
+    open_tag: &'static str,
+    close_tag: &'static str,
+    in_thinking: bool,
+    buffer: String,
+}
+
+impl TagSplitter {
+    fn new(open_tag: &'static str, close_tag: &'static str) -> Self {
+        Self {
+            open_tag,
+            close_tag,
+            in_thinking: false,
+            buffer: String::new(),
+        }
+    }
+
+    fn push(&mut self, chunk: &str) -> Vec<Segment> {
+        self.buffer.push_str(chunk);
+        let mut out = Vec::new();
+        loop {
+            let target = if self.in_thinking {
+                self.close_tag
+            } else {
+                self.open_tag
+            };
+            if let Some(idx) = self.buffer.find(target) {
+                if idx > 0 {
+                    let segment: String = self.buffer.drain(..idx).collect();
+                    out.push(self.classify(segment));
+                }
+                self.buffer.drain(..target.len());
+                self.in_thinking = !self.in_thinking;
+                // After closing a thinking block, drop a single trailing newline
+                // for parity with the previous extract_think_tags behavior.
+                if !self.in_thinking && self.buffer.starts_with('\n') {
+                    self.buffer.drain(..1);
+                }
+            } else {
+                let hold = partial_suffix_len(&self.buffer, target);
+                let emit_len = self.buffer.len() - hold;
+                if emit_len > 0 {
+                    let segment: String = self.buffer.drain(..emit_len).collect();
+                    out.push(self.classify(segment));
+                }
+                break;
+            }
+        }
+        out
+    }
+
+    fn flush(mut self) -> Option<Segment> {
+        if self.buffer.is_empty() {
+            None
+        } else {
+            let text = std::mem::take(&mut self.buffer);
+            Some(self.classify(text))
+        }
+    }
+
+    fn classify(&self, text: String) -> Segment {
+        if self.in_thinking {
+            Segment::Thinking(text)
+        } else {
+            Segment::Answer(text)
+        }
+    }
+}
+
+/// How much of `tag`'s prefix appears at the end of `buf` — bytes we must
+/// hold back in case the next chunk completes the tag.
+fn partial_suffix_len(buf: &str, tag: &str) -> usize {
+    let max = std::cmp::min(tag.len() - 1, buf.len());
+    for i in (1..=max).rev() {
+        if buf.ends_with(&tag[..i]) {
+            return i;
+        }
+    }
+    0
 }
 
 pub struct ApiExecutor {
@@ -146,21 +255,17 @@ impl LlmExecutor for ApiExecutor {
             content: prompt.clone(),
         });
 
-        let is_gemini = self.base_url.contains("generativelanguage.googleapis.com");
-        let (reasoning_effort, extra_body) = if is_gemini {
-            (
-                None,
-                Some(serde_json::json!({
-                    "google": {
-                        "thinking_config": {
-                            "thinking_level": "high",
-                            "include_thoughts": true
-                        }
+        let dialect = detect_dialect(&self.base_url);
+        let extra_body = match dialect {
+            Dialect::Gemini => Some(serde_json::json!({
+                "google": {
+                    "thinking_config": {
+                        "thinking_level": "high",
+                        "include_thoughts": true
                     }
-                })),
-            )
-        } else {
-            (None, None)
+                }
+            })),
+            _ => None,
         };
 
         let request = ChatRequest {
@@ -170,7 +275,6 @@ impl LlmExecutor for ApiExecutor {
             stream_options: Some(StreamOptions {
                 include_usage: true,
             }),
-            reasoning_effort,
             extra_body,
         };
 
@@ -189,6 +293,11 @@ impl LlmExecutor for ApiExecutor {
         }
 
         let mut event_stream = resp.bytes_stream().eventsource();
+        let mut splitter = match dialect {
+            Dialect::Gemini => Some(TagSplitter::new("<thought>", "</thought>")),
+            Dialect::MiniMax => Some(TagSplitter::new("<think>", "</think>")),
+            Dialect::Generic => None,
+        };
         let mut raw_content = String::new();
         let mut raw_thinking = String::new();
         let mut usage: Option<Usage> = None;
@@ -224,23 +333,60 @@ impl LlmExecutor for ApiExecutor {
                         finish_reason = Some(r.clone());
                     }
                     let delta = &choice.delta;
+
+                    let mut segments: Vec<Segment> = Vec::new();
                     if let Some(t) = delta.reasoning_content.as_deref()
                         && !t.is_empty()
                     {
-                        set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
-                        raw_thinking.push_str(t);
+                        segments.push(Segment::Thinking(t.to_string()));
                     }
                     if let Some(text) = delta.content.as_deref()
                         && !text.is_empty()
                     {
-                        set_stage_once(&mut current_stage, ProgressStage::Responding, &spool);
-                        raw_content.push_str(text);
+                        match splitter.as_mut() {
+                            Some(s) => segments.extend(s.push(text)),
+                            None => segments.push(Segment::Answer(text.to_string())),
+                        }
                     }
+
+                    emit_segments(
+                        segments,
+                        &mut raw_content,
+                        &mut raw_thinking,
+                        &mut current_stage,
+                        &spool,
+                    );
                 }
             }
         }
 
-        let (tag_thinking, response) = extract_think_tags(&raw_content);
+        // Flush any tag-splitter remainder (e.g. content after the last tag).
+        let unclosed_thought = splitter.as_ref().is_some_and(|s| s.in_thinking);
+        if let Some(s) = splitter
+            && let Some(seg) = s.flush()
+        {
+            emit_segments(
+                vec![seg],
+                &mut raw_content,
+                &mut raw_thinking,
+                &mut current_stage,
+                &spool,
+            );
+        }
+
+        // Recovery: if a `<think>`/`<thought>` tag opened but never closed,
+        // every chunk was misclassified as Thinking and `raw_content` is
+        // empty. Fall back to the streamed thinking text so the user gets
+        // *something* rather than a "No response" error.
+        if raw_content.trim().is_empty() && unclosed_thought && !raw_thinking.is_empty() {
+            crate::logger::log_to_file(&format!(
+                "WARNING: API response for {model} had unclosed thought tag; treating thinking as response"
+            ));
+            eprintln!("Warning: unclosed thought tag in stream; treating thinking as response");
+            raw_content = std::mem::take(&mut raw_thinking);
+        }
+
+        let response = raw_content.trim().to_string();
         if response.is_empty() {
             anyhow::bail!("No response from the model via API");
         }
@@ -261,18 +407,8 @@ impl LlmExecutor for ApiExecutor {
             _ => {}
         }
 
-        // Merge DeepSeek-style reasoning_content with <think>-tag thinking (e.g. MiniMax).
-        let thinking = match (raw_thinking.is_empty(), tag_thinking) {
-            (false, Some(tags)) => Some(format!("{}\n{}", raw_thinking.trim(), tags)),
-            (false, None) => Some(raw_thinking),
-            (true, t) => t,
-        };
-
         {
             let mut s = spool.lock().unwrap();
-            if let Some(ref t) = thinking {
-                s.stream_event(ParsedStreamEvent::Thinking { text: t.clone() });
-            }
             s.stream_event(ParsedStreamEvent::AssistantText {
                 text: response.clone(),
             });
@@ -285,6 +421,46 @@ impl LlmExecutor for ApiExecutor {
         }
 
         session.commit_turn(prompt, model, response, usage)
+    }
+}
+
+fn emit_segments(
+    segments: Vec<Segment>,
+    raw_content: &mut String,
+    raw_thinking: &mut String,
+    current_stage: &mut Option<ProgressStage>,
+    spool: &std::sync::Mutex<consult_llm_core::monitoring::RunSpool>,
+) {
+    if segments.is_empty() {
+        return;
+    }
+    // Single lock acquisition: interleave stage updates with event emissions
+    // so progress and stream events stay in causal order (e.g. for a mixed
+    // [Thinking, Answer] chunk, the timeline is
+    // Progress(Thinking), Stream(Thinking), Progress(Responding), Stream(Answer)).
+    let mut s = spool.lock().unwrap();
+    for seg in segments {
+        let next = match &seg {
+            Segment::Thinking(_) => ProgressStage::Thinking,
+            Segment::Answer(_) => ProgressStage::Responding,
+        };
+        if current_stage.as_ref() != Some(&next) {
+            s.set_stage(next.clone());
+            *current_stage = Some(next);
+        }
+        match seg {
+            Segment::Thinking(text) => {
+                if !text.is_empty() {
+                    raw_thinking.push_str(&text);
+                    s.stream_event(ParsedStreamEvent::Thinking { text });
+                }
+            }
+            Segment::Answer(text) => {
+                if !text.is_empty() {
+                    raw_content.push_str(&text);
+                }
+            }
+        }
     }
 }
 
@@ -301,49 +477,107 @@ fn effective_usage(u: ApiUsage) -> Usage {
     }
 }
 
-/// Extract `<think>...</think>` blocks from reasoning models (e.g. MiniMax M2.7)
-/// that embed chain-of-thought in the content field.
-/// Returns (thinking_content, stripped_response).
-fn extract_think_tags(s: &str) -> (Option<String>, String) {
-    let mut thinking = String::new();
-    let mut result = s.to_string();
-    while let Some(start) = result.find("<think>") {
-        let content_start = start + "<think>".len();
-        if let Some(rel_end) = result[content_start..].find("</think>") {
-            let end = content_start + rel_end;
-            thinking.push_str(result[content_start..end].trim());
-            let end = end + "</think>".len();
-            let end = if result.as_bytes().get(end) == Some(&b'\n') {
-                end + 1
-            } else {
-                end
-            };
-            result.replace_range(start..end, "");
-        } else {
-            break;
-        }
-    }
-    let thinking = if thinking.is_empty() {
-        None
-    } else {
-        Some(thinking)
-    };
-    (thinking, result.trim().to_string())
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn set_stage_once(
-    current: &mut Option<ProgressStage>,
-    next: ProgressStage,
-    spool: &std::sync::Mutex<consult_llm_core::monitoring::RunSpool>,
-) {
-    let needs_update = match current {
-        None => true,
-        Some(ProgressStage::Thinking) => !matches!(next, ProgressStage::Thinking),
-        Some(ProgressStage::Responding) => !matches!(next, ProgressStage::Responding),
-        _ => true,
-    };
-    if needs_update {
-        spool.lock().unwrap().set_stage(next.clone());
-        *current = Some(next);
+    #[test]
+    fn splitter_full_thought_and_answer_in_separate_chunks() {
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        let segs = p.push("<thought>plan A</thought>answer");
+        assert_eq!(
+            segs,
+            vec![
+                Segment::Thinking("plan A".into()),
+                Segment::Answer("answer".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn splitter_split_open_tag_across_chunks() {
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        assert_eq!(p.push("<tho"), vec![]);
+        assert_eq!(p.push("ught>plan"), vec![Segment::Thinking("plan".into())]);
+    }
+
+    #[test]
+    fn splitter_split_close_tag_across_chunks() {
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        let _ = p.push("<thought>plan");
+        assert_eq!(p.push("</thou"), vec![]);
+        assert_eq!(p.push("ght>answer"), vec![Segment::Answer("answer".into())]);
+    }
+
+    #[test]
+    fn splitter_close_tag_at_start_of_answer_chunk() {
+        // Mirrors the real Gemini boundary: thought chunk has only opening
+        // tag, answer chunk starts with closing tag.
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        assert_eq!(
+            p.push("<thought>thinking text"),
+            vec![Segment::Thinking("thinking text".into())]
+        );
+        assert_eq!(
+            p.push("</thought>**Answer**"),
+            vec![Segment::Answer("**Answer**".into())]
+        );
+    }
+
+    #[test]
+    fn splitter_no_tags_passthrough() {
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        assert_eq!(
+            p.push("plain answer text"),
+            vec![Segment::Answer("plain answer text".into())]
+        );
+        assert!(p.flush().is_none());
+    }
+
+    #[test]
+    fn splitter_strips_trailing_newline_after_close() {
+        let mut p = TagSplitter::new("<think>", "</think>");
+        let segs = p.push("<think>x</think>\nanswer");
+        assert_eq!(
+            segs,
+            vec![
+                Segment::Thinking("x".into()),
+                Segment::Answer("answer".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn splitter_holds_partial_suffix_that_is_not_tag() {
+        // A trailing '<' could start an open tag; must be held back.
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        let s1 = p.push("hello <");
+        assert_eq!(s1, vec![Segment::Answer("hello ".into())]);
+        let s2 = p.push("world");
+        assert_eq!(s2, vec![Segment::Answer("<world".into())]);
+    }
+
+    #[test]
+    fn splitter_unicode_safe_when_buffer_ends_non_ascii() {
+        let mut p = TagSplitter::new("<thought>", "</thought>");
+        let segs = p.push("café 🍰");
+        assert_eq!(segs, vec![Segment::Answer("café 🍰".into())]);
+    }
+
+    #[test]
+    fn detect_dialect_known_providers() {
+        assert_eq!(
+            detect_dialect("https://generativelanguage.googleapis.com/v1beta/openai/"),
+            Dialect::Gemini
+        );
+        assert_eq!(
+            detect_dialect("https://api.minimax.io/v1"),
+            Dialect::MiniMax
+        );
+        assert_eq!(
+            detect_dialect("https://api.openai.com/v1/"),
+            Dialect::Generic
+        );
+        assert_eq!(detect_dialect("https://api.deepseek.com"), Dialect::Generic);
     }
 }
