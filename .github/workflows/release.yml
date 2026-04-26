@@ -141,9 +141,9 @@ jobs:
 
           crate_published() {
             local crate="$1"
-            curl -sf "https://crates.io/api/v1/crates/$crate/$CARGO_VERSION" \
+            curl -sf -o /dev/null \
               -H "User-Agent: consult-llm-release-workflow" \
-              | jq -e '.version.num == "'$CARGO_VERSION'"' > /dev/null 2>&1
+              "https://crates.io/api/v1/crates/$crate/$CARGO_VERSION"
           }
 
           publish_if_missing() {
