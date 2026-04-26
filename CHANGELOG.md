@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v3.0.0 (2026-04-26)
 
 - **Migrated from MCP server to standalone CLI.** `consult-llm` is now a
   native binary invoked directly in the terminal or from agent skills via
