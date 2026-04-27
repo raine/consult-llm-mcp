@@ -4,6 +4,7 @@ pub mod api_common;
 pub mod cli_runner;
 pub mod codex_cli;
 pub mod cursor_cli;
+pub mod cursor_models;
 pub mod gemini_cli;
 pub mod opencode_cli;
 pub mod stream;

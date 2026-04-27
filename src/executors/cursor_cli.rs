@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use smallvec::SmallVec;
 use std::path::PathBuf;
 
+use super::cursor_models;
 use super::run_cli_executor;
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
@@ -218,26 +219,14 @@ fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     // cursor-agent encodes reasoning effort in the model name for models
     // that require it. e.g. gpt-5.3-codex + high → gpt-5.3-codex-high,
     // gpt-5.4 + high → gpt-5.4-high. Bare gpt-5.4/gpt-5.5 are not accepted.
+    // The effort suffix may not match cursor-agent's actual ladder for the
+    // model (e.g. gpt-5.5 wants `extra-high`, not `xhigh`); the resolver in
+    // `cursor_models` rewrites the candidate against the live model list.
     if model_requires_reasoning_suffix(&cursor_model) {
-        let effort = map_effort_for_model(&cursor_model, codex_reasoning_effort);
-        cursor_model = format!("{cursor_model}-{effort}");
+        cursor_model = format!("{cursor_model}-{codex_reasoning_effort}");
     }
 
     cursor_model
-}
-
-// gpt-5.5 only accepts medium/high/extra-high suffixes (no low/xhigh).
-// Translate the configured codex effort onto that ladder.
-fn map_effort_for_model<'a>(model: &str, effort: &'a str) -> &'a str {
-    if model == "gpt-5.5" {
-        match effort {
-            "low" => "medium",
-            "xhigh" => "extra-high",
-            other => other,
-        }
-    } else {
-        effort
-    }
 }
 
 fn model_requires_reasoning_suffix(model: &str) -> bool {
@@ -301,7 +290,14 @@ impl LlmExecutor for CursorCliExecutor {
             format!("{system_prompt}\n\n{message_with_files}")
         };
 
-        let cursor_model = map_cursor_model(&model, &self.codex_reasoning_effort);
+        let candidate = map_cursor_model(&model, &self.codex_reasoning_effort);
+        let base = model.replace("-preview", "");
+        let cursor_model = if model_requires_reasoning_suffix(&base) {
+            let list = cursor_models::available_models().await;
+            cursor_models::resolve_model(&candidate, &base, &list)?
+        } else {
+            candidate
+        };
 
         // --trust is required for headless (--print) mode to skip the interactive
         // workspace trust prompt. --mode ask restricts to read-only operations.
