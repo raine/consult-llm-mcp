@@ -176,11 +176,37 @@ async fn validate_cursor_model(
     let list = cache.as_ref().unwrap();
     match cursor_models::resolve_model(&candidate, &base, list) {
         Ok(resolved) if resolved == candidate => None,
-        Ok(resolved) => Some(format!(
-            "model '{candidate}' rewritten to '{resolved}' (effort='{effort}' isn't accepted by cursor-agent for this model)"
-        )),
+        Ok(resolved) => {
+            let resolved_suffix = resolved
+                .strip_prefix(&base)
+                .and_then(|s| s.strip_prefix('-'))
+                .unwrap_or("");
+            // Synonyms aren't user-actionable — cursor-agent just uses a
+            // different name for the same tier. Stay quiet.
+            if is_effort_synonym(effort, resolved_suffix) {
+                None
+            } else {
+                Some(format!(
+                    "model '{candidate}' rewritten to '{resolved}' (effort='{effort}' isn't accepted by cursor-agent for this model)"
+                ))
+            }
+        }
         Err(e) => Some(e.to_string()),
     }
+}
+
+fn is_effort_synonym(a: &str, b: &str) -> bool {
+    let canon = |e: &str| {
+        match e {
+            "xhigh" | "extra-high" => "xhigh",
+            other => match other.strip_suffix("-fast") {
+                Some("xhigh") | Some("extra-high") => "xhigh",
+                _ => other,
+            },
+        }
+        .to_string()
+    };
+    canon(a) == canon(b)
 }
 
 // ---- main -------------------------------------------------------------------
