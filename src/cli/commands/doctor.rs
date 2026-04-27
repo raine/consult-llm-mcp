@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
@@ -5,25 +6,92 @@ use consult_llm_core::monitoring::{active_dir, runs_dir, sessions_dir};
 
 use crate::models::PROVIDER_SPECS;
 
-// ---- terminal helpers -------------------------------------------------------
+// ---- terminal styling -------------------------------------------------------
 
 fn use_color() -> bool {
     std::env::var("NO_COLOR").is_err() && std::io::stdout().is_terminal()
 }
 
-fn ok_mark(color: bool) -> &'static str {
-    if color { "\x1b[32m✓\x1b[0m" } else { "✓" }
-}
-
-fn err_mark(color: bool) -> &'static str {
-    if color { "\x1b[31m✗\x1b[0m" } else { "✗" }
-}
-
-fn dim(color: bool, s: &str) -> String {
+fn paint(color: bool, code: &str, text: impl Display) -> String {
     if color {
-        format!("\x1b[2m{s}\x1b[0m")
+        format!("\x1b[{code}m{text}\x1b[0m")
     } else {
-        s.to_string()
+        text.to_string()
+    }
+}
+
+fn bold(c: bool, t: impl Display) -> String {
+    paint(c, "1", t)
+}
+fn muted(c: bool, t: impl Display) -> String {
+    paint(c, "2", t)
+}
+fn accent(c: bool, t: impl Display) -> String {
+    paint(c, "1;36", t)
+}
+fn success(c: bool, t: impl Display) -> String {
+    paint(c, "1;32", t)
+}
+fn warning(c: bool, t: impl Display) -> String {
+    paint(c, "33", t)
+}
+fn error_text(c: bool, t: impl Display) -> String {
+    paint(c, "1;31", t)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Status {
+    Ok,
+    Warn,
+    Fail,
+    Skip,
+    Info,
+}
+
+fn symbol(c: bool, s: Status) -> String {
+    match s {
+        Status::Ok => success(c, "✓"),
+        Status::Warn => warning(c, "⚠"),
+        Status::Fail => error_text(c, "✗"),
+        Status::Skip => muted(c, "·"),
+        Status::Info => muted(c, "·"),
+    }
+}
+
+fn print_section(c: bool, title: &str) {
+    println!();
+    println!("{}", accent(c, title));
+}
+
+fn print_row(c: bool, status: Status, label: &str, detail: Option<&str>) {
+    let sym = symbol(c, status);
+    let lbl = match status {
+        Status::Skip => muted(c, label),
+        _ => label.to_string(),
+    };
+    match detail {
+        Some(d) => println!("  {sym} {lbl}  {}", muted(c, d)),
+        None => println!("  {sym} {lbl}"),
+    }
+}
+
+fn print_row_aligned(
+    c: bool,
+    status: Status,
+    label: &str,
+    label_width: usize,
+    detail: Option<&str>,
+) {
+    let sym = symbol(c, status);
+    let visible_pad = label_width.saturating_sub(label.chars().count());
+    let pad: String = std::iter::repeat_n(' ', visible_pad).collect();
+    let lbl = match status {
+        Status::Skip => muted(c, label),
+        _ => label.to_string(),
+    };
+    match detail {
+        Some(d) => println!("  {sym} {lbl}{pad}  {}", muted(c, d)),
+        None => println!("  {sym} {lbl}{pad}"),
     }
 }
 
@@ -153,10 +221,6 @@ struct PathRow {
 
 // ---- cursor model validation ------------------------------------------------
 
-/// Resolve the configured cursor model + effort against `cursor-agent
-/// --list-models`. Returns `None` if the model would be accepted (or if the
-/// list is unavailable / stale and we can't authoritatively reject), or
-/// `Some(detail)` with a one-line error suitable for appending to the row.
 #[derive(Clone, Copy)]
 enum Severity {
     Warn,
@@ -190,7 +254,6 @@ async fn validate_cursor_model(
                 if is_effort_synonym(effort, resolved_suffix) {
                     None
                 } else {
-                    // Lossy: still works, but not what was asked for.
                     Some((
                         Severity::Warn,
                         format!(
@@ -202,8 +265,6 @@ async fn validate_cursor_model(
             Err(e) => Some((Severity::Err, e.to_string())),
         }
     } else {
-        // Non-suffix models: validate the bare id exists in a fresh list.
-        // Stale or unavailable lists never produce false rejects.
         let ModelList::Fresh(models) = list else {
             return None;
         };
@@ -235,9 +296,7 @@ fn is_effort_synonym(a: &str, b: &str) -> bool {
 // ---- main -------------------------------------------------------------------
 
 pub async fn run(verbose: bool) -> anyhow::Result<()> {
-    let color = use_color();
-    let ok = ok_mark(color);
-    let err = err_mark(color);
+    let c = use_color();
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let home = dirs::home_dir();
@@ -267,7 +326,6 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
     let mut warnings: Vec<(Severity, String)> = Vec::new();
     let mut has_warn = false;
     let mut has_error = false;
-    // Lazily fetched cursor-agent --list-models result, shared across rows.
     let mut cursor_list_cache: Option<crate::executors::cursor_models::ModelList> = None;
 
     for spec in PROVIDER_SPECS {
@@ -330,13 +388,8 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
             (false, format!("unknown backend '{backend}'"))
         };
 
-        // dep failures (missing key, missing binary) are hard errors —
-        // the provider definitely won't work.
         let mut sev: Option<Severity> = if dep_ok { None } else { Some(Severity::Err) };
 
-        // Cursor backend: validate the configured model + effort actually
-        // resolves against `cursor-agent --list-models`. Skip if the binary
-        // isn't on PATH (the dep_ok check above already flagged that).
         if dep_ok
             && backend == "cursor-cli"
             && !model.is_empty()
@@ -398,66 +451,54 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
 
     // ---- Header
     let version = env!("CARGO_PKG_VERSION");
-    let status = if has_error {
-        if color {
-            "\x1b[31mERROR\x1b[0m"
-        } else {
-            "ERROR"
-        }
-    } else if has_warn {
-        if color { "\x1b[33mWARN\x1b[0m" } else { "WARN" }
-    } else if color {
-        "\x1b[32mOK\x1b[0m"
-    } else {
-        "OK"
-    };
-    println!("consult-llm v{version} doctor: {status}");
+    println!(
+        "{} {}",
+        bold(c, "consult-llm doctor"),
+        muted(c, format!("v{version}"))
+    );
 
     // ---- Providers
-    println!("\nProviders:");
+    print_section(c, "Providers");
     let id_w = prov_rows.iter().map(|r| r.id.len()).max().unwrap_or(8);
-    let model_w = prov_rows.iter().map(|r| r.model.len()).max().unwrap_or(20);
-    let backend_w = prov_rows.iter().map(|r| r.backend.len()).max().unwrap_or(7);
-
     for row in &prov_rows {
         match row.status {
             ProvStatus::Skip => {
-                let dash = dim(color, "-");
-                let detail = dim(color, &row.detail);
-                println!(
-                    "  {:<id_w$}  {:<model_w$}  {:<backend_w$}  {dash}   {detail}",
-                    row.id, "", "",
-                );
+                print_row_aligned(c, Status::Skip, row.id, id_w, Some(&row.detail));
             }
             ProvStatus::Ok => {
-                println!(
-                    "  {:<id_w$}  {:<model_w$}  {:<backend_w$}  {ok}   {}",
-                    row.id, row.model, row.backend, row.detail,
-                );
+                let detail = format!("{} via {} — {}", row.model, row.backend, row.detail);
+                print_row_aligned(c, Status::Ok, row.id, id_w, Some(&detail));
             }
             ProvStatus::Err => {
-                println!(
-                    "  {:<id_w$}  {:<model_w$}  {:<backend_w$}  {err}   {}",
-                    row.id, row.model, row.backend, row.detail,
-                );
+                let detail = if row.model.is_empty() && row.backend.is_empty() {
+                    row.detail.clone()
+                } else {
+                    format!("{} via {} — {}", row.model, row.backend, row.detail)
+                };
+                print_row_aligned(c, Status::Fail, row.id, id_w, Some(&detail));
             }
         }
     }
 
     // ---- Config
-    println!("\nConfig:");
+    print_section(c, "Config");
     let keys = config_keys();
     if verbose {
-        let key_w = keys.iter().map(|k| k.len()).max().unwrap_or(30);
+        let key_w = keys
+            .iter()
+            .map(|k| semantic_name(k).len())
+            .max()
+            .unwrap_or(20);
         for key in &keys {
+            let name = semantic_name(key);
             match env.lookup(key) {
                 Some((v, src)) => {
-                    let src_str = dim(color, &format!("[{src}]"));
-                    println!("  {key:<key_w$}  {v:<24}  {src_str}");
+                    let src_str = shorten_str(&src.to_string(), home.as_deref());
+                    let detail = format!("{v}  [{src_str}]");
+                    print_row_aligned(c, Status::Info, &name, key_w, Some(&detail));
                 }
                 None => {
-                    let def = dim(color, "[default]");
-                    println!("  {key:<key_w$}  (unset)                   {def}");
+                    print_row_aligned(c, Status::Skip, &name, key_w, Some("unset  [default]"));
                 }
             }
         }
@@ -467,7 +508,7 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
             .filter_map(|&k| env.lookup(k).map(|(v, src)| (k, v, src)))
             .collect();
         if set.is_empty() {
-            println!("  {}", dim(color, "(all defaults)"));
+            print_row(c, Status::Skip, "all defaults", None);
         } else {
             let name_w = set
                 .iter()
@@ -476,17 +517,15 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
                 .unwrap_or(20);
             for (key, v, src) in &set {
                 let name = semantic_name(key);
-                let src_str = dim(
-                    color,
-                    &format!("[{}]", shorten_str(&src.to_string(), home.as_deref())),
-                );
-                println!("  {name:<name_w$}  {v:<24}  {src_str}");
+                let src_str = shorten_str(&src.to_string(), home.as_deref());
+                let detail = format!("{v}  [{src_str}]");
+                print_row_aligned(c, Status::Info, &name, name_w, Some(&detail));
             }
         }
     }
 
     // ---- Config files
-    println!("\nConfig files:");
+    print_section(c, "Config files");
     struct FileEntry {
         label: &'static str,
         display: String,
@@ -526,57 +565,50 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
         .map(|e| e.label.len())
         .max()
         .unwrap_or(12);
-    let path_w = file_entries
-        .iter()
-        .map(|e| e.display.len())
-        .max()
-        .unwrap_or(40);
     for entry in &file_entries {
         if entry.loaded {
-            println!(
-                "  {:<label_w$}  {:<path_w$}  {ok}",
-                entry.label, entry.display
-            );
+            print_row_aligned(c, Status::Ok, entry.label, label_w, Some(&entry.display));
         } else {
-            let status = dim(color, "not found");
-            println!(
-                "  {:<label_w$}  {:<path_w$}  {status}",
-                entry.label, entry.display
-            );
+            let detail = format!("{} (not found)", entry.display);
+            print_row_aligned(c, Status::Skip, entry.label, label_w, Some(&detail));
         }
     }
 
     // ---- State
-    println!("\nState:");
+    print_section(c, "State");
     let name_w = path_rows.iter().map(|r| r.name.len()).max().unwrap_or(8);
-    let spath_w = path_rows
-        .iter()
-        .map(|r| shorten(&r.path, home.as_deref()).len())
-        .max()
-        .unwrap_or(40);
     for row in &path_rows {
         let path_str = shorten(&row.path, home.as_deref());
-        let status = if !row.exists {
-            format!("{err} not found")
+        let (status, detail) = if !row.exists {
+            (Status::Fail, format!("{path_str} (not found)"))
         } else if !row.writable {
-            format!("{err} not writable")
+            (Status::Fail, format!("{path_str} (not writable)"))
         } else {
-            format!("{ok} writable")
+            (Status::Ok, path_str)
         };
-        println!("  {:<name_w$}  {:<spath_w$}  {status}", row.name, path_str);
+        print_row_aligned(c, status, row.name, name_w, Some(&detail));
     }
 
     // ---- Warnings
     if !warnings.is_empty() {
-        println!("\nWarnings:");
-        let warn_mark = if color { "\x1b[33m!\x1b[0m" } else { "!" };
+        print_section(c, "Warnings");
         for (sev, msg) in &warnings {
-            let mark = match sev {
-                Severity::Err => err,
-                Severity::Warn => warn_mark,
+            let status = match sev {
+                Severity::Err => Status::Fail,
+                Severity::Warn => Status::Warn,
             };
-            println!("  {mark} {msg}");
+            print_row(c, status, msg, None);
         }
+    }
+
+    // ---- Summary
+    println!();
+    if has_error {
+        eprintln!("{}", error_text(c, "Some checks failed."));
+    } else if has_warn {
+        eprintln!("{}", warning(c, "Some checks have warnings."));
+    } else {
+        println!("{}", success(c, "All checks passed."));
     }
 
     Ok(())
