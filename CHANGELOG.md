@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.7 (2026-04-27)
+
+- `doctor` now validates the configured cursor model and reasoning effort against `cursor-agent --list-models` and reports a hard error when the combination would be rejected (e.g. `gpt-5.5` only accepts `medium`/`high`/`extra-high`)
+- Cursor backend now maps `low` → `medium` and `xhigh` → `extra-high` when targeting `gpt-5.5`, so existing `codex_reasoning_effort` configs keep working
+- `implement` skill now verifies reviewer findings empirically before adopting them, reducing churn from hallucinated or contrived issues
+
 ## v3.0.5 (2026-04-26)
 
 - Added new skills: `implement`, `workshop`, `panel`, and `review-panel`
