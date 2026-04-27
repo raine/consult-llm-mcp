@@ -263,56 +263,42 @@ impl LlmExecutor for AnthropicApiExecutor {
                 last_event = std::time::Instant::now();
             }
             for ev in events {
-                let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&ev.data) else {
-                    continue;
-                };
-                match parsed {
-                    AnthropicEvent::MessageStart { message } => {
-                        if let Some(u) = message.usage {
-                            input_tokens = u.input_tokens;
-                            cache_creation_tokens = u.cache_creation_input_tokens;
-                            cache_read_tokens = u.cache_read_input_tokens;
-                            got_usage = true;
-                        }
-                    }
-                    AnthropicEvent::ContentBlockStart { content_block, .. } => {
-                        if matches!(content_block, ContentBlockKind::Thinking) {
-                            set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
-                        }
-                    }
-                    AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
-                        ContentDelta::ThinkingDelta { thinking: t } => {
-                            set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
-                            thinking.push_str(&t);
-                        }
-                        ContentDelta::TextDelta { text } => {
-                            set_stage_once(&mut current_stage, ProgressStage::Responding, &spool);
-                            response.push_str(&text);
-                        }
-                        ContentDelta::SignatureDelta { .. } | ContentDelta::Other => {}
-                    },
-                    AnthropicEvent::ContentBlockStop => {}
-                    AnthropicEvent::MessageDelta { delta, usage } => {
-                        stop_reason = delta.stop_reason;
-                        if let Some(u) = usage {
-                            output_tokens = u.output_tokens;
-                            got_usage = true;
-                        }
-                    }
-                    AnthropicEvent::MessageStop => {
-                        saw_message_stop = true;
-                        break 'outer;
-                    }
-                    AnthropicEvent::Error { error } => {
-                        anyhow::bail!(
-                            "Anthropic stream error {}: {}",
-                            error.error_type,
-                            error.message
-                        );
-                    }
-                    AnthropicEvent::Ping | AnthropicEvent::Unknown => {}
+                if process_event(
+                    &ev,
+                    &mut input_tokens,
+                    &mut cache_creation_tokens,
+                    &mut cache_read_tokens,
+                    &mut output_tokens,
+                    &mut got_usage,
+                    &mut stop_reason,
+                    &mut saw_message_stop,
+                    &mut current_stage,
+                    &mut response,
+                    &mut thinking,
+                    &spool,
+                )? {
+                    break 'outer;
                 }
             }
+        }
+
+        // Drain any final event the server sent without a trailing blank
+        // line (e.g. a connection terminated right after `message_stop`).
+        if let Some(ev) = sse.flush() {
+            process_event(
+                &ev,
+                &mut input_tokens,
+                &mut cache_creation_tokens,
+                &mut cache_read_tokens,
+                &mut output_tokens,
+                &mut got_usage,
+                &mut stop_reason,
+                &mut saw_message_stop,
+                &mut current_stage,
+                &mut response,
+                &mut thinking,
+                &spool,
+            )?;
         }
 
         if !saw_message_stop {
@@ -376,6 +362,75 @@ impl LlmExecutor for AnthropicApiExecutor {
 
         session.commit_turn(prompt, model, response, usage)
     }
+}
+
+/// Process a single parsed SSE event. Returns `Ok(true)` when the stream
+/// should terminate (`message_stop` seen).
+#[allow(clippy::too_many_arguments)]
+fn process_event(
+    ev: &super::sse::SseEvent,
+    input_tokens: &mut u64,
+    cache_creation_tokens: &mut u64,
+    cache_read_tokens: &mut u64,
+    output_tokens: &mut u64,
+    got_usage: &mut bool,
+    stop_reason: &mut Option<String>,
+    saw_message_stop: &mut bool,
+    current_stage: &mut Option<ProgressStage>,
+    response: &mut String,
+    thinking: &mut String,
+    spool: &std::sync::Mutex<consult_llm_core::monitoring::RunSpool>,
+) -> anyhow::Result<bool> {
+    let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&ev.data) else {
+        return Ok(false);
+    };
+    match parsed {
+        AnthropicEvent::MessageStart { message } => {
+            if let Some(u) = message.usage {
+                *input_tokens = u.input_tokens;
+                *cache_creation_tokens = u.cache_creation_input_tokens;
+                *cache_read_tokens = u.cache_read_input_tokens;
+                *got_usage = true;
+            }
+        }
+        AnthropicEvent::ContentBlockStart { content_block, .. } => {
+            if matches!(content_block, ContentBlockKind::Thinking) {
+                set_stage_once(current_stage, ProgressStage::Thinking, spool);
+            }
+        }
+        AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
+            ContentDelta::ThinkingDelta { thinking: t } => {
+                set_stage_once(current_stage, ProgressStage::Thinking, spool);
+                thinking.push_str(&t);
+            }
+            ContentDelta::TextDelta { text } => {
+                set_stage_once(current_stage, ProgressStage::Responding, spool);
+                response.push_str(&text);
+            }
+            ContentDelta::SignatureDelta { .. } | ContentDelta::Other => {}
+        },
+        AnthropicEvent::ContentBlockStop => {}
+        AnthropicEvent::MessageDelta { delta, usage } => {
+            *stop_reason = delta.stop_reason;
+            if let Some(u) = usage {
+                *output_tokens = u.output_tokens;
+                *got_usage = true;
+            }
+        }
+        AnthropicEvent::MessageStop => {
+            *saw_message_stop = true;
+            return Ok(true);
+        }
+        AnthropicEvent::Error { error } => {
+            anyhow::bail!(
+                "Anthropic stream error {}: {}",
+                error.error_type,
+                error.message
+            );
+        }
+        AnthropicEvent::Ping | AnthropicEvent::Unknown => {}
+    }
+    Ok(false)
 }
 
 /// Update the spool stage only when it differs from the current value.
