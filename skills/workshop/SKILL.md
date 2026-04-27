@@ -2,7 +2,6 @@
 name: workshop
 description: Interactive design session — agent facilitates a clarifying dialogue with the user, fans out to multiple LLMs in parallel for divergent approach generation, lets the user pick one, then co-designs the chosen approach with optional multi-LLM critique before saving.
 allowed-tools: AskUserQuestion, Bash, Glob, Grep, Read, Write
-disable-model-invocation: true
 ---
 
 A facilitated design session. The user brings a rough idea; the agent clarifies it through dialogue, then convenes external LLMs to propose distinct approaches in parallel; the user picks one; agent and user finalize the design, with an optional multi-LLM critique pass before saving. Use this when you have a vague idea and want expert divergence without losing the user-in-the-loop. For 1:1 design dialogue with no LLMs, use `/brainstorm`. For role-asymmetric advisory analysis without user interaction, use `/panel`.

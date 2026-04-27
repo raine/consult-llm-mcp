@@ -2,7 +2,6 @@
 name: implement
 description: Autonomously plan and implement a task with external LLM review. Writes a behavioral spec, runs an evidence-gated plan review (premortem + independent alternative), applies feedback through a decision ledger, implements with a triggered debug loop, and finishes with an evidence-gated red-team pass. No user interaction.
 allowed-tools: Bash, Glob, Grep, Read, Edit, Write
-disable-model-invocation: true
 ---
 
 End-to-end autonomous workflow: spec → plan → review → implement → red-team → summary. Reviewers must produce structured findings with concrete evidence; conflicts are resolved through a written decision ledger, not silent agent judgment. Use this when you want a single command to take a task from "describe it" to "committed implementation" with external-LLM gating at the right checkpoints. For advisory-only review of an existing diff, use `/review-panel` or `/panel`.

@@ -2,7 +2,6 @@
 name: panel
 description: Role-specialized LLM panel analyzes a task from asymmetric expert lenses (architect, security, maintainability, test-strategist by default). Agent synthesizes a trade-off resolution.
 allowed-tools: Bash, Glob, Grep, Read
-disable-model-invocation: true
 ---
 
 Run a role-asymmetric advisory panel. Each role analyzes the same task from a single expert lens; the agent synthesizes a PM-style trade-off resolution. Use this when a decision spans multiple domains that pull in different directions and one of them shouldn't silently win. For peer-style brainstorming with no role separation, use `/collab`. For multi-model review of an existing diff with identical prompts, use `/review-panel`.

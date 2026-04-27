@@ -1,7 +1,6 @@
 ---
 name: debate-vs
 description: The agent debates an opponent LLM through a multi-turn conversation, then synthesizes the best approach and implements.
-disable-model-invocation: true
 ---
 
 Debate an opponent LLM on the best implementation approach using multi-turn
