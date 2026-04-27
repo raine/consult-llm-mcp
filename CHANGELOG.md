@@ -1,5 +1,10 @@
 # Changelog
 
+## v3.0.8 (2026-04-27)
+
+- `install-skills` interactive prompt now installs to a single platform per run; re-run the command to install to another platform
+- Workflow skills are now discoverable by model invocation again (removed `disable-model-invocation` from `collab`, `collab-vs`, `debate`, `debate-vs`, `implement`, `panel`, `review-panel`, and `workshop`)
+
 ## v3.0.7 (2026-04-27)
 
 - `doctor` now validates the configured cursor model and reasoning effort against `cursor-agent --list-models` and reports a hard error when the combination would be rejected (e.g. `gpt-5.5` only accepts `medium`/`high`/`extra-high`)
