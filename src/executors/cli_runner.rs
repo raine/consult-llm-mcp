@@ -1,6 +1,5 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
-use std::thread;
 use std::time::Instant;
 
 use super::child_guard::ChildGuard;
@@ -62,55 +61,59 @@ where
     let stderr_pipe = guard.child_mut().stderr.take().expect("stderr was piped");
     let stdin_pipe = guard.child_mut().stdin.take();
 
-    let stdin_owned: Option<Vec<u8>> = stdin_data.map(|s| s.as_bytes().to_vec());
+    // Scope so the stdin writer can borrow `stdin_data` directly instead
+    // of cloning it (prompts can be megabytes).
+    let (stdout_bytes, stderr) = std::thread::scope(|s| -> anyhow::Result<(usize, String)> {
+        let stderr_handle = s.spawn(move || -> std::io::Result<String> {
+            let mut buf = String::new();
+            let mut reader = BufReader::new(stderr_pipe);
+            reader.read_to_string(&mut buf)?;
+            Ok(buf)
+        });
 
-    let stderr_handle = thread::spawn(move || -> std::io::Result<String> {
-        let mut buf = String::new();
-        let mut reader = BufReader::new(stderr_pipe);
-        reader.read_to_string(&mut buf)?;
-        Ok(buf)
-    });
-
-    let stdin_handle = thread::spawn(move || -> std::io::Result<()> {
-        if let (Some(data), Some(mut stdin)) = (stdin_owned, stdin_pipe) {
-            // BrokenPipe is suppressed: the child can legitimately exit early.
-            match stdin.write_all(&data) {
-                Ok(()) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
-                Err(e) => return Err(e),
+        let stdin_handle = s.spawn(move || -> std::io::Result<()> {
+            if let (Some(data), Some(mut stdin)) = (stdin_data, stdin_pipe) {
+                // BrokenPipe is suppressed: the child can legitimately exit early.
+                match stdin.write_all(data.as_bytes()) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+                    Err(e) => return Err(e),
+                }
+                drop(stdin);
             }
-            drop(stdin);
-        }
-        Ok(())
-    });
+            Ok(())
+        });
 
-    let mut reader = BufReader::new(stdout);
-    let mut line = String::new();
-    let mut stdout_bytes: usize = 0;
-    loop {
-        line.clear();
-        let n = reader.read_line(&mut line)?;
-        if n == 0 {
-            break;
+        let mut reader = BufReader::new(stdout);
+        let mut line = String::new();
+        let mut stdout_bytes: usize = 0;
+        loop {
+            line.clear();
+            let n = reader.read_line(&mut line)?;
+            if n == 0 {
+                break;
+            }
+            let trimmed = line.trim_end_matches('\n').trim_end_matches('\r');
+            stdout_bytes += line.len();
+            on_line(trimmed);
         }
-        let trimmed = line.trim_end_matches('\n').trim_end_matches('\r');
-        stdout_bytes += line.len();
-        on_line(trimmed);
-    }
+
+        let stderr = stderr_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stderr thread panicked"))??;
+        match stdin_handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("stdin thread panicked"))?
+        {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+            Err(e) => return Err(e.into()),
+        }
+        Ok((stdout_bytes, stderr))
+    })?;
 
     let status = guard.wait()?;
     let duration_ms = start.elapsed().as_millis();
-    let stderr = stderr_handle
-        .join()
-        .map_err(|_| anyhow::anyhow!("stderr thread panicked"))??;
-    match stdin_handle
-        .join()
-        .map_err(|_| anyhow::anyhow!("stdin thread panicked"))?
-    {
-        Ok(()) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
-        Err(e) => return Err(e.into()),
-    }
 
     let result = CliResult {
         stdout_bytes,
