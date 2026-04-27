@@ -128,9 +128,9 @@ impl ConsultService {
         }
     }
 
-    pub async fn consult(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
+    pub fn consult(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
         if args.web_mode {
-            return self.handle_web_mode(args).await;
+            return self.handle_web_mode(args);
         }
 
         let loaded_group = match args.thread_id.as_deref() {
@@ -158,11 +158,10 @@ impl ConsultService {
             plan.group_id,
             plan.unwrap_single,
         )
-        .await
     }
 
     /// Run a set of pre-built jobs with per-job prompts in parallel.
-    pub async fn consult_jobs(
+    pub fn consult_jobs(
         &self,
         jobs: Vec<ConsultJob>,
         files: &[String],
@@ -173,10 +172,9 @@ impl ConsultService {
         let shared = build_shared_inputs_from_files(files, git_diff_args)?;
         // --run always uses the group output path; never unwrap to a plain Response.
         self.run_jobs(jobs, shared, task_mode, existing_group_id, false)
-            .await
     }
 
-    async fn run_jobs(
+    fn run_jobs(
         &self,
         jobs: Vec<ConsultJob>,
         shared: SharedInputs,
@@ -191,22 +189,34 @@ impl ConsultService {
             .map(|m| self.executor_provider.get_executor(m))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
-        let futures: Vec<_> = jobs
-            .into_iter()
-            .zip(executors.into_iter())
-            .map(|(job, exec)| {
-                runner::run_single_model(
-                    &shared,
-                    job.model,
-                    exec,
-                    job.thread_id,
-                    job.prompt,
-                    task_mode,
-                )
-            })
-            .collect();
-
-        let outcomes = futures::future::join_all(futures).await;
+        // Fan out one OS thread per job. `std::thread::scope` joins them
+        // deterministically and lets each thread borrow `shared`.
+        let outcomes: Vec<anyhow::Result<runner::SingleResult>> = std::thread::scope(|s| {
+            let handles: Vec<_> = jobs
+                .into_iter()
+                .zip(executors)
+                .map(|(job, exec)| {
+                    let shared_ref = &shared;
+                    s.spawn(move || {
+                        runner::run_single_model(
+                            shared_ref,
+                            job.model,
+                            exec,
+                            job.thread_id,
+                            job.prompt,
+                            task_mode,
+                        )
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| match h.join() {
+                    Ok(r) => r,
+                    Err(_) => Err(anyhow::anyhow!("worker thread panicked")),
+                })
+                .collect()
+        });
 
         if unwrap_single {
             // Single-model path: propagate errors directly.
@@ -307,9 +317,10 @@ impl ConsultService {
         })?;
 
         if existing_group_id.is_none() {
-            tokio::task::spawn_blocking(|| {
-                let _ = group_thread_store::cleanup_expired(7);
-            });
+            // Synchronous: directory scan is fast (<1ms typical) and detached
+            // threads aren't reliable to run before process exit. See plan
+            // ledger entry `untestable-cleanup-background`.
+            let _ = group_thread_store::cleanup_expired(7);
         }
 
         Ok(ConsultOutcome::GroupResponse {
@@ -318,7 +329,7 @@ impl ConsultService {
         })
     }
 
-    async fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
+    fn handle_web_mode(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
         let context_files = args
             .files
             .as_ref()

@@ -1,14 +1,13 @@
+use std::io::Read;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use eventsource_stream::Eventsource;
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use consult_llm_core::monitoring::ProgressStage;
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
+use super::sse::SseParser;
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
 
 #[derive(Serialize)]
@@ -177,7 +176,7 @@ fn partial_suffix_len(buf: &str, tag: &str) -> usize {
 }
 
 pub struct ApiExecutor {
-    client: reqwest::Client,
+    agent: ureq::Agent,
     api_key: String,
     base_url: String,
     idle_timeout: Duration,
@@ -186,13 +185,13 @@ pub struct ApiExecutor {
 
 impl ApiExecutor {
     pub fn new(
-        client: reqwest::Client,
+        agent: ureq::Agent,
         api_key: String,
         base_url: Option<String>,
         idle_timeout: Duration,
     ) -> Self {
         Self {
-            client,
+            agent,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1/".to_string()),
             idle_timeout,
@@ -205,7 +204,6 @@ impl ApiExecutor {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for ApiExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -215,7 +213,7 @@ impl LlmExecutor for ApiExecutor {
         "api"
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -278,21 +276,35 @@ impl LlmExecutor for ApiExecutor {
             extra_body,
         };
 
+        let idle_timeout = self.idle_timeout;
+        let idle_secs = idle_timeout.as_secs();
+        let body_json = serde_json::to_vec(&request)?;
         let resp = self
-            .client
+            .agent
             .post(&url)
-            .bearer_auth(&self.api_key)
-            .json(&request)
-            .send()
-            .await?;
+            .config()
+            .timeout_recv_body(Some(idle_timeout))
+            .http_status_as_error(false)
+            .build()
+            .header("Authorization", format!("Bearer {}", &self.api_key))
+            .header("Content-Type", "application/json")
+            .send(&body_json[..]);
+
+        let mut resp = match resp {
+            Ok(r) => r,
+            Err(e) => anyhow::bail!("API request to {model} failed: {e}"),
+        };
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.body_mut().read_to_string().unwrap_or_default();
             anyhow::bail!("API request failed with status {status}: {body}");
         }
 
-        let mut event_stream = resp.bytes_stream().eventsource();
+        let mut reader = resp.into_body().into_reader();
+        let mut sse = SseParser::new();
+        let mut buf = [0u8; 8192];
+
         let mut splitter = match dialect {
             Dialect::Gemini => Some(TagSplitter::new("<thought>", "</thought>")),
             Dialect::MiniMax => Some(TagSplitter::new("<think>", "</think>")),
@@ -303,60 +315,109 @@ impl LlmExecutor for ApiExecutor {
         let mut usage: Option<Usage> = None;
         let mut current_stage: Option<ProgressStage> = None;
         let mut finish_reason: Option<String> = None;
-        let idle_timeout = self.idle_timeout;
-        let idle_secs = idle_timeout.as_secs();
+        let mut last_event = std::time::Instant::now();
 
-        loop {
-            match tokio::time::timeout(idle_timeout, event_stream.next()).await {
-                Err(_) => {
-                    anyhow::bail!("API stream idle timeout: no data from {model} for {idle_secs}s")
+        'outer: loop {
+            let n = match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) => {
+                    if is_timeout_err(&e) {
+                        anyhow::bail!(
+                            "API stream idle timeout: no data from {model} for {idle_secs}s"
+                        );
+                    }
+                    anyhow::bail!("API stream error for {model}: {e}");
                 }
-                Ok(None) => break,
-                Ok(Some(Err(e))) => anyhow::bail!("API stream error for {model}: {e}"),
-                Ok(Some(Ok(event))) => {
-                    if event.data == "[DONE]" {
-                        break;
-                    }
-                    let Ok(chunk) = serde_json::from_str::<ChatChunk>(&event.data) else {
-                        continue;
-                    };
-                    // Capture usage wherever it appears — some providers (e.g. MiniMax) include
-                    // it on the final content chunk rather than a separate empty-choices chunk.
-                    if let Some(u) = chunk.usage {
-                        usage = Some(effective_usage(u));
-                    }
-                    if chunk.choices.is_empty() {
-                        continue;
-                    }
-                    let choice = &chunk.choices[0];
-                    if let Some(ref r) = choice.finish_reason {
-                        finish_reason = Some(r.clone());
-                    }
-                    let delta = &choice.delta;
-
-                    let mut segments: Vec<Segment> = Vec::new();
-                    if let Some(t) = delta.reasoning_content.as_deref()
-                        && !t.is_empty()
-                    {
-                        segments.push(Segment::Thinking(t.to_string()));
-                    }
-                    if let Some(text) = delta.content.as_deref()
-                        && !text.is_empty()
-                    {
-                        match splitter.as_mut() {
-                            Some(s) => segments.extend(s.push(text)),
-                            None => segments.push(Segment::Answer(text.to_string())),
-                        }
-                    }
-
-                    emit_segments(
-                        segments,
-                        &mut raw_content,
-                        &mut raw_thinking,
-                        &mut current_stage,
-                        &spool,
-                    );
+            };
+            let events = sse.feed(&buf[..n]);
+            // Per-event idle: bytes that don't form a complete SSE event do
+            // NOT reset the watchdog. Catches heartbeat-comment streams that
+            // would otherwise defeat ureq's body-recv timer by trickling.
+            if events.is_empty() {
+                if last_event.elapsed() >= idle_timeout {
+                    anyhow::bail!("API stream idle timeout: no data from {model} for {idle_secs}s");
                 }
+            } else {
+                last_event = std::time::Instant::now();
+            }
+            for ev in events {
+                if ev.data == "[DONE]" {
+                    break 'outer;
+                }
+                let Ok(chunk) = serde_json::from_str::<ChatChunk>(&ev.data) else {
+                    continue;
+                };
+                if let Some(u) = chunk.usage {
+                    usage = Some(effective_usage(u));
+                }
+                if chunk.choices.is_empty() {
+                    continue;
+                }
+                let choice = &chunk.choices[0];
+                if let Some(ref r) = choice.finish_reason {
+                    finish_reason = Some(r.clone());
+                }
+                let delta = &choice.delta;
+
+                let mut segments: Vec<Segment> = Vec::new();
+                if let Some(t) = delta.reasoning_content.as_deref()
+                    && !t.is_empty()
+                {
+                    segments.push(Segment::Thinking(t.to_string()));
+                }
+                if let Some(text) = delta.content.as_deref()
+                    && !text.is_empty()
+                {
+                    match splitter.as_mut() {
+                        Some(s) => segments.extend(s.push(text)),
+                        None => segments.push(Segment::Answer(text.to_string())),
+                    }
+                }
+
+                emit_segments(
+                    segments,
+                    &mut raw_content,
+                    &mut raw_thinking,
+                    &mut current_stage,
+                    &spool,
+                );
+            }
+        }
+        // Drain any final event that arrived without a trailing blank line.
+        if let Some(ev) = sse.flush()
+            && ev.data != "[DONE]"
+            && let Ok(chunk) = serde_json::from_str::<ChatChunk>(&ev.data)
+        {
+            if let Some(u) = chunk.usage {
+                usage = Some(effective_usage(u));
+            }
+            if let Some(choice) = chunk.choices.first() {
+                if let Some(ref r) = choice.finish_reason {
+                    finish_reason = Some(r.clone());
+                }
+                let delta = &choice.delta;
+                let mut segments: Vec<Segment> = Vec::new();
+                if let Some(t) = delta.reasoning_content.as_deref()
+                    && !t.is_empty()
+                {
+                    segments.push(Segment::Thinking(t.to_string()));
+                }
+                if let Some(text) = delta.content.as_deref()
+                    && !text.is_empty()
+                {
+                    match splitter.as_mut() {
+                        Some(s) => segments.extend(s.push(text)),
+                        None => segments.push(Segment::Answer(text.to_string())),
+                    }
+                }
+                emit_segments(
+                    segments,
+                    &mut raw_content,
+                    &mut raw_thinking,
+                    &mut current_stage,
+                    &spool,
+                );
             }
         }
 
@@ -462,6 +523,18 @@ fn emit_segments(
             }
         }
     }
+}
+
+/// True if the IO error originated from a ureq timeout (or stdlib TimedOut).
+/// `timeout_recv_body` raises a `ureq::Error::Timeout` which surfaces as
+/// `io::Error` with kind `TimedOut` when reading from `BodyReader`.
+pub(super) fn is_timeout_err(e: &std::io::Error) -> bool {
+    if e.kind() == std::io::ErrorKind::TimedOut {
+        return true;
+    }
+    // ureq wraps its own Error in io::Error::Other; fall back to a string match.
+    let s = e.to_string();
+    s.contains("timeout") || s.contains("Timeout")
 }
 
 fn effective_usage(u: ApiUsage) -> Usage {

@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use smallvec::SmallVec;
 use std::path::PathBuf;
 
@@ -253,7 +252,6 @@ fn append_files(text: &str, file_paths: Option<&[PathBuf]>) -> String {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for CursorCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -271,7 +269,7 @@ impl LlmExecutor for CursorCliExecutor {
         }
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -293,7 +291,7 @@ impl LlmExecutor for CursorCliExecutor {
         let candidate = map_cursor_model(&model, &self.codex_reasoning_effort);
         let base = model.replace("-preview", "");
         let cursor_model = if model_requires_reasoning_suffix(&base) {
-            let list = cursor_models::available_models().await;
+            let list = cursor_models::available_models();
             cursor_models::resolve_model(&candidate, &base, &list)?
         } else {
             candidate
@@ -324,8 +322,7 @@ impl LlmExecutor for CursorCliExecutor {
             &system_prompt,
             spool,
             parse_cursor_line,
-        )
-        .await?;
+        )?;
         // Cursor doesn't always emit a session ID; preserve the input thread_id
         if result.thread_id.is_none() {
             result.thread_id = tid.map(|s| s.to_string());

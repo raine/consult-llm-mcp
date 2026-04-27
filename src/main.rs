@@ -23,14 +23,14 @@ mod service;
 mod system_prompt;
 mod update;
 
-#[tokio::main]
-async fn main() {
-    // Set panic hook for logging
+fn main() {
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         logger::log_to_file(&format!("PANIC: {info}"));
         default_hook(info);
     }));
+
+    executors::child_guard::install_signal_handler();
 
     consult_llm_core::path_migrate::migrate_if_needed();
     paths::migrate_to_xdg_if_needed();
@@ -45,11 +45,11 @@ async fn main() {
     }
 
     let result: Result<(), cli::input::CliError> = match cli.cmd {
-        None => cli::run::run_ask(cli).await,
+        None => cli::run::run_ask(cli),
         Some(cli::Command::Models) => cli::commands::models::run().map_err(Into::into),
-        Some(cli::Command::Doctor { verbose }) => cli::commands::doctor::run(verbose)
-            .await
-            .map_err(Into::into),
+        Some(cli::Command::Doctor { verbose }) => {
+            cli::commands::doctor::run(verbose).map_err(Into::into)
+        }
         Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run().map_err(Into::into),
         Some(cli::Command::InitConfig) => cli::commands::init_config::run().map_err(Into::into),
         Some(cli::Command::Config(args)) => cli::commands::config::run(args).map_err(Into::into),

@@ -166,19 +166,58 @@ fn save_cached(path: &Path, c: &CachedModels) {
     }
 }
 
-async fn fetch_from_cli() -> Option<Vec<String>> {
-    // kill_on_drop ensures the cursor-agent child is reaped if the timeout
-    // fires; without it tokio leaks the process until it exits on its own.
-    let fut = tokio::process::Command::new("cursor-agent")
-        .arg("--list-models")
+fn fetch_from_cli() -> Option<Vec<String>> {
+    use crate::executors::child_guard::ChildGuard;
+
+    let mut cmd = std::process::Command::new("cursor-agent");
+    cmd.arg("--list-models")
         .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output();
-    let output = tokio::time::timeout(FETCH_TIMEOUT, fut).await.ok()?.ok()?;
-    if !output.status.success() {
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut guard = ChildGuard::spawn(&mut cmd).ok()?;
+
+    // Drain stdout/stderr in worker threads so they cannot fill the OS pipe
+    // and deadlock try_wait. We hold the child in the main thread so we can
+    // kill it on timeout.
+    let stdout_pipe = guard.child_mut().stdout.take()?;
+    let stderr_pipe = guard.child_mut().stderr.take()?;
+    let stdout_handle = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut pipe = stdout_pipe;
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut pipe, &mut buf)?;
+        Ok(buf)
+    });
+    let stderr_handle = std::thread::spawn(move || -> std::io::Result<Vec<u8>> {
+        let mut pipe = stderr_pipe;
+        let mut buf = Vec::new();
+        std::io::Read::read_to_end(&mut pipe, &mut buf)?;
+        Ok(buf)
+    });
+
+    let deadline = std::time::Instant::now() + FETCH_TIMEOUT;
+    let exited = loop {
+        match guard.try_wait() {
+            Ok(Some(status)) => break Some(status),
+            Ok(None) => {
+                if std::time::Instant::now() >= deadline {
+                    break None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => break None,
+        }
+    };
+
+    let status = exited?; // Drop on None: ChildGuard kills the child.
+    if !status.success() {
         return None;
     }
-    let text = String::from_utf8_lossy(&output.stdout);
+    // Reap the guard normally (already exited).
+    let _ = guard.wait();
+    let stdout_bytes = stdout_handle.join().ok()?.ok()?;
+    let _ = stderr_handle.join();
+    let text = String::from_utf8_lossy(&stdout_bytes);
     let models = parse_list_models_output(&text);
     if models.is_empty() {
         None
@@ -187,7 +226,7 @@ async fn fetch_from_cli() -> Option<Vec<String>> {
     }
 }
 
-pub async fn available_models() -> ModelList {
+pub fn available_models() -> ModelList {
     let path = cache_path();
     let now = now_secs();
     let cached = path.as_deref().and_then(load_cached);
@@ -199,7 +238,7 @@ pub async fn available_models() -> ModelList {
         return ModelList::Fresh(c.models.clone());
     }
 
-    if let Some(models) = fetch_from_cli().await {
+    if let Some(models) = fetch_from_cli() {
         if let Some(p) = path.as_deref() {
             save_cached(
                 p,
@@ -220,7 +259,7 @@ pub async fn available_models() -> ModelList {
 
 /// Pure decision logic mirroring `available_models`, used by tests so they
 /// don't have to spawn `cursor-agent`. Production code calls
-/// `available_models()` which composes this with `fetch_from_cli().await`.
+/// `available_models()` which composes this with `fetch_from_cli()`.
 #[cfg(test)]
 fn available_models_with(
     now: u64,

@@ -227,7 +227,7 @@ enum Severity {
     Err,
 }
 
-async fn validate_cursor_model(
+fn validate_cursor_model(
     model: &str,
     effort: &str,
     cache: &mut Option<crate::executors::cursor_models::ModelList>,
@@ -239,7 +239,7 @@ async fn validate_cursor_model(
     let base = model.replace("-preview", "");
 
     if cache.is_none() {
-        *cache = Some(cursor_models::available_models().await);
+        *cache = Some(cursor_models::available_models());
     }
     let list = cache.as_ref().unwrap();
 
@@ -295,7 +295,7 @@ fn is_effort_synonym(a: &str, b: &str) -> bool {
 
 // ---- main -------------------------------------------------------------------
 
-pub async fn run(verbose: bool) -> anyhow::Result<()> {
+pub fn run(verbose: bool) -> anyhow::Result<()> {
     let c = use_color();
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -394,7 +394,7 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
             && backend == "cursor-cli"
             && !model.is_empty()
             && let Some((extra_sev, extra)) =
-                validate_cursor_model(&model, &effort, &mut cursor_list_cache).await
+                validate_cursor_model(&model, &effort, &mut cursor_list_cache)
         {
             sev = Some(extra_sev);
             detail = format!("{detail}; {extra}");

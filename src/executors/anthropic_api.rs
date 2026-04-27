@@ -1,8 +1,6 @@
+use std::io::Read;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use eventsource_stream::Eventsource;
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 
 use consult_llm_core::monitoring::ProgressStage;
@@ -122,7 +120,7 @@ struct AnthropicError {
 }
 
 pub struct AnthropicApiExecutor {
-    client: reqwest::Client,
+    agent: ureq::Agent,
     api_key: String,
     base_url: String,
     idle_timeout: Duration,
@@ -131,13 +129,13 @@ pub struct AnthropicApiExecutor {
 
 impl AnthropicApiExecutor {
     pub fn new(
-        client: reqwest::Client,
+        agent: ureq::Agent,
         api_key: String,
         base_url: Option<String>,
         idle_timeout: Duration,
     ) -> Self {
         Self {
-            client,
+            agent,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string()),
             idle_timeout,
@@ -150,7 +148,6 @@ impl AnthropicApiExecutor {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for AnthropicApiExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -160,7 +157,7 @@ impl LlmExecutor for AnthropicApiExecutor {
         "api"
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -201,22 +198,36 @@ impl LlmExecutor for AnthropicApiExecutor {
             stream: true,
         };
 
+        let idle_timeout = self.idle_timeout;
+        let idle_secs = idle_timeout.as_secs();
+        let body_json = serde_json::to_vec(&request)?;
         let resp = self
-            .client
+            .agent
             .post(&url)
+            .config()
+            .timeout_recv_body(Some(idle_timeout))
+            .http_status_as_error(false)
+            .build()
             .header("x-api-key", &self.api_key)
             .header("anthropic-version", ANTHROPIC_VERSION)
-            .json(&request)
-            .send()
-            .await?;
+            .header("Content-Type", "application/json")
+            .send(&body_json[..]);
+
+        let mut resp = match resp {
+            Ok(r) => r,
+            Err(e) => anyhow::bail!("Anthropic API request to {model} failed: {e}"),
+        };
 
         if !resp.status().is_success() {
             let status = resp.status();
-            let body = resp.text().await.unwrap_or_default();
+            let body = resp.body_mut().read_to_string().unwrap_or_default();
             anyhow::bail!("Anthropic API request failed with status {status}: {body}");
         }
 
-        let mut event_stream = resp.bytes_stream().eventsource();
+        let mut reader = resp.into_body().into_reader();
+        let mut sse = super::sse::SseParser::new();
+        let mut buf = [0u8; 8192];
+
         let mut response = String::new();
         let mut thinking = String::new();
         let mut input_tokens: u64 = 0;
@@ -227,70 +238,80 @@ impl LlmExecutor for AnthropicApiExecutor {
         let mut stop_reason: Option<String> = None;
         let mut saw_message_stop = false;
         let mut current_stage: Option<ProgressStage> = None;
-        let idle_timeout = self.idle_timeout;
-        let idle_secs = idle_timeout.as_secs();
+        let mut last_event = std::time::Instant::now();
 
-        loop {
-            match tokio::time::timeout(idle_timeout, event_stream.next()).await {
-                Err(_) => anyhow::bail!(
-                    "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
-                ),
-                Ok(None) => break,
-                Ok(Some(Err(e))) => anyhow::bail!("Anthropic stream error for {model}: {e}"),
-                Ok(Some(Ok(event))) => {
-                    let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&event.data) else {
-                        continue;
-                    };
-                    match parsed {
-                        AnthropicEvent::MessageStart { message } => {
-                            if let Some(u) = message.usage {
-                                input_tokens = u.input_tokens;
-                                cache_creation_tokens = u.cache_creation_input_tokens;
-                                cache_read_tokens = u.cache_read_input_tokens;
-                                got_usage = true;
-                            }
-                        }
-                        AnthropicEvent::ContentBlockStart { content_block, .. } => {
-                            if matches!(content_block, ContentBlockKind::Thinking) {
-                                set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
-                            }
-                        }
-                        AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
-                            ContentDelta::ThinkingDelta { thinking: t } => {
-                                set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
-                                thinking.push_str(&t);
-                            }
-                            ContentDelta::TextDelta { text } => {
-                                set_stage_once(
-                                    &mut current_stage,
-                                    ProgressStage::Responding,
-                                    &spool,
-                                );
-                                response.push_str(&text);
-                            }
-                            ContentDelta::SignatureDelta { .. } | ContentDelta::Other => {}
-                        },
-                        AnthropicEvent::ContentBlockStop => {}
-                        AnthropicEvent::MessageDelta { delta, usage } => {
-                            stop_reason = delta.stop_reason;
-                            if let Some(u) = usage {
-                                output_tokens = u.output_tokens;
-                                got_usage = true;
-                            }
-                        }
-                        AnthropicEvent::MessageStop => {
-                            saw_message_stop = true;
-                            break;
-                        }
-                        AnthropicEvent::Error { error } => {
-                            anyhow::bail!(
-                                "Anthropic stream error {}: {}",
-                                error.error_type,
-                                error.message
-                            );
-                        }
-                        AnthropicEvent::Ping | AnthropicEvent::Unknown => {}
+        'outer: loop {
+            let n = match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(e) => {
+                    if super::api::is_timeout_err(&e) {
+                        anyhow::bail!(
+                            "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
+                        );
                     }
+                    anyhow::bail!("Anthropic stream error for {model}: {e}");
+                }
+            };
+            let events = sse.feed(&buf[..n]);
+            if events.is_empty() {
+                if last_event.elapsed() >= idle_timeout {
+                    anyhow::bail!(
+                        "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
+                    );
+                }
+            } else {
+                last_event = std::time::Instant::now();
+            }
+            for ev in events {
+                let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&ev.data) else {
+                    continue;
+                };
+                match parsed {
+                    AnthropicEvent::MessageStart { message } => {
+                        if let Some(u) = message.usage {
+                            input_tokens = u.input_tokens;
+                            cache_creation_tokens = u.cache_creation_input_tokens;
+                            cache_read_tokens = u.cache_read_input_tokens;
+                            got_usage = true;
+                        }
+                    }
+                    AnthropicEvent::ContentBlockStart { content_block, .. } => {
+                        if matches!(content_block, ContentBlockKind::Thinking) {
+                            set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
+                        }
+                    }
+                    AnthropicEvent::ContentBlockDelta { delta, .. } => match delta {
+                        ContentDelta::ThinkingDelta { thinking: t } => {
+                            set_stage_once(&mut current_stage, ProgressStage::Thinking, &spool);
+                            thinking.push_str(&t);
+                        }
+                        ContentDelta::TextDelta { text } => {
+                            set_stage_once(&mut current_stage, ProgressStage::Responding, &spool);
+                            response.push_str(&text);
+                        }
+                        ContentDelta::SignatureDelta { .. } | ContentDelta::Other => {}
+                    },
+                    AnthropicEvent::ContentBlockStop => {}
+                    AnthropicEvent::MessageDelta { delta, usage } => {
+                        stop_reason = delta.stop_reason;
+                        if let Some(u) = usage {
+                            output_tokens = u.output_tokens;
+                            got_usage = true;
+                        }
+                    }
+                    AnthropicEvent::MessageStop => {
+                        saw_message_stop = true;
+                        break 'outer;
+                    }
+                    AnthropicEvent::Error { error } => {
+                        anyhow::bail!(
+                            "Anthropic stream error {}: {}",
+                            error.error_type,
+                            error.message
+                        );
+                    }
+                    AnthropicEvent::Ping | AnthropicEvent::Unknown => {}
                 }
             }
         }

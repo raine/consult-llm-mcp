@@ -9,12 +9,12 @@ pub struct QueryResult {
     pub usage: Option<Usage>,
 }
 
-pub async fn query_llm(
+pub fn query_llm(
     req: ExecutionRequest,
     executor: &Arc<dyn LlmExecutor>,
 ) -> anyhow::Result<QueryResult> {
     let model = req.model.clone();
-    let result = executor.execute(req).await?;
+    let result = executor.execute(req)?;
 
     if result.response.is_empty() {
         anyhow::bail!("No response from the model");

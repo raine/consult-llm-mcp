@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use super::stream::{ParsedStreamEvent, StreamEvents, tool_label};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
@@ -143,7 +141,6 @@ pub fn parse_gemini_line(line: &str) -> StreamEvents {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for GeminiCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -153,7 +150,7 @@ impl LlmExecutor for GeminiCliExecutor {
         "gemini_cli"
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -197,7 +194,6 @@ impl LlmExecutor for GeminiCliExecutor {
             spool,
             parse_gemini_line,
         )
-        .await
         .map_err(|e| {
             let msg = e.to_string();
             if msg.contains("RESOURCE_EXHAUSTED") {

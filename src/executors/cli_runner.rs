@@ -1,9 +1,12 @@
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Command, Stdio};
+use std::thread;
 use std::time::Instant;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::Command;
 
+use super::child_guard::ChildGuard;
 use crate::logger::log_cli_debug;
 
+#[derive(Debug)]
 pub struct CliResult {
     pub stdout_bytes: usize,
     pub stderr: String,
@@ -11,10 +14,11 @@ pub struct CliResult {
 }
 
 /// Run a CLI command, calling `on_line` for each stdout line as it arrives.
-/// When `stdin_data` is provided, it is written to the child's stdin (then closed)
-/// instead of connecting stdin to /dev/null. This keeps large prompts out of the
-/// process argument list.
-pub async fn run_cli_streaming<F>(
+/// When `stdin_data` is provided, it is written to the child's stdin (then
+/// closed) instead of connecting stdin to /dev/null. The stdin write, the
+/// stderr drain, and the stdout read run on three threads so a child that
+/// emits >~64KB before draining stdin doesn't deadlock.
+pub fn run_cli_streaming<F>(
     command: &str,
     args: &[String],
     stdin_data: Option<&str>,
@@ -36,70 +40,73 @@ where
 
     let use_stdin = stdin_data.is_some();
     let start = Instant::now();
-    let mut child = Command::new(command)
-        .args(args)
+    let mut cmd = Command::new(command);
+    cmd.args(args)
         .stdin(if use_stdin {
-            std::process::Stdio::piped()
+            Stdio::piped()
         } else {
-            std::process::Stdio::null()
+            Stdio::null()
         })
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to spawn {command} CLI. Is it installed and in PATH? Error: {e}"
-            )
-        })?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    let child_pid = child.id();
-    if let (Some(cb), Some(pid)) = (on_spawn, child_pid) {
-        cb(pid);
+    let mut guard = ChildGuard::spawn(&mut cmd).map_err(|e| {
+        anyhow::anyhow!("Failed to spawn {command} CLI. Is it installed and in PATH? Error: {e}")
+    })?;
+
+    if let Some(cb) = on_spawn {
+        cb(guard.id());
     }
 
-    let stdout = child.stdout.take().expect("stdout was piped");
-    let stderr_pipe = child.stderr.take().expect("stderr was piped");
-    let stdin_pipe = child.stdin.take();
+    let stdout = guard.child_mut().stdout.take().expect("stdout was piped");
+    let stderr_pipe = guard.child_mut().stderr.take().expect("stderr was piped");
+    let stdin_pipe = guard.child_mut().stdin.take();
 
-    // Write stdin, read stdout, and read stderr concurrently. Writing the
-    // full prompt synchronously before reading stdout/stderr deadlocks when
-    // the child emits enough output to fill its pipe buffer (typically
-    // ~64KB) before draining stdin — both sides end up waiting on each
-    // other. Running all three on the same task pool avoids that.
     let stdin_owned: Option<Vec<u8>> = stdin_data.map(|s| s.as_bytes().to_vec());
-    let stdin_task = tokio::spawn(async move {
-        if let (Some(data), Some(mut stdin)) = (stdin_owned, stdin_pipe) {
-            stdin.write_all(&data).await?;
-            stdin.shutdown().await?;
-        }
-        Ok::<_, std::io::Error>(())
-    });
 
-    let stderr_task = tokio::spawn(async move {
+    let stderr_handle = thread::spawn(move || -> std::io::Result<String> {
         let mut buf = String::new();
         let mut reader = BufReader::new(stderr_pipe);
-        tokio::io::AsyncReadExt::read_to_string(&mut reader, &mut buf).await?;
-        Ok::<_, std::io::Error>(buf)
+        reader.read_to_string(&mut buf)?;
+        Ok(buf)
     });
 
-    let mut reader = BufReader::new(stdout).lines();
-    let mut stdout_bytes: usize = 0;
+    let stdin_handle = thread::spawn(move || -> std::io::Result<()> {
+        if let (Some(data), Some(mut stdin)) = (stdin_owned, stdin_pipe) {
+            // BrokenPipe is suppressed: the child can legitimately exit early.
+            match stdin.write_all(&data) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+                Err(e) => return Err(e),
+            }
+            drop(stdin);
+        }
+        Ok(())
+    });
 
-    while let Some(line) = reader.next_line().await? {
-        stdout_bytes += line.len() + 1;
-        on_line(&line);
+    let mut reader = BufReader::new(stdout);
+    let mut line = String::new();
+    let mut stdout_bytes: usize = 0;
+    loop {
+        line.clear();
+        let n = reader.read_line(&mut line)?;
+        if n == 0 {
+            break;
+        }
+        let trimmed = line.trim_end_matches('\n').trim_end_matches('\r');
+        stdout_bytes += line.len();
+        on_line(trimmed);
     }
 
-    let status = child.wait().await?;
+    let status = guard.wait()?;
     let duration_ms = start.elapsed().as_millis();
-    let stderr = stderr_task.await??;
-    // The child has already exited at this point. If it exited without
-    // consuming all of stdin (e.g. it rejected the prompt early and printed a
-    // diagnostic to stderr), the stdin write will fail with BrokenPipe. Don't
-    // surface that as the top-level error — the real failure is in `stderr`
-    // and `status`, and they should reach the caller intact.
-    match stdin_task.await? {
+    let stderr = stderr_handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("stderr thread panicked"))??;
+    match stdin_handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("stdin thread panicked"))?
+    {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
         Err(e) => return Err(e.into()),
@@ -122,4 +129,58 @@ where
     );
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streams_stdout_lines() {
+        let args = vec!["-c".to_string(), "printf 'a\\nb\\nc\\n'".to_string()];
+        let mut lines = Vec::new();
+        run_cli_streaming("sh", &args, None, None, |l| lines.push(l.to_string())).expect("run");
+        assert_eq!(lines, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn large_stdin_with_concurrent_stdout_does_not_deadlock() {
+        let big: String = "x".repeat(256 * 1024);
+        let args = vec![
+            "-c".to_string(),
+            "cat > /dev/null; head -c 262144 /dev/zero | tr '\\0' 'y'".to_string(),
+        ];
+        let mut total = 0usize;
+        let result =
+            run_cli_streaming("sh", &args, Some(&big), None, |l| total += l.len()).expect("run");
+        assert_eq!(result.code, Some(0));
+        assert_eq!(total, 256 * 1024);
+    }
+
+    #[test]
+    fn child_exits_before_consuming_stdin() {
+        let args = vec!["-c".to_string(), "echo ok".to_string()];
+        let prompt = "x".repeat(128 * 1024);
+        let mut got = String::new();
+        let result = run_cli_streaming("sh", &args, Some(&prompt), None, |l| got = l.to_string())
+            .expect("run");
+        assert_eq!(result.code, Some(0));
+        assert_eq!(got, "ok");
+    }
+
+    #[test]
+    fn stderr_is_captured() {
+        let args = vec!["-c".to_string(), "echo oops 1>&2; exit 7".to_string()];
+        let result = run_cli_streaming("sh", &args, None, None, |_| {}).expect("run");
+        assert_eq!(result.code, Some(7));
+        assert!(result.stderr.contains("oops"));
+    }
+
+    #[test]
+    fn missing_command_returns_error() {
+        let result = run_cli_streaming("consult-llm-no-such-binary-xyz", &[], None, None, |_| {});
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("Failed to spawn"));
+    }
 }

@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, run_cli_executor};
@@ -93,7 +91,6 @@ pub fn parse_opencode_line(line: &str) -> StreamEvents {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for OpenCodeCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -103,7 +100,7 @@ impl LlmExecutor for OpenCodeCliExecutor {
         "opencode_cli"
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -155,7 +152,6 @@ impl LlmExecutor for OpenCodeCliExecutor {
             spool,
             parse_opencode_line,
         )
-        .await
     }
 }
 

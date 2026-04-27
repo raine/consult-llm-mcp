@@ -13,30 +13,32 @@ use crate::models::{ApiProtocol, Provider};
 
 pub struct ExecutorProvider {
     cache: Mutex<HashMap<String, Arc<dyn LlmExecutor>>>,
-    http_client: reqwest::Client,
+    agent: ureq::Agent,
     idle_timeout: std::time::Duration,
 }
 
 impl ExecutorProvider {
     pub fn new() -> Self {
-        // Idle timeout: fires if no data is received for this long, resetting on each chunk.
-        // Catches hung requests where the server accepts the connection but sends nothing.
-        // Configurable via CONSULT_LLM_API_IDLE_TIMEOUT_SECS; defaults to 120s.
+        // Idle timeout: bounds body recv. Catches hung requests where the
+        // server accepts the connection but stops sending data. Configurable
+        // via CONSULT_LLM_API_IDLE_TIMEOUT_SECS; defaults to 120s. ureq v3
+        // doesn't expose a per-read socket timeout, so this bounds the
+        // entire body recv duration.
         let idle_timeout_secs: u64 = std::env::var("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(120);
-
         let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
+
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_connect(Some(std::time::Duration::from_secs(30)))
+            .build()
+            .into();
 
         Self {
             cache: Mutex::new(HashMap::new()),
+            agent,
             idle_timeout,
-            http_client: reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(30))
-                .read_timeout(idle_timeout)
-                .build()
-                .expect("failed to build HTTP client"),
         }
     }
 
@@ -63,13 +65,13 @@ impl ExecutorProvider {
                 let idle_timeout = self.idle_timeout;
                 match provider.api_protocol() {
                     ApiProtocol::OpenAiCompat => Arc::new(ApiExecutor::new(
-                        self.http_client.clone(),
+                        self.agent.clone(),
                         key.to_string(),
                         base,
                         idle_timeout,
                     )),
                     ApiProtocol::AnthropicMessages => Arc::new(AnthropicApiExecutor::new(
-                        self.http_client.clone(),
+                        self.agent.clone(),
                         key.to_string(),
                         base,
                         idle_timeout,

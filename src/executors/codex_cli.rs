@@ -1,5 +1,3 @@
-use async_trait::async_trait;
-
 use super::stream::{ParsedStreamEvent, StreamEvents};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use super::{append_file_refs, build_extra_dir_args, run_cli_executor};
@@ -136,7 +134,6 @@ fn extract_shell_command(cmd: &str) -> String {
     }
 }
 
-#[async_trait]
 impl LlmExecutor for CodexCliExecutor {
     fn capabilities(&self) -> &LlmExecutorCapabilities {
         &self.capabilities
@@ -150,7 +147,7 @@ impl LlmExecutor for CodexCliExecutor {
         Some(&self.codex_reasoning_effort)
     }
 
-    async fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
+    fn execute(&self, req: ExecutionRequest) -> anyhow::Result<ExecuteResult> {
         let ExecutionRequest {
             prompt,
             model,
@@ -201,7 +198,6 @@ impl LlmExecutor for CodexCliExecutor {
             spool,
             parse_codex_line,
         )
-        .await
     }
 }
 

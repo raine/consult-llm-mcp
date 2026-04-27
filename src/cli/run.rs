@@ -39,7 +39,7 @@ pub fn build_args(cli: &Cli, prompt: String) -> ConsultLlmArgs {
     }
 }
 
-pub async fn run_ask(cli: Cli) -> Result<(), input::CliError> {
+pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
     if !cli.runs.is_empty() {
         if !cli.model.is_empty() || cli.thread_id.is_some() || cli.prompt_file.is_some() || cli.web
         {
@@ -98,7 +98,6 @@ pub async fn run_ask(cli: Cli) -> Result<(), input::CliError> {
                 cli.task.into(),
                 None,
             )
-            .await
             .map_err(|e| input::CliError::Generic(format!("{e:#}")))?;
 
         match outcome {
@@ -125,7 +124,6 @@ pub async fn run_ask(cli: Cli) -> Result<(), input::CliError> {
 
     let outcome = service
         .consult(args)
-        .await
         .map_err(|e| input::CliError::Generic(format!("{e:#}")))?;
 
     match outcome {

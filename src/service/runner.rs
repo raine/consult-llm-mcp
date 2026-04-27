@@ -17,7 +17,7 @@ pub struct SingleResult {
     pub failed: bool,
 }
 
-pub async fn run_single_model(
+pub fn run_single_model(
     shared: &SharedInputs,
     model: String,
     executor: Arc<dyn LlmExecutor>,
@@ -104,8 +104,7 @@ pub async fn run_single_model(
             spool: Arc::clone(&spool),
         },
         &executor,
-    )
-    .await;
+    );
     let duration_ms = start.elapsed().as_millis() as u64;
 
     let (success, error, usage, body, result_thread_id) = match &run {
