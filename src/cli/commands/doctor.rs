@@ -151,9 +151,41 @@ struct PathRow {
     writable: bool,
 }
 
+// ---- cursor model validation ------------------------------------------------
+
+/// Resolve the configured cursor model + effort against `cursor-agent
+/// --list-models`. Returns `None` if the model would be accepted (or if the
+/// list is unavailable / stale and we can't authoritatively reject), or
+/// `Some(detail)` with a one-line error suitable for appending to the row.
+async fn validate_cursor_model(
+    model: &str,
+    effort: &str,
+    cache: &mut Option<crate::executors::cursor_models::ModelList>,
+) -> Option<String> {
+    use crate::executors::cursor_cli::{map_cursor_model, model_requires_reasoning_suffix};
+    use crate::executors::cursor_models;
+
+    let candidate = map_cursor_model(model, effort);
+    let base = model.replace("-preview", "");
+    if !model_requires_reasoning_suffix(&base) {
+        return None;
+    }
+    if cache.is_none() {
+        *cache = Some(cursor_models::available_models().await);
+    }
+    let list = cache.as_ref().unwrap();
+    match cursor_models::resolve_model(&candidate, &base, list) {
+        Ok(resolved) if resolved == candidate => None,
+        Ok(resolved) => Some(format!(
+            "model '{candidate}' rewritten to '{resolved}' (effort='{effort}' isn't accepted by cursor-agent for this model)"
+        )),
+        Err(e) => Some(e.to_string()),
+    }
+}
+
 // ---- main -------------------------------------------------------------------
 
-pub fn run(verbose: bool) -> anyhow::Result<()> {
+pub async fn run(verbose: bool) -> anyhow::Result<()> {
     let color = use_color();
     let ok = ok_mark(color);
     let err = err_mark(color);
@@ -176,10 +208,17 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
             .collect()
     });
 
+    let effort = env
+        .lookup("CONSULT_LLM_CODEX_REASONING_EFFORT")
+        .map(|(v, _)| v)
+        .unwrap_or_else(|| "high".to_string());
+
     // ---- Collect provider rows
     let mut prov_rows: Vec<ProvRow> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
     let mut has_warn = false;
+    // Lazily fetched cursor-agent --list-models result, shared across rows.
+    let mut cursor_list_cache: Option<crate::executors::cursor_models::ModelList> = None;
 
     for spec in PROVIDER_SPECS {
         let backend = env
@@ -225,7 +264,7 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
                 .to_string(),
         };
 
-        let (dep_ok, detail) = if backend == "api" {
+        let (mut dep_ok, mut detail) = if backend == "api" {
             if let Some((_, src)) = env.lookup(spec.api_key_env) {
                 let src_label = shorten_str(&src.to_string(), home.as_deref());
                 (true, format!("{} set [{}]", spec.api_key_env, src_label))
@@ -240,6 +279,19 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
         } else {
             (false, format!("unknown backend '{backend}'"))
         };
+
+        // Cursor backend: validate the configured model + effort actually
+        // resolves against `cursor-agent --list-models`. Skip if the binary
+        // isn't on PATH (the dep_ok check above already flagged that).
+        if dep_ok
+            && backend == "cursor-cli"
+            && !model.is_empty()
+            && let Some(extra) =
+                validate_cursor_model(&model, &effort, &mut cursor_list_cache).await
+        {
+            dep_ok = false;
+            detail = format!("{detail}; {extra}");
+        }
 
         if !dep_ok {
             has_warn = true;

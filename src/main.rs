@@ -47,9 +47,9 @@ async fn main() {
     let result: Result<(), cli::input::CliError> = match cli.cmd {
         None => cli::run::run_ask(cli).await,
         Some(cli::Command::Models) => cli::commands::models::run().map_err(Into::into),
-        Some(cli::Command::Doctor { verbose }) => {
-            cli::commands::doctor::run(verbose).map_err(Into::into)
-        }
+        Some(cli::Command::Doctor { verbose }) => cli::commands::doctor::run(verbose)
+            .await
+            .map_err(Into::into),
         Some(cli::Command::InitPrompt) => cli::commands::init_prompt::run().map_err(Into::into),
         Some(cli::Command::InitConfig) => cli::commands::init_config::run().map_err(Into::into),
         Some(cli::Command::Config(args)) => cli::commands::config::run(args).map_err(Into::into),

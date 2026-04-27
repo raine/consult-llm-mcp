@@ -213,7 +213,7 @@ fn extract_cursor_tool_error(tool_call: &serde_json::Value) -> Option<String> {
 }
 
 /// Map model IDs to cursor-agent model names
-fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
+pub(crate) fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     let mut cursor_model = model.replace("-preview", "");
 
     // cursor-agent encodes reasoning effort in the model name for models
@@ -229,7 +229,7 @@ fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     cursor_model
 }
 
-fn model_requires_reasoning_suffix(model: &str) -> bool {
+pub(crate) fn model_requires_reasoning_suffix(model: &str) -> bool {
     model.contains("-codex") || model == "gpt-5.4" || model == "gpt-5.5"
 }
 
