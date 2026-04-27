@@ -283,7 +283,6 @@ impl LlmExecutor for ApiExecutor {
             .agent
             .post(&url)
             .config()
-            .timeout_recv_body(Some(idle_timeout))
             .http_status_as_error(false)
             .build()
             .header("Authorization", format!("Bearer {}", &self.api_key))

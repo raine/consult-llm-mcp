@@ -19,19 +19,28 @@ pub struct ExecutorProvider {
 
 impl ExecutorProvider {
     pub fn new() -> Self {
-        // Idle timeout: bounds body recv. Catches hung requests where the
-        // server accepts the connection but stops sending data. Configurable
-        // via CONSULT_LLM_API_IDLE_TIMEOUT_SECS; defaults to 120s. ureq v3
-        // doesn't expose a per-read socket timeout, so this bounds the
-        // entire body recv duration.
+        // Idle timeout: gap between successful SSE events. Enforced by the
+        // post-read elapsed check in api.rs / anthropic_api.rs — *not* by
+        // ureq's body-recv deadline (which is a total cap, not an idle
+        // timer, and would cut legitimate long generations).
         let idle_timeout_secs: u64 = std::env::var("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(120);
         let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
 
+        // Hard backstop for a fully-stalled mid-read (where the post-read
+        // idle check can never fire because read() never returns). Generous
+        // enough that long real responses complete; tight enough that a
+        // hung TCP connection can't pin a worker forever.
+        let total_recv_secs: u64 = std::env::var("CONSULT_LLM_API_TOTAL_RECV_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30 * 60);
+
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(30)))
+            .timeout_recv_body(Some(std::time::Duration::from_secs(total_recv_secs)))
             .build()
             .into();
 

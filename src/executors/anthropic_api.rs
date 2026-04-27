@@ -205,7 +205,6 @@ impl LlmExecutor for AnthropicApiExecutor {
             .agent
             .post(&url)
             .config()
-            .timeout_recv_body(Some(idle_timeout))
             .http_status_as_error(false)
             .build()
             .header("x-api-key", &self.api_key)
