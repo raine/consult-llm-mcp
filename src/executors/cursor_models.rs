@@ -209,8 +209,19 @@ fn fetch_from_cli() -> Option<Vec<String>> {
         }
     };
 
-    let status = exited?; // Drop on None: ChildGuard kills the child.
+    let Some(status) = exited else {
+        // Timeout: kill the child, then join the drain threads so they
+        // don't outlive this function as detached threads holding the
+        // (now-EOF) pipe ends.
+        drop(guard);
+        let _ = stdout_handle.join();
+        let _ = stderr_handle.join();
+        return None;
+    };
     if !status.success() {
+        let _ = guard.wait();
+        let _ = stdout_handle.join();
+        let _ = stderr_handle.join();
         return None;
     }
     // Reap the guard normally (already exited).
