@@ -40,6 +40,13 @@ impl ExecutorProvider {
 
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(30)))
+            // Bound the request body upload (large prompts) and the wait
+            // for the first response byte / response headers. Without
+            // these, a provider that accepts the connection but never
+            // sends headers can hang `.send()` forever before the body
+            // reader (and its idle timeout) is reachable.
+            .timeout_send_body(Some(std::time::Duration::from_secs(120)))
+            .timeout_recv_response(Some(std::time::Duration::from_secs(60)))
             .timeout_recv_body(Some(std::time::Duration::from_secs(total_recv_secs)))
             .build()
             .into();
