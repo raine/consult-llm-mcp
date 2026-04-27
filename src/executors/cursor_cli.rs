@@ -219,10 +219,25 @@ fn map_cursor_model(model: &str, codex_reasoning_effort: &str) -> String {
     // that require it. e.g. gpt-5.3-codex + high → gpt-5.3-codex-high,
     // gpt-5.4 + high → gpt-5.4-high. Bare gpt-5.4/gpt-5.5 are not accepted.
     if model_requires_reasoning_suffix(&cursor_model) {
-        cursor_model = format!("{cursor_model}-{codex_reasoning_effort}");
+        let effort = map_effort_for_model(&cursor_model, codex_reasoning_effort);
+        cursor_model = format!("{cursor_model}-{effort}");
     }
 
     cursor_model
+}
+
+// gpt-5.5 only accepts medium/high/extra-high suffixes (no low/xhigh).
+// Translate the configured codex effort onto that ladder.
+fn map_effort_for_model<'a>(model: &str, effort: &'a str) -> &'a str {
+    if model == "gpt-5.5" {
+        match effort {
+            "low" => "medium",
+            "xhigh" => "extra-high",
+            other => other,
+        }
+    } else {
+        effort
+    }
 }
 
 fn model_requires_reasoning_suffix(model: &str) -> bool {
