@@ -157,41 +157,64 @@ struct PathRow {
 /// --list-models`. Returns `None` if the model would be accepted (or if the
 /// list is unavailable / stale and we can't authoritatively reject), or
 /// `Some(detail)` with a one-line error suitable for appending to the row.
+#[derive(Clone, Copy)]
+enum Severity {
+    Warn,
+    Err,
+}
+
 async fn validate_cursor_model(
     model: &str,
     effort: &str,
     cache: &mut Option<crate::executors::cursor_models::ModelList>,
-) -> Option<String> {
+) -> Option<(Severity, String)> {
     use crate::executors::cursor_cli::{map_cursor_model, model_requires_reasoning_suffix};
-    use crate::executors::cursor_models;
+    use crate::executors::cursor_models::{self, ModelList};
 
     let candidate = map_cursor_model(model, effort);
     let base = model.replace("-preview", "");
-    if !model_requires_reasoning_suffix(&base) {
-        return None;
-    }
+
     if cache.is_none() {
         *cache = Some(cursor_models::available_models().await);
     }
     let list = cache.as_ref().unwrap();
-    match cursor_models::resolve_model(&candidate, &base, list) {
-        Ok(resolved) if resolved == candidate => None,
-        Ok(resolved) => {
-            let resolved_suffix = resolved
-                .strip_prefix(&base)
-                .and_then(|s| s.strip_prefix('-'))
-                .unwrap_or("");
-            // Synonyms aren't user-actionable — cursor-agent just uses a
-            // different name for the same tier. Stay quiet.
-            if is_effort_synonym(effort, resolved_suffix) {
-                None
-            } else {
-                Some(format!(
-                    "model '{candidate}' rewritten to '{resolved}' (effort='{effort}' isn't accepted by cursor-agent for this model)"
-                ))
+
+    if model_requires_reasoning_suffix(&base) {
+        match cursor_models::resolve_model(&candidate, &base, list) {
+            Ok(resolved) if resolved == candidate => None,
+            Ok(resolved) => {
+                let resolved_suffix = resolved
+                    .strip_prefix(&base)
+                    .and_then(|s| s.strip_prefix('-'))
+                    .unwrap_or("");
+                if is_effort_synonym(effort, resolved_suffix) {
+                    None
+                } else {
+                    // Lossy: still works, but not what was asked for.
+                    Some((
+                        Severity::Warn,
+                        format!(
+                            "model '{candidate}' rewritten to '{resolved}' (effort='{effort}' isn't accepted by cursor-agent for this model)"
+                        ),
+                    ))
+                }
             }
+            Err(e) => Some((Severity::Err, e.to_string())),
         }
-        Err(e) => Some(e.to_string()),
+    } else {
+        // Non-suffix models: validate the bare id exists in a fresh list.
+        // Stale or unavailable lists never produce false rejects.
+        let ModelList::Fresh(models) = list else {
+            return None;
+        };
+        if models.iter().any(|m| m == &candidate) {
+            None
+        } else {
+            Some((
+                Severity::Err,
+                format!("cursor-agent does not list model '{candidate}'"),
+            ))
+        }
     }
 }
 
@@ -241,8 +264,9 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
 
     // ---- Collect provider rows
     let mut prov_rows: Vec<ProvRow> = Vec::new();
-    let mut warnings: Vec<String> = Vec::new();
+    let mut warnings: Vec<(Severity, String)> = Vec::new();
     let mut has_warn = false;
+    let mut has_error = false;
     // Lazily fetched cursor-agent --list-models result, shared across rows.
     let mut cursor_list_cache: Option<crate::executors::cursor_models::ModelList> = None;
 
@@ -290,7 +314,7 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
                 .to_string(),
         };
 
-        let (mut dep_ok, mut detail) = if backend == "api" {
+        let (dep_ok, mut detail) = if backend == "api" {
             if let Some((_, src)) = env.lookup(spec.api_key_env) {
                 let src_label = shorten_str(&src.to_string(), home.as_deref());
                 (true, format!("{} set [{}]", spec.api_key_env, src_label))
@@ -306,32 +330,38 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
             (false, format!("unknown backend '{backend}'"))
         };
 
+        // dep failures (missing key, missing binary) are hard errors —
+        // the provider definitely won't work.
+        let mut sev: Option<Severity> = if dep_ok { None } else { Some(Severity::Err) };
+
         // Cursor backend: validate the configured model + effort actually
         // resolves against `cursor-agent --list-models`. Skip if the binary
         // isn't on PATH (the dep_ok check above already flagged that).
         if dep_ok
             && backend == "cursor-cli"
             && !model.is_empty()
-            && let Some(extra) =
+            && let Some((extra_sev, extra)) =
                 validate_cursor_model(&model, &effort, &mut cursor_list_cache).await
         {
-            dep_ok = false;
+            sev = Some(extra_sev);
             detail = format!("{detail}; {extra}");
         }
 
-        if !dep_ok {
-            has_warn = true;
-            warnings.push(format!("{}: {}", spec.id, detail));
+        if let Some(s) = sev {
+            match s {
+                Severity::Err => has_error = true,
+                Severity::Warn => has_warn = true,
+            }
+            warnings.push((s, format!("{}: {}", spec.id, detail)));
         }
 
         prov_rows.push(ProvRow {
             id: spec.id,
             model,
             backend,
-            status: if dep_ok {
-                ProvStatus::Ok
-            } else {
-                ProvStatus::Err
+            status: match sev {
+                None => ProvStatus::Ok,
+                Some(_) => ProvStatus::Err,
             },
             detail,
         });
@@ -350,9 +380,12 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
         let writable = exists && check_writable(path);
         if !exists || !writable {
             has_warn = true;
-            warnings.push(format!(
-                "{name}: {}",
-                if !exists { "not found" } else { "not writable" }
+            warnings.push((
+                Severity::Warn,
+                format!(
+                    "{name}: {}",
+                    if !exists { "not found" } else { "not writable" }
+                ),
             ));
         }
         path_rows.push(PathRow {
@@ -365,7 +398,13 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
 
     // ---- Header
     let version = env!("CARGO_PKG_VERSION");
-    let status = if has_warn {
+    let status = if has_error {
+        if color {
+            "\x1b[31mERROR\x1b[0m"
+        } else {
+            "ERROR"
+        }
+    } else if has_warn {
         if color { "\x1b[33mWARN\x1b[0m" } else { "WARN" }
     } else if color {
         "\x1b[32mOK\x1b[0m"
@@ -530,8 +569,13 @@ pub async fn run(verbose: bool) -> anyhow::Result<()> {
     // ---- Warnings
     if !warnings.is_empty() {
         println!("\nWarnings:");
-        for w in &warnings {
-            println!("  {err} {w}");
+        let warn_mark = if color { "\x1b[33m!\x1b[0m" } else { "!" };
+        for (sev, msg) in &warnings {
+            let mark = match sev {
+                Severity::Err => err,
+                Severity::Warn => warn_mark,
+            };
+            println!("  {mark} {msg}");
         }
     }
 

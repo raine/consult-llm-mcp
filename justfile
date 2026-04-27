@@ -42,7 +42,7 @@ test:
 
 # Install debug binaries globally via symlink
 install-dev:
-    cargo build && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp && ln -sf $(pwd)/target/debug/consult-llm-monitor ~/.cargo/bin/consult-llm-monitor
+    cargo build && ln -sf $(pwd)/target/debug/consult-llm ~/.cargo/bin/consult-llm && ln -sf $(pwd)/target/debug/consult-llm-mcp ~/.cargo/bin/consult-llm-mcp && ln -sf $(pwd)/target/debug/consult-llm-monitor ~/.cargo/bin/consult-llm-monitor
 
 # Install release binaries globally
 install:
