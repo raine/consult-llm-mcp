@@ -185,15 +185,15 @@ fn run_batch(targets: &[&Platform], home: &Path) -> anyhow::Result<()> {
 }
 
 fn run_interactive(detected: &[&Platform], home: &Path) -> anyhow::Result<()> {
-    let selected_platforms: Vec<&Platform> = if detected.len() == 1 {
-        vec![detected[0]]
+    let selected_platform: &Platform = if detected.len() == 1 {
+        detected[0]
     } else {
         let options: Vec<PlatformChoice> = detected
             .iter()
             .enumerate()
             .map(|(idx, p)| PlatformChoice { idx, name: p.name })
             .collect();
-        let chosen = match inquire::MultiSelect::new("Install to which platforms?", options)
+        let chosen = match inquire::Select::new("Install to which platform?", options)
             .with_page_size(10)
             .prompt()
         {
@@ -203,53 +203,30 @@ fn run_interactive(detected: &[&Platform], home: &Path) -> anyhow::Result<()> {
             }
             Err(e) => return Err(e.into()),
         };
-        if chosen.is_empty() {
-            println!("No platforms selected.");
-            return Ok(());
-        }
-        chosen.into_iter().map(|c| detected[c.idx]).collect()
+        detected[chosen.idx]
     };
 
-    let multi_platform = selected_platforms.len() > 1;
     let max_id_len = SKILLS.iter().map(|s| s.id.len()).max().unwrap_or(0);
 
     let items: Vec<SkillItem> = SKILLS
         .iter()
         .enumerate()
-        .map(|(idx, skill)| {
-            let per_platform: Vec<(&'static str, SkillStatus)> = selected_platforms
-                .iter()
-                .map(|p| (p.name, SkillStatus::for_skill(skill, p)))
-                .collect();
-            SkillItem {
-                idx,
-                id: skill.id,
-                description: skill.description.clone(),
-                per_platform,
-                show_platform: multi_platform,
-                id_pad: max_id_len,
-                color: use_color(),
-            }
+        .map(|(idx, skill)| SkillItem {
+            idx,
+            id: skill.id,
+            description: skill.description.clone(),
+            status: SkillStatus::for_skill(skill, selected_platform),
+            id_pad: max_id_len,
+            color: use_color(),
         })
         .collect();
 
-    // Default-select only when at least one selected platform is missing the
-    // skill AND no selected platform has a locally modified copy. This avoids
-    // silently overwriting modifications when one platform is also missing.
+    // Default-select skills missing from the chosen platform. Skip locally
+    // modified ones so we don't silently overwrite the user's edits.
     let defaults: Vec<usize> = items
         .iter()
         .enumerate()
-        .filter(|(_, item)| {
-            let any_missing = item
-                .per_platform
-                .iter()
-                .any(|(_, s)| *s == SkillStatus::Missing);
-            let any_modified = item
-                .per_platform
-                .iter()
-                .any(|(_, s)| *s == SkillStatus::Modified);
-            any_missing && !any_modified
-        })
+        .filter(|(_, item)| item.status == SkillStatus::Missing)
         .map(|(i, _)| i)
         .collect();
 
@@ -273,16 +250,14 @@ fn run_interactive(detected: &[&Platform], home: &Path) -> anyhow::Result<()> {
     let color = use_color();
     let mut any_failed = false;
 
-    for platform in &selected_platforms {
-        println!("==> {}", platform.name);
-        for item in &chosen {
-            let skill = &SKILLS[item.idx];
-            if !install_skill(skill, platform, color, home) {
-                any_failed = true;
-            }
+    println!("==> {}", selected_platform.name);
+    for item in &chosen {
+        let skill = &SKILLS[item.idx];
+        if !install_skill(skill, selected_platform, color, home) {
+            any_failed = true;
         }
-        println!();
     }
+    println!();
 
     if any_failed {
         anyhow::bail!("some skills failed to install");
@@ -307,47 +282,23 @@ struct SkillItem {
     idx: usize,
     id: &'static str,
     description: String,
-    per_platform: Vec<(&'static str, SkillStatus)>,
-    show_platform: bool,
+    status: SkillStatus,
     id_pad: usize,
     color: bool,
 }
 
 impl SkillItem {
     fn render_status(&self) -> String {
-        // Group platform names by status. When only one platform is selected,
-        // omit the platform name and just show the bare label.
-        use std::collections::BTreeMap;
-        let mut groups: BTreeMap<u8, Vec<&'static str>> = BTreeMap::new();
-        for (name, status) in &self.per_platform {
-            let key = match status {
-                SkillStatus::Missing => 0u8,
-                SkillStatus::Modified => 1,
-                SkillStatus::Installed => 2,
-            };
-            groups.entry(key).or_default().push(name);
+        let (label, code) = match self.status {
+            SkillStatus::Missing => ("missing", 33u8),
+            SkillStatus::Modified => ("modified", 31),
+            SkillStatus::Installed => ("installed", 32),
+        };
+        if self.color {
+            format!("\x1b[{code}m{label}\x1b[0m")
+        } else {
+            label.to_string()
         }
-        let parts: Vec<String> = groups
-            .into_iter()
-            .map(|(key, names)| {
-                let (label, code) = match key {
-                    0 => ("missing", 33u8),
-                    1 => ("modified", 31),
-                    _ => ("installed", 32),
-                };
-                let body = if self.show_platform {
-                    format!("{}: {}", label, names.join(", "))
-                } else {
-                    label.to_string()
-                };
-                if self.color {
-                    format!("\x1b[{code}m{body}\x1b[0m")
-                } else {
-                    body
-                }
-            })
-            .collect();
-        parts.join(" | ")
     }
 }
 
