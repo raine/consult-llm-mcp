@@ -329,7 +329,9 @@ impl LlmExecutor for ApiExecutor {
                     anyhow::bail!("API stream error for {model}: {e}");
                 }
             };
-            let events = sse.feed(&buf[..n]);
+            let events = sse
+                .feed(&buf[..n])
+                .map_err(|e| anyhow::anyhow!("API stream parse error for {model}: {e}"))?;
             // Per-event idle: bytes that don't form a complete SSE event do
             // NOT reset the watchdog. Catches heartbeat-comment streams that
             // would otherwise defeat ureq's body-recv timer by trickling.

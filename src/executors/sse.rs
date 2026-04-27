@@ -7,6 +7,13 @@ pub struct SseEvent {
     pub event: Option<String>,
 }
 
+/// Cap on the unparsed buffer size between event boundaries. A misbehaving
+/// or malicious server that streams bytes without ever closing a frame would
+/// otherwise grow the buffer until the idle timeout fires (potentially
+/// exhausting memory if the bytes keep flowing). 16 MiB is well above any
+/// realistic single SSE frame for chat completion responses.
+const MAX_BUFFER_BYTES: usize = 16 * 1024 * 1024;
+
 #[derive(Default)]
 pub struct SseParser {
     buf: Vec<u8>,
@@ -22,9 +29,17 @@ impl SseParser {
 
     /// Feed bytes from the wire. Returns any complete events that became
     /// available. Holds back partial frames across calls so split delimiters
-    /// (`\r\n\r\n` cut between two reads) are still detected.
-    pub fn feed(&mut self, chunk: &[u8]) -> Vec<SseEvent> {
+    /// (`\r\n\r\n` cut between two reads) are still detected. Errors if the
+    /// unparsed buffer would exceed `MAX_BUFFER_BYTES` — guards against a
+    /// peer that streams without ever closing a frame.
+    pub fn feed(&mut self, chunk: &[u8]) -> anyhow::Result<Vec<SseEvent>> {
         self.buf.extend_from_slice(chunk);
+        if self.buf.len() > MAX_BUFFER_BYTES {
+            anyhow::bail!(
+                "SSE frame exceeded {} bytes without a delimiter",
+                MAX_BUFFER_BYTES
+            );
+        }
         let mut out = Vec::new();
         loop {
             let Some((content_end, delim_len)) = find_double_newline(&self.buf) else {
@@ -72,7 +87,7 @@ impl SseParser {
             self.cur_data.clear();
             self.cur_event = None;
         }
-        out
+        Ok(out)
     }
 
     /// Emit any remaining buffered event when the stream ends without a
@@ -144,10 +159,14 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 mod tests {
     use super::*;
 
+    fn feed(p: &mut SseParser, chunk: &[u8]) -> Vec<SseEvent> {
+        p.feed(chunk).expect("feed ok")
+    }
+
     #[test]
     fn basic_event() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"data: hello\n\n");
+        let evts = feed(&mut p, b"data: hello\n\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "hello");
     }
@@ -155,9 +174,9 @@ mod tests {
     #[test]
     fn split_across_chunks() {
         let mut p = SseParser::new();
-        assert!(p.feed(b"data: he").is_empty());
-        assert!(p.feed(b"llo\n").is_empty());
-        let evts = p.feed(b"\n");
+        assert!(feed(&mut p, b"data: he").is_empty());
+        assert!(feed(&mut p, b"llo\n").is_empty());
+        let evts = feed(&mut p, b"\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "hello");
     }
@@ -166,8 +185,8 @@ mod tests {
     fn split_delimiter_across_chunks() {
         // The blank-line delimiter itself spans two reads.
         let mut p = SseParser::new();
-        assert!(p.feed(b"data: a\n").is_empty());
-        let evts = p.feed(b"\ndata: b\n\n");
+        assert!(feed(&mut p, b"data: a\n").is_empty());
+        let evts = feed(&mut p, b"\ndata: b\n\n");
         assert_eq!(evts.len(), 2);
         assert_eq!(evts[0].data, "a");
         assert_eq!(evts[1].data, "b");
@@ -176,7 +195,7 @@ mod tests {
     #[test]
     fn crlf_delimiter() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"data: hi\r\n\r\n");
+        let evts = feed(&mut p, b"data: hi\r\n\r\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "hi");
     }
@@ -184,8 +203,8 @@ mod tests {
     #[test]
     fn crlf_delimiter_split() {
         let mut p = SseParser::new();
-        assert!(p.feed(b"data: hi\r\n\r").is_empty());
-        let evts = p.feed(b"\n");
+        assert!(feed(&mut p, b"data: hi\r\n\r").is_empty());
+        let evts = feed(&mut p, b"\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "hi");
     }
@@ -193,7 +212,7 @@ mod tests {
     #[test]
     fn multiline_data() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"data: line1\ndata: line2\n\n");
+        let evts = feed(&mut p, b"data: line1\ndata: line2\n\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "line1\nline2");
     }
@@ -201,7 +220,7 @@ mod tests {
     #[test]
     fn comments_and_pings() {
         let mut p = SseParser::new();
-        let evts = p.feed(b": ping\n\ndata: real\n\n");
+        let evts = feed(&mut p, b": ping\n\ndata: real\n\n");
         // The ":ping" frame has no fields → not emitted.
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "real");
@@ -211,13 +230,13 @@ mod tests {
     fn event_field_without_data_is_not_dispatched() {
         // SSE spec: empty data buffer → event is not dispatched.
         let mut p = SseParser::new();
-        assert!(p.feed(b"event: ping\n\n").is_empty());
+        assert!(feed(&mut p, b"event: ping\n\n").is_empty());
     }
 
     #[test]
     fn event_field_captured() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"event: ping\ndata: {}\n\n");
+        let evts = feed(&mut p, b"event: ping\ndata: {}\n\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].event.as_deref(), Some("ping"));
         assert_eq!(evts[0].data, "{}");
@@ -226,7 +245,7 @@ mod tests {
     #[test]
     fn flush_emits_trailing_event_without_blank_line() {
         let mut p = SseParser::new();
-        assert!(p.feed(b"data: tail").is_empty());
+        assert!(feed(&mut p, b"data: tail").is_empty());
         let last = p.flush().expect("trailing event");
         assert_eq!(last.data, "tail");
     }
@@ -240,7 +259,7 @@ mod tests {
     #[test]
     fn data_field_with_no_space() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"data:hello\n\n");
+        let evts = feed(&mut p, b"data:hello\n\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "hello");
     }
@@ -248,7 +267,7 @@ mod tests {
     #[test]
     fn data_done_sentinel() {
         let mut p = SseParser::new();
-        let evts = p.feed(b"data: [DONE]\n\n");
+        let evts = feed(&mut p, b"data: [DONE]\n\n");
         assert_eq!(evts.len(), 1);
         assert_eq!(evts[0].data, "[DONE]");
     }
@@ -259,9 +278,20 @@ mod tests {
         let mut bytes = b"data: pre".to_vec();
         bytes.extend_from_slice(&[0xff, 0xff]);
         bytes.extend_from_slice(b"post\n\n");
-        let evts = p.feed(&bytes);
+        let evts = feed(&mut p, &bytes);
         assert_eq!(evts.len(), 1);
         assert!(evts[0].data.contains("pre"));
         assert!(evts[0].data.contains("post"));
+    }
+
+    #[test]
+    fn errors_when_buffer_exceeds_cap() {
+        let mut p = SseParser::new();
+        // Stream bytes without ever closing a frame.
+        let chunk = vec![b'x'; 1024 * 1024];
+        for _ in 0..16 {
+            let _ = p.feed(&chunk);
+        }
+        assert!(p.feed(&chunk).is_err());
     }
 }

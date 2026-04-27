@@ -252,7 +252,9 @@ impl LlmExecutor for AnthropicApiExecutor {
                     anyhow::bail!("Anthropic stream error for {model}: {e}");
                 }
             };
-            let events = sse.feed(&buf[..n]);
+            let events = sse
+                .feed(&buf[..n])
+                .map_err(|e| anyhow::anyhow!("Anthropic stream parse error for {model}: {e}"))?;
             if events.is_empty() {
                 if last_event.elapsed() >= idle_timeout {
                     anyhow::bail!(
