@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, ExitStatus};
 use std::sync::{Mutex, OnceLock};
 
@@ -50,10 +51,13 @@ fn shutdown_children() {
 }
 
 fn send_signal(pid: u32, sig: libc::c_int) {
-    // SAFETY: kill(2) with a pid we previously spawned. errno is ignored —
-    // the child may already have exited.
+    // Signal the whole process group: each child is spawned as a process-
+    // group leader (see ChildGuard::spawn) so its PGID equals its PID.
+    // Negating the PID makes kill(2) target the group, ensuring shell
+    // wrappers and tool subprocesses exit alongside the immediate child.
+    // errno is ignored — the group may already have exited.
     unsafe {
-        libc::kill(pid as libc::pid_t, sig);
+        libc::kill(-(pid as libc::pid_t), sig);
     }
 }
 
@@ -68,6 +72,18 @@ pub struct ChildGuard {
 
 impl ChildGuard {
     pub fn spawn(cmd: &mut Command) -> std::io::Result<Self> {
+        // Make the child its own process-group leader so signals routed
+        // through `send_signal` reach descendant processes (shell
+        // wrappers, tool subprocesses). Otherwise Ctrl-C cleanup only
+        // hits the immediate child and leaks orphaned work.
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setpgid(0, 0) == -1 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
         let child = cmd.spawn()?;
         let pid = child.id();
         tracked()
@@ -108,7 +124,9 @@ impl ChildGuard {
 impl Drop for ChildGuard {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
+            // Signal the whole group, not just the immediate child, so
+            // descendants spawned by CLI wrappers don't leak.
+            send_signal(self.pid, libc::SIGKILL);
             let _ = child.wait();
             tracked()
                 .lock()
