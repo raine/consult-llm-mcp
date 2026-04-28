@@ -61,7 +61,7 @@ Save a context bundle to `history/<YYYY-MM-DD>-context-<topic>.md`. Include only
 - Repo facts: branch, START_HEAD, validation command, test framework.
 - Source inventory — files with **factual** reasons for inclusion only ("contains symbol X", "test file for Y"). No "likely needs change", no "probable approach".
 
-Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <context bundle>`, and `-f <relevant source>`. Capture `[thread_id:group_xxx]` from line 1 as `CONSULT_THREAD_ID` — it threads through 2A → 3 → 4 → 6. Save raw output to `history/<YYYY-MM-DD>-proposals-<topic>.md`.
+Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <context bundle>`, and `-f <relevant source>`. Capture `[thread_id:group_xxx]` from line 1 as `CONSULT_THREAD_ID` — it threads through 2A → 3 → 4 → 6. Synthesize the proposals directly into the ADR.
 
 Prompt:
 
@@ -124,7 +124,7 @@ Then write an Approach Decision Record at `history/<YYYY-MM-DD>-adr-<topic>.md`.
 
 ### 2B — Plan artifact
 
-Save `history/<YYYY-MM-DD>-plan-<topic>.md`. With `--consult-first`, link the context bundle, proposals, and ADR at the top, and reflect the ADR in spec/criteria/tasks.
+Save `history/<YYYY-MM-DD>-plan-<topic>.md`. With `--consult-first`, link the context bundle and ADR at the top, and reflect the ADR in spec/criteria/tasks.
 
 ````markdown
 # <Feature> Plan
@@ -164,7 +164,7 @@ Guidelines: exact paths only, never "somewhere in src/". Each task small (2-5 mi
 
 Skip if `--no-review`. Reviewers receive the plan file and relevant source files; they must produce structured output.
 
-Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <plan path>`, `-f <relevant source>`. With `--consult-first`, continue from `CONSULT_THREAD_ID` via `-t <id>` and additionally attach `-f <context bundle>`, `-f <proposals>`, `-f <ADR>`.
+Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <plan path>`, `-f <relevant source>`. With `--consult-first`, continue from `CONSULT_THREAD_ID` via `-t <id>` and additionally attach `-f <context bundle>`, `-f <ADR>`.
 
 Compose the prompt by including the `## ADR Check` section if and only if `--consult-first` was used; otherwise include `## Independent Alternative`. Send exactly one of these — do not include the bracket markers in the prompt sent to reviewers.
 
@@ -380,7 +380,6 @@ Print:
 **Implemented:** <one sentence>
 **Consult-first:** yes | no
 **Context bundle:** history/<date>-context-<topic>.md | n/a
-**Proposals:** history/<date>-proposals-<topic>.md | n/a
 **ADR:** history/<date>-adr-<topic>.md | n/a
 **Plan:** history/<date>-plan-<topic>.md
 **Diff base:** <START_HEAD short sha>
