@@ -27,13 +27,14 @@ Check `$ARGUMENTS` for flags:
 **Rigor knob:**
 
 - `--rigor lite|standard|deep` — default `standard`.
-  - `lite` — single shared-prompt review, no premortem section, generic final review, no debug consult. Use this (not "skip review") when the task is small.
+  - `lite` — single shared-prompt review, no premortem section, generic final review, no debug consult. Use this (not "skip review") when the task is small. Incompatible with `--consult-first`.
   - `standard` — shared-prompt review with structured premortem and independent-alternative sections, evidence-gated final review with attack lenses, debug consult after 2 failed hypotheses.
   - `deep` — Phase 3 and Phase 6 use `--run` with role-asymmetric prompts (security, test-strategist, data-integrity, fuzzing-strategist). Same number of reviewer calls but each model gets a focused persona.
 
 **Mode flags:**
 
-- `--rounds N` — repeat the review-refine cycle (Phases 3–4) N times. Default `1`. Max `3`.
+- `--consult-first` — before writing the Behavioral Spec or implementation plan, ask reviewers for independent scope readings and implementation approaches using only the raw task and neutral source context. The agent then writes an Approach Decision Record (ADR) and only afterward authors the spec and plan. Use this when scope is ambiguous, direction is non-obvious, the change crosses module boundaries, or the repo is unfamiliar. Skip for typos, mechanical renames, exact bug fixes with clear repro, or dependency bumps. Fail fast if combined with `--rigor lite`. Compatible with `--no-review` (Phase 2B still runs because it is proposal generation, not plan review; Phases 3/4/6 are skipped).
+- `--rounds N` — repeat the review-refine cycle (Phases 3–4) N times. Default `1`. Max `3`. With `--consult-first`, applies only to plan review rounds, not to Phase 2B proposal generation.
 - `--dry-run` — stop after Phase 4. Plan and ledger are saved; nothing is implemented or reviewed against a diff.
 - `--no-review` — skip Phases 3, 4, and 6. Plan, implement, summarize. Useful for very small tasks where review overhead exceeds value.
 - `--skip-final` — implement but skip the Phase 6 red-team pass.
@@ -69,6 +70,188 @@ Capture:
 Select the source files most relevant to the change. Keep the set small — quality over quantity. These files are passed as shared `-f <path>` to every reviewer call.
 
 ## Phase 2: Write the spec and plan
+
+If `--consult-first` was passed, run Phase 2A–2D below instead of the standard flow. Otherwise skip to "Standard flow" after the consult-first sub-phases.
+
+### Consult-first flow (only when `--consult-first`)
+
+The agent must not write inferred scope, assumptions, acceptance criteria, implementation direction, or tasks before Phase 2B proposals are captured. Reviewers must see only raw task and neutral source context.
+
+#### Phase 2A — Context bundle
+
+Save `history/<YYYY-MM-DD>-context-<topic>.md`. Include only:
+
+- Raw task verbatim (after flags stripped).
+- Relevant repo/user instructions (e.g. validation command requirement).
+- Repository facts: branch, START_HEAD, dirty files, validation command, test framework.
+- Source inventory — list of selected files with **factual** reasons for inclusion only ("contains symbol X", "imports Y", "test file for Z"). No "likely needs change", no "probable approach".
+
+Do **not** include: inferred goal, behavioral spec, scope, assumptions, acceptance criteria, proposed architecture, file changes, task breakdown, code snippets.
+
+#### Phase 2B — Independent proposals
+
+Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <context bundle path>`, and `-f <relevant source>`. Capture `[thread_id:group_xxx]` from line 1 as `CONSULT_THREAD_ID` — it threads through 2B → 3 → 4 → 6. Save raw output to `history/<YYYY-MM-DD>-proposals-<topic>.md`.
+
+Send this prompt:
+
+```
+You are independently advising on how to implement the raw task using the attached source context.
+
+You have NOT been given an agent-written spec, plan, architecture, or intended scope. That is intentional. Your job is to infer the most defensible scope and approach from the raw task and source evidence.
+
+Do not ask clarifying questions. Do not assume another reviewer will cover missing scope. Make your assumptions explicit.
+
+Output exactly these sections in this order. Do not add preamble or closing remarks.
+
+## Scope Reading
+
+**In scope:**
+- ...
+
+**Out of scope:**
+- ...
+
+**Assumptions:**
+- ...
+
+**Ambiguities:**
+- ...
+
+**Confidence:** high | medium | low
+
+## Recommended Approach
+
+**Strategy:** <2–4 sentences>
+
+**Why this fits the task:** <specific rationale tied to raw task/source context>
+
+**Files/modules likely touched:**
+- `path` — <why>
+
+**Implementation outline:**
+1. ...
+2. ...
+
+**Compatibility / migration impact:**
+- ...
+
+**Complexity:** low | medium | high
+
+## Acceptance Criteria I Would Verify
+
+Use Given/When/Then. Include only observable behavior.
+
+- Given ..., when ..., then ...
+
+## Key Design Choices
+
+For each material design choice:
+
+- choice: <specific choice>
+- rationale: <why>
+- tradeoff: <what this makes harder or excludes>
+
+## Risks and Failure Modes
+
+For each risk:
+
+- risk: <concrete failure>
+- trigger: <input/action/state that causes it>
+- impact: low | medium | high
+- mitigation_or_test: <specific mitigation or test>
+
+## Alternative Worth Considering
+
+**Strategy:** <materially different underlying strategy, not a minor variant>
+
+**When it wins:** <conditions where this beats your recommended approach>
+
+**Why it is not your primary recommendation:** <specific reason>
+
+## Evidence To Check Before Planning
+
+- <source/API/test/library behavior that should be verified before committing to a plan>
+```
+
+**Ambiguity / groupthink handling:**
+
+- If two or more reviewers report `Confidence: low` and no proposal produces testable acceptance criteria, stop with an Ambiguity Blocker (see Phase 2C). Do not invent a spec.
+- If proposals converge on one narrow strategy with no credible alternative on a high-risk or cross-module task, run one divergence-challenge consult on the same thread before synthesis: ask for materially different strategies, not defenses of the existing one.
+
+#### Phase 2C — Approach Decision Record (ADR)
+
+Save `history/<YYYY-MM-DD>-adr-<topic>.md`. Every proposal must be accepted, rejected, or recorded as a watched risk with evidence — no silent discard.
+
+```markdown
+# Approach Decision Record
+
+**Raw task:** <verbatim or link>
+**Context bundle:** `history/<date>-context-<topic>.md`
+**Proposals:** `history/<date>-proposals-<topic>.md`
+
+## Scope Divergence Matrix
+
+| scope question | proposal readings | selected interpretation | rationale | risk |
+| -- | -- | -- | -- | -- |
+
+## Proposal Summary
+
+| id | model | scope confidence | strategy | complexity | strengths | weaknesses | decision |
+| -- | -- | -- | -- | -- | -- | -- | -- |
+
+## Selected Approach
+
+**Selected proposal:** <A | B | C | agent-synthesized-after-consult>
+**Selection rationale:** <evidence-backed reasons>
+**Core architecture:** <single coherent architecture>
+
+## Rejected Alternatives
+
+| proposal | reason rejected | evidence | watched risk? |
+| -- | -- | -- | -- |
+
+## Frankenstein Guard
+
+The selected approach must follow ONE coherent core architecture. Core choices that must come from a single proposal: data model, control flow, API boundary, ownership/module boundary, persistence/migration strategy, concurrency model.
+
+Borrowing from rejected proposals is allowed only for orthogonal refinements: tests, naming, validation checks, error handling, migration safeguards.
+
+If core choices mix across proposals, this section must include an explicit compatibility proof. Otherwise the plan is invalid.
+
+## Watched Risks
+
+- **risk:** ...
+  **why accepted:** ...
+  **what would change the decision:** ...
+
+## Evidence Checks Required Before/During Implementation
+
+- ...
+```
+
+**Scope-divergence rule:**
+
+- If the raw task / source evidence supports one reading, choose it and record why.
+- If divergence affects public API, data loss, security, or migration behavior and no reading is clearly supported, stop with an **Ambiguity Blocker**: record conflicting readings, missing evidence, and required user decision. Do not implement.
+- If divergence is only about implementation breadth, choose the approach that best satisfies the literal task while preserving invariants.
+
+**Tiebreakers (consult-first overrides the default order):**
+
+1. Literal fit to raw task.
+2. Safety / data integrity / destructive-action prevention.
+3. Acceptance criteria coverage.
+4. Existing patterns and codebase conventions.
+5. Maintainability.
+6. Testability.
+7. Simplicity.
+
+#### Phase 2D — Spec and plan
+
+Now write the standard plan artifact (template below) using the selected approach from the ADR. The Behavioral Spec, acceptance criteria, and tasks must reflect the ADR. Include links at the top of the plan to the context bundle, proposals, and ADR.
+
+After Phase 2D completes, continue to Phase 3 using `-t CONSULT_THREAD_ID`.
+
+### Standard flow (default)
 
 Save a single artifact to `history/<YYYY-MM-DD>-plan-<topic>.md`. Derive `<topic>` from the task description (kebab-case, short).
 
@@ -148,6 +331,8 @@ Skip only if `--no-review` was passed. Reviewers receive the plan file and the r
 
 Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <plan path>`, and `-f <relevant source>`. Send the prompt below on stdin per the `consult-llm` invocation contract (heredoc, terminator, timeout). Capture the `[thread_id:group_xxx]` from line 1 of the response — it's needed for `--rounds` and Phase 6.
 
+**With `--consult-first`:** continue from `CONSULT_THREAD_ID` using `-t <CONSULT_THREAD_ID>` and additionally attach `-f <context bundle>`, `-f <proposals>`, `-f <ADR>`. Use the consult-first review prompt below instead of the default.
+
 ```
 Review this implementation plan against the attached source context.
 
@@ -180,6 +365,58 @@ Issues that should change the plan, spec, or test matrix. For each:
 - location_or_task: <plan section, task number, or file:line>
 - rationale: <why this is a real problem>
 - recommended_change: <specific edit>
+```
+
+### Consult-first review prompt
+
+Use this prompt instead of the standard one when `--consult-first` is active. It drops `## Independent Alternative` (already produced in Phase 2B) and adds checks specific to the synthesis.
+
+```
+You previously gave an independent scope reading and implementation approach from the raw task and source context. The agent has now synthesized the proposals into an Approach Decision Record (ADR) and written a Behavioral Spec plus implementation plan.
+
+Review the synthesis and plan. Do not defend your earlier proposal by default. Treat your earlier output, the other proposals, the ADR, and the plan as claims requiring evidence.
+
+Output exactly these sections in this order. Do not add preamble or closing remarks.
+
+## Scope Synthesis Check
+Did the Behavioral Spec choose a defensible scope from the raw task and proposal set?
+- missing_scope:
+- overreach:
+- unsupported_assumption:
+- ambiguity_should_block: yes | no
+- required_change:
+
+If scope is defensible, write "Scope synthesis sufficient."
+
+## ADR Check
+Evaluate whether the selected approach is the best coherent strategy.
+- better_rejected_approach: <proposal id or "none">
+- incompatible_merge_detected: yes | no
+- selection_rationale_sufficient: yes | no
+- required_change:
+
+## Spec Check
+List acceptance criteria that are missing, ambiguous, or untestable. Flag invariants the plan does not preserve. If the spec is sufficient, write "Spec sufficient."
+
+## Premortem
+Assume this plan ships and fails in production within six months. List the top 3 failure modes. For each:
+
+- failure_mode: <concrete failure with a trigger, not a category>
+- impact: low | medium | high
+- probability: low | medium | high
+- evidence: <what in the plan or source supports this risk>
+- current_mitigation: <quote the plan or "none">
+- mitigation_sufficient: yes | no
+- required_plan_change_or_test: <specific addition that closes the gap>
+
+## Plan Findings
+Issues that should change the ADR, spec, plan, or test matrix. For each:
+
+- severity: must-fix | should-fix | optional
+- issue_identity: <short kebab-case label>
+- location_or_task: <ADR section, plan task, or file:line>
+- rationale:
+- recommended_change:
 ```
 
 ### Lite rigor
@@ -220,6 +457,8 @@ For each finding, classify:
 - **Not a real issue** — reviewer misread the plan or source. Record as rejected with the evidence that disproves it.
 
 Complexity has its own cost. A "must-fix" guarding a corner case that virtually never occurs is not worth shipping a more complicated codebase for.
+
+With `--consult-first`, findings may target the ADR as well as the spec, plan, or test matrix. Any finding that claims the agent rejected a better approach (`better_rejected_approach`) or merged incompatible strategies (`incompatible_merge_detected: yes`) must be verified against the raw proposal file and source context before adoption or rejection.
 
 ### Build the ledger
 
@@ -392,6 +631,10 @@ Print to the user:
 ## Summary
 
 **Implemented:** <one sentence>
+**Consult-first:** yes | no
+**Context bundle:** history/<date>-context-<topic>.md | n/a
+**Proposals:** history/<date>-proposals-<topic>.md | n/a
+**ADR:** history/<date>-adr-<topic>.md | n/a
 **Plan:** history/<date>-plan-<topic>.md
 **Diff base:** <START_HEAD short sha>
 **Review phases run:** Phase 3 [yes | skipped: --no-review] · Phase 6 [yes | skipped: --no-review | skipped: --skip-final]
@@ -435,3 +678,6 @@ If implementation drifted from the plan, list the deviations so the plan and the
 - **Dirty worktree halts.** `implement` does not auto-stash; the user cleans up first.
 - **Default is no commits.** `--commit` opts in; otherwise the user commits the result themselves (e.g. with `git-surgeon`).
 - **One pass through Phase 6.** If must-fix items remain after the auto-fix step, hand off — do not loop reviews.
+- **Consult-first means no pre-spec direction.** When `--consult-first` is set, the agent must not write inferred scope, assumptions, acceptance criteria, implementation direction, or tasks before Phase 2B proposals are captured. The context bundle contains only raw task and factual source inventory.
+- **Scope divergence is signal, not noise.** Divergent reviewer readings under consult-first must be recorded in the ADR's Scope Divergence Matrix, not normalized away silently. High-impact divergence (API, data, security, migration) without supporting evidence triggers an Ambiguity Blocker — do not implement.
+- **No Frankenstein synthesis.** The plan must follow one coherent core architecture. Rejected proposals may contribute only orthogonal refinements (tests, naming, validation, error handling) unless the ADR includes an explicit compatibility proof.
