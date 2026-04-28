@@ -224,7 +224,7 @@ fn handle_left_click(
         && let Some(idx) = row_at(rect, &state.table_state, event.column, event.row)
         && idx < row_infos.len()
     {
-        if state.focus == Focus::Active && idx == state.selected {
+        if idx == state.selected {
             return Some(Action::EnterDetail(row_infos[idx].run_id.clone()));
         }
         return Some(Action::SelectActiveRow(idx));
@@ -237,7 +237,7 @@ fn handle_left_click(
         if idx >= count {
             return None;
         }
-        if state.focus == Focus::History && idx == state.history_selected {
+        if idx == state.history_selected {
             return open_history_row(state, idx, dir);
         }
         return Some(Action::SelectHistoryRow(idx));
@@ -445,9 +445,46 @@ mod tests {
             mouse_event(MouseEventKind::Down(MouseButton::Left), 5, 3),
             &dir,
         );
-        // idx=2 (y=3 - y=0 header - 1 = 2). Not the currently selected row, so
-        // emits Select* even though Active was unfocused.
+        // idx=2, not the selected row → SelectActiveRow.
         assert!(matches!(action, Some(Action::SelectActiveRow(2))));
+    }
+
+    #[test]
+    fn click_already_selected_active_opens_even_when_history_focused() {
+        let (mut state, rows) = make_state_with_active(5);
+        state.selected = 2;
+        state.focus = Focus::History;
+        let dir = PathBuf::from("/tmp/x");
+        let action = handle_mouse(
+            &state,
+            &rows,
+            mouse_event(MouseEventKind::Down(MouseButton::Left), 5, 3),
+            &dir,
+        );
+        match action {
+            Some(Action::EnterDetail(id)) => assert_eq!(id, "run-2"),
+            other => panic!("expected EnterDetail, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn click_already_selected_history_opens_even_when_active_focused() {
+        let (mut state, rows) = make_state_with_active(2);
+        push_history(&mut state, 4);
+        state.history_selected = 1;
+        state.focus = Focus::Active;
+        let dir = PathBuf::from("/tmp/x");
+        // y=14 → history idx=1.
+        let action = handle_mouse(
+            &state,
+            &rows,
+            mouse_event(MouseEventKind::Down(MouseButton::Left), 5, 14),
+            &dir,
+        );
+        // History row 1 is a Single record without a runs file on disk, so we
+        // expect a Flash, not SelectHistoryRow. The point is the open path was
+        // taken regardless of focus.
+        assert!(matches!(action, Some(Action::Flash(_, _))));
     }
 
     #[test]
