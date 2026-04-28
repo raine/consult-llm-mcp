@@ -29,22 +29,23 @@ impl ExecutorProvider {
             .unwrap_or(120);
         let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
 
-        // Absolute upper bound on a single request lifetime. Catches
-        // pathological cases the per-read idle can't (e.g. a server that
-        // trickles a single byte every <120s indefinitely).
-        let total_secs: u64 = std::env::var("CONSULT_LLM_API_TOTAL_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(30 * 60);
-
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(30)))
-            // Bound body upload (large prompts) and time-to-headers.
-            // Without these a provider that accepts the connection but
-            // never reads / never sends headers can hang `.send()` forever.
+            // Bound body upload so a provider that accepts the connection
+            // but never reads can't hang `.send()` forever.
             .timeout_send_body(Some(std::time::Duration::from_secs(120)))
-            .timeout_recv_response(Some(std::time::Duration::from_secs(60)))
-            .timeout_global(Some(std::time::Duration::from_secs(total_secs)))
+            // Absolute lifetime cap on any single request — backstop for
+            // pathological cases the per-read socket idle can't catch
+            // (server trickling a single byte every <idle interval).
+            //
+            // Note: do NOT also set timeout_recv_response. ureq's
+            // next_timeout(RecvBody) takes the min over RecvBody,
+            // RecvResponse, and Global. RecvResponse's deadline is fixed
+            // at `headers_time + recv_response`, which sits in the past
+            // once the body has been streaming a while; that pins every
+            // subsequent body read to a 1-second timeout and the stream
+            // dies on the first ~1s gap between tokens.
+            .timeout_global(Some(std::time::Duration::from_secs(30 * 60)))
             .build()
             .into();
 
