@@ -50,6 +50,19 @@ impl AppState {
                     self.history_selected = self.history_selected.saturating_sub(1);
                 }
             },
+            Action::SelectActiveRow(idx) => {
+                if self.row_count > 0 {
+                    self.selected = idx.min(self.row_count - 1);
+                    self.focus = Focus::Active;
+                }
+            }
+            Action::SelectHistoryRow(idx) => {
+                let count = self.build_history_display_rows().len();
+                if count > 0 {
+                    self.history_selected = idx.min(count - 1);
+                    self.focus = Focus::History;
+                }
+            }
             Action::EnterDetail(run_id) => {
                 let from_history = matches!(self.focus, Focus::History);
                 self.enter_detail(run_id);

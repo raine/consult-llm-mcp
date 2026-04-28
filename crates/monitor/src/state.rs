@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use chrono::{DateTime, Utc};
+use ratatui::layout::Rect;
 use ratatui::style::Color;
 use ratatui::text::Line as RatatuiLine;
 use ratatui::widgets::TableState;
@@ -146,6 +147,13 @@ pub(crate) struct AppState {
     pub(crate) filter_text: String,
     pub(crate) filter_editing: bool,
     pub(crate) cached_filter_indices: Option<Vec<usize>>,
+    /// Inner area (inside borders) of the Active subtable, captured on render.
+    /// `None` while not in Table mode. The first inner row is the header; data
+    /// rows start at `inner.y + 1`.
+    pub(crate) last_active_inner: Option<Rect>,
+    /// Inner area of the History subtable. Same layout convention as
+    /// `last_active_inner`.
+    pub(crate) last_history_inner: Option<Rect>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -191,6 +199,8 @@ impl AppState {
             filter_text: String::new(),
             filter_editing: false,
             cached_filter_indices: None,
+            last_active_inner: None,
+            last_history_inner: None,
         }
     }
 

@@ -11,7 +11,7 @@ use std::fs;
 use std::io::{self, Stdout};
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyEventKind};
+use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
 use crossterm::terminal::{self, EnterAlternateScreen, LeaveAlternateScreen};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
@@ -32,7 +32,7 @@ impl TerminalGuard {
     fn new() -> io::Result<Self> {
         terminal::enable_raw_mode()?;
         let mut stdout = io::stdout();
-        crossterm::execute!(stdout, EnterAlternateScreen)?;
+        crossterm::execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
         Ok(Self { terminal })
@@ -41,8 +41,12 @@ impl TerminalGuard {
 
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
+        let _ = crossterm::execute!(
+            self.terminal.backend_mut(),
+            DisableMouseCapture,
+            LeaveAlternateScreen
+        );
         let _ = terminal::disable_raw_mode();
-        let _ = crossterm::execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
     }
 }
 
@@ -56,8 +60,8 @@ fn main() -> io::Result<()> {
 
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        let _ = crossterm::execute!(io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
         let _ = terminal::disable_raw_mode();
-        let _ = crossterm::execute!(io::stdout(), LeaveAlternateScreen);
         default_hook(info);
     }));
 
@@ -119,50 +123,82 @@ fn main() -> io::Result<()> {
         guard.terminal.draw(|frame| ui::render(frame, &mut state))?;
         state.tick += 1;
 
-        if event::poll(render_interval)?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-            && let Some(action) = input::handle_key(&state, &row_infos, key, &dir)
-        {
-            if matches!(action, Action::Quit) {
-                let _ = cmd_tx.send(PollCommand::Shutdown);
-                break;
-            }
-
-            let entering_detail = matches!(
-                &action,
-                Action::EnterDetail(_) | Action::NextSibling | Action::PrevSibling
-            );
-            let entering_thread_detail = matches!(&action, Action::EnterThreadDetail(_));
-            let exiting_detail = matches!(&action, Action::ExitDetail);
-            let clearing_history = matches!(&action, Action::ClearHistory);
-
-            state.apply(action);
-
-            if entering_detail {
-                if let AppMode::Detail(ref detail) = state.mode {
-                    let _ = cmd_tx.send(PollCommand::EnterDetail {
-                        run_id: detail.run_id.clone(),
-                        file_offset: detail.file_offset,
-                    });
-                }
-            } else if entering_thread_detail {
-                if let AppMode::ThreadDetail(ref detail) = state.mode
-                    && let Some(last_run_id) = detail.turn_ids.last()
+        let mut should_quit = false;
+        if event::poll(render_interval)? {
+            // Drain all queued input events in one pass so a single render
+            // covers a whole burst of wheel/key activity.
+            loop {
+                let action = match event::read()? {
+                    Event::Key(key) if key.kind == KeyEventKind::Press => {
+                        input::handle_key(&state, &row_infos, key, &dir)
+                    }
+                    Event::Mouse(mouse) => input::handle_mouse(&state, &row_infos, mouse, &dir),
+                    _ => None,
+                };
+                if let Some(action) = action
+                    && dispatch_action(action, &mut state, &cmd_tx, &dir)
                 {
-                    let _ = cmd_tx.send(PollCommand::EnterDetail {
-                        run_id: last_run_id.clone(),
-                        file_offset: detail.active_file_offset,
-                    });
+                    should_quit = true;
+                    break;
                 }
-            } else if exiting_detail {
-                let _ = cmd_tx.send(PollCommand::ExitDetail);
-            } else if clearing_history {
-                let _ = fs::File::create(dir.join(consult_llm_core::monitoring::HISTORY_FILE));
-                let _ = cmd_tx.send(PollCommand::ResetHistory);
+                if !event::poll(Duration::ZERO)? {
+                    break;
+                }
             }
+        }
+        if should_quit {
+            let _ = cmd_tx.send(PollCommand::Shutdown);
+            break;
         }
     }
 
     Ok(())
+}
+
+/// Apply an action and send any side-effect commands to the poller.
+/// Returns `true` if this action was `Quit` and the loop should stop.
+fn dispatch_action(
+    action: Action,
+    state: &mut AppState,
+    cmd_tx: &std::sync::mpsc::Sender<PollCommand>,
+    dir: &std::path::Path,
+) -> bool {
+    if matches!(action, Action::Quit) {
+        return true;
+    }
+
+    let entering_detail = matches!(
+        &action,
+        Action::EnterDetail(_) | Action::NextSibling | Action::PrevSibling
+    );
+    let entering_thread_detail = matches!(&action, Action::EnterThreadDetail(_));
+    let exiting_detail = matches!(&action, Action::ExitDetail);
+    let clearing_history = matches!(&action, Action::ClearHistory);
+
+    state.apply(action);
+
+    if entering_detail {
+        if let AppMode::Detail(ref detail) = state.mode {
+            let _ = cmd_tx.send(PollCommand::EnterDetail {
+                run_id: detail.run_id.clone(),
+                file_offset: detail.file_offset,
+            });
+        }
+    } else if entering_thread_detail {
+        if let AppMode::ThreadDetail(ref detail) = state.mode
+            && let Some(last_run_id) = detail.turn_ids.last()
+        {
+            let _ = cmd_tx.send(PollCommand::EnterDetail {
+                run_id: last_run_id.clone(),
+                file_offset: detail.active_file_offset,
+            });
+        }
+    } else if exiting_detail {
+        let _ = cmd_tx.send(PollCommand::ExitDetail);
+    } else if clearing_history {
+        let _ = fs::File::create(dir.join(consult_llm_core::monitoring::HISTORY_FILE));
+        let _ = cmd_tx.send(PollCommand::ResetHistory);
+    }
+
+    false
 }

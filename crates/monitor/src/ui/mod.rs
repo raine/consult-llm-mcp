@@ -15,6 +15,11 @@ pub(crate) fn render(frame: &mut ratatui::Frame, state: &mut AppState) {
     let area = frame.area();
     frame.render_widget(Block::default().style(Style::default().bg(BG)), area);
 
+    // Reset rects each frame; the table renderer fills these when in Table-like
+    // modes so mouse input can hit-test against the most recent layout.
+    state.last_active_inner = None;
+    state.last_history_inner = None;
+
     match &state.mode {
         AppMode::Table => {
             table::render_table_view(frame, area, state);
@@ -48,6 +53,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
             ("k / ↑", "Scroll up"),
             ("d", "Half page down"),
             ("u", "Half page up"),
+            ("Wheel", "Scroll"),
             ("Tab / S-Tab", "Next / prev sibling"),
             ("g / G", "Scroll to top / bottom"),
             ("r", "Jump to response"),
@@ -62,6 +68,7 @@ fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
             ("k / ↑", "Scroll up"),
             ("d", "Half page down"),
             ("u", "Half page up"),
+            ("Wheel", "Scroll"),
             ("[ / ]", "Prev / next turn"),
             ("g / G", "Scroll to top / bottom"),
             ("r", "Jump to response"),
@@ -73,6 +80,8 @@ fn render_help_overlay(frame: &mut ratatui::Frame, mode: &AppMode) {
         _ => vec![
             ("j / ↓", "Move down"),
             ("k / ↑", "Move up"),
+            ("Wheel", "Move selection"),
+            ("Click", "Select / open row"),
             ("Tab", "Switch focus"),
             ("Enter", "Open detail view"),
             ("K", "Kill process"),

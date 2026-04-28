@@ -1,8 +1,13 @@
+#[derive(Debug)]
 pub(crate) enum Action {
     Quit,
     ToggleFocus,
     MoveDown,
     MoveUp,
+    /// Set Active table selection to a specific index (clamped) and focus Active.
+    SelectActiveRow(usize),
+    /// Set History table selection to a specific index (clamped) and focus History.
+    SelectHistoryRow(usize),
     EnterDetail(String),
     /// Enter thread detail view for a thread_id
     EnterThreadDetail(String),

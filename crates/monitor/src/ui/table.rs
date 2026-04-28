@@ -205,15 +205,15 @@ fn render_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppState) {
     }
     constraints.push(Constraint::Length(duration_col_width));
 
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(SEPARATOR));
+    state.last_active_inner = Some(block.inner(area));
     let table = Table::new(rows, constraints)
         .header(header)
         .row_highlight_style(Style::default().bg(SELECTED_BG))
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(SEPARATOR)),
-        );
+        .block(block);
 
     if state.focus == Focus::Active {
         state.table_state.select(Some(state.selected));
@@ -421,23 +421,23 @@ fn render_history_table(frame: &mut ratatui::Frame, area: Rect, state: &mut AppS
     constraints.push(Constraint::Length(cost_col_width));
     constraints.push(Constraint::Length(2));
 
+    let block = Block::default()
+        .title(Line::from(vec![Span::styled(
+            " History ",
+            Style::default().fg(if state.focus == Focus::History {
+                TEAL
+            } else {
+                DIM_WHITE
+            }),
+        )]))
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(SEPARATOR));
+    state.last_history_inner = Some(block.inner(area));
     let table = Table::new(rows, constraints)
         .header(header)
         .row_highlight_style(Style::default().bg(SELECTED_BG))
-        .block(
-            Block::default()
-                .title(Line::from(vec![Span::styled(
-                    " History ",
-                    Style::default().fg(if state.focus == Focus::History {
-                        TEAL
-                    } else {
-                        DIM_WHITE
-                    }),
-                )]))
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(SEPARATOR)),
-        );
+        .block(block);
 
     if state.focus == Focus::History && !display_rows.is_empty() {
         state
