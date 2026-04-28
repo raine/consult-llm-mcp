@@ -19,35 +19,32 @@ pub struct ExecutorProvider {
 
 impl ExecutorProvider {
     pub fn new() -> Self {
-        // Idle timeout: gap between successful SSE events. Enforced by the
-        // post-read elapsed check in api.rs / anthropic_api.rs — *not* by
-        // ureq's body-recv deadline (which is a total cap, not an idle
-        // timer, and would cut legitimate long generations).
+        // Socket read-idle: ureq applies this as a per-read deadline (each
+        // blocking read gets a fresh budget), so it's the right knob for
+        // "the connection went silent" — heartbeat bytes count as liveness
+        // and reset the timer naturally. Set per-request in the executors.
         let idle_timeout_secs: u64 = std::env::var("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(120);
         let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
 
-        // Hard backstop for a fully-stalled mid-read (where the post-read
-        // idle check can never fire because read() never returns). Generous
-        // enough that long real responses complete; tight enough that a
-        // hung TCP connection can't pin a worker forever.
-        let total_recv_secs: u64 = std::env::var("CONSULT_LLM_API_TOTAL_RECV_TIMEOUT_SECS")
+        // Absolute upper bound on a single request lifetime. Catches
+        // pathological cases the per-read idle can't (e.g. a server that
+        // trickles a single byte every <120s indefinitely).
+        let total_secs: u64 = std::env::var("CONSULT_LLM_API_TOTAL_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(30 * 60);
 
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .timeout_connect(Some(std::time::Duration::from_secs(30)))
-            // Bound the request body upload (large prompts) and the wait
-            // for the first response byte / response headers. Without
-            // these, a provider that accepts the connection but never
-            // sends headers can hang `.send()` forever before the body
-            // reader (and its idle timeout) is reachable.
+            // Bound body upload (large prompts) and time-to-headers.
+            // Without these a provider that accepts the connection but
+            // never reads / never sends headers can hang `.send()` forever.
             .timeout_send_body(Some(std::time::Duration::from_secs(120)))
             .timeout_recv_response(Some(std::time::Duration::from_secs(60)))
-            .timeout_recv_body(Some(std::time::Duration::from_secs(total_recv_secs)))
+            .timeout_global(Some(std::time::Duration::from_secs(total_secs)))
             .build()
             .into();
 

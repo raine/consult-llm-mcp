@@ -283,6 +283,12 @@ impl LlmExecutor for ApiExecutor {
             .agent
             .post(&url)
             .config()
+            // Per-read socket idle: ureq applies this as a fresh budget on
+            // every read, so heartbeat bytes (and any data, parsed or not)
+            // reset the timer. This is the actual "stream went silent"
+            // detector. The agent-level timeout_global bounds the whole
+            // request as an absolute backstop.
+            .timeout_recv_body(Some(idle_timeout))
             .http_status_as_error(false)
             .build()
             .header("Authorization", format!("Bearer {}", &self.api_key))
@@ -314,7 +320,6 @@ impl LlmExecutor for ApiExecutor {
         let mut usage: Option<Usage> = None;
         let mut current_stage: Option<ProgressStage> = None;
         let mut finish_reason: Option<String> = None;
-        let mut last_event = std::time::Instant::now();
 
         'outer: loop {
             let n = match reader.read(&mut buf) {
@@ -323,7 +328,7 @@ impl LlmExecutor for ApiExecutor {
                 Err(e) => {
                     if is_timeout_err(&e) {
                         anyhow::bail!(
-                            "API stream idle timeout: no data from {model} for {idle_secs}s"
+                            "API stream idle timeout: no bytes from {model} for {idle_secs}s"
                         );
                     }
                     anyhow::bail!("API stream error for {model}: {e}");
@@ -332,16 +337,6 @@ impl LlmExecutor for ApiExecutor {
             let events = sse
                 .feed(&buf[..n])
                 .map_err(|e| anyhow::anyhow!("API stream parse error for {model}: {e}"))?;
-            // Per-event idle: bytes that don't form a complete SSE event do
-            // NOT reset the watchdog. Catches heartbeat-comment streams that
-            // would otherwise defeat ureq's body-recv timer by trickling.
-            if events.is_empty() {
-                if last_event.elapsed() >= idle_timeout {
-                    anyhow::bail!("API stream idle timeout: no data from {model} for {idle_secs}s");
-                }
-            } else {
-                last_event = std::time::Instant::now();
-            }
             for ev in events {
                 if ev.data == "[DONE]" {
                     break 'outer;

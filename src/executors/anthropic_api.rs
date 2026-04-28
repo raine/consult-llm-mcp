@@ -205,6 +205,9 @@ impl LlmExecutor for AnthropicApiExecutor {
             .agent
             .post(&url)
             .config()
+            // See api.rs for rationale: per-read socket idle, with the
+            // agent-level timeout_global as the total-lifetime backstop.
+            .timeout_recv_body(Some(idle_timeout))
             .http_status_as_error(false)
             .build()
             .header("x-api-key", &self.api_key)
@@ -237,7 +240,6 @@ impl LlmExecutor for AnthropicApiExecutor {
         let mut stop_reason: Option<String> = None;
         let mut saw_message_stop = false;
         let mut current_stage: Option<ProgressStage> = None;
-        let mut last_event = std::time::Instant::now();
 
         'outer: loop {
             let n = match reader.read(&mut buf) {
@@ -246,7 +248,7 @@ impl LlmExecutor for AnthropicApiExecutor {
                 Err(e) => {
                     if super::api::is_timeout_err(&e) {
                         anyhow::bail!(
-                            "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
+                            "Anthropic stream idle timeout: no bytes from {model} for {idle_secs}s"
                         );
                     }
                     anyhow::bail!("Anthropic stream error for {model}: {e}");
@@ -255,15 +257,6 @@ impl LlmExecutor for AnthropicApiExecutor {
             let events = sse
                 .feed(&buf[..n])
                 .map_err(|e| anyhow::anyhow!("Anthropic stream parse error for {model}: {e}"))?;
-            if events.is_empty() {
-                if last_event.elapsed() >= idle_timeout {
-                    anyhow::bail!(
-                        "Anthropic stream idle timeout: no data from {model} for {idle_secs}s"
-                    );
-                }
-            } else {
-                last_event = std::time::Instant::now();
-            }
             for ev in events {
                 if process_event(
                     &ev,
