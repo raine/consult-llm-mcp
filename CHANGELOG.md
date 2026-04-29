@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.0.9 (2026-04-29)
+
+- `consult-llm-monitor` TUI now supports mouse input: click rows to select or open them, and use the scroll wheel to navigate
+- New `phased-implement` workflow skill for coordinating multi-phase implementations across worktree branches, with support for sequential, parallel, and DAG dependency ordering
+- `implement` skill: added `--consult-first` flag for unbiased planning by gathering independent external proposals before writing a behavioral spec
+- `implement` skill: simplified by removing `--rigor`, `--commit`, `--skip-final`, `--dry-run`, and `--diff-base` flags. Reviews now follow a single standardized path, and auto-commit at the end of implementation is now the default behavior
+
 ## v3.0.8 (2026-04-27)
 
 - `install-skills` interactive prompt now installs to a single platform per run; re-run the command to install to another platform
