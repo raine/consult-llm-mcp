@@ -22,9 +22,7 @@ Selectors resolvable in this environment (depends on configured API keys):
 
 Check `$ARGUMENTS` for flags:
 
-**Reviewer flags:** any `--<selector>` from the Models block above selects that reviewer (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. With no reviewer flag, use **all** listed selectors.
-
-Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
+**Reviewer flags:** any `--<selector>` from the Models block above selects that reviewer (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
 
 **Diff flags:**
 

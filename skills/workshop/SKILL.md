@@ -22,7 +22,7 @@ Selectors resolvable in this environment (depends on configured API keys):
 
 Check `$ARGUMENTS` for flags:
 
-**Expert flags:** any `--<selector>` from the Models block selects an expert (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. With no selector flag, use **all** listed selectors in parallel. Translate each `--<selector>` into a `-m <selector>` argument.
+**Expert flags:** any `--<selector>` from the Models block selects an expert (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
 
 **Mode flags:**
 

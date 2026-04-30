@@ -17,9 +17,7 @@ Selectors resolvable in this environment (depends on configured API keys):
 
 **Arguments:** `$ARGUMENTS`
 
-**Model flags:** any `--<selector>` from the Models block above selects a collaborator (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two**. With no model flag, brainstorm uses **all** listed selectors.
-
-Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
+**Model flags:** any `--<selector>` from the Models block above selects a collaborator (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two**. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
 
 Strip all flags from arguments to get the task description. Use the selector name as the label when presenting per-model output.
 

@@ -25,9 +25,7 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 Check the arguments for flags:
 
-**Model flags:** any `--<selector>` from the Models block above selects a debater (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two** debaters. With no model flag, debate uses **all** listed selectors.
-
-Translate each `--<selector>` into a `-m <selector>` argument to the CLI.
+**Model flags:** any `--<selector>` from the Models block above selects a debater (e.g. `--gemini`, `--openai`, `--deepseek`). Repeat for multiple. Need at least **two** debaters. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
 
 **Mode flags:**
 - `--dry-run` → debate and plan only, skip implementation

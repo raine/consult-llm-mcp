@@ -12,7 +12,7 @@ End-to-end autonomous workflow: spec → plan → review → implement → red-t
 
 **Arguments:** `$ARGUMENTS`
 
-**Reviewer flags:** any `--<selector>` resolvable by `consult-llm models` selects a reviewer (e.g. `--gemini`, `--openai`). Repeat for multiple. With no selector flag, use **all** available selectors in parallel. Translate each into a `-m <selector>`.
+**Reviewer flags:** any `--<selector>` resolvable by `consult-llm models` selects a reviewer (e.g. `--gemini`, `--openai`). Repeat for multiple. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
 
 **Mode flags:**
 
