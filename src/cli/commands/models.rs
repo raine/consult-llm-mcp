@@ -20,7 +20,7 @@ pub fn run() -> anyhow::Result<()> {
             .unwrap_or("unknown");
         println!("  {m} ({backend})");
     }
-    println!("\nDefault models:");
+    println!("\nDefault models (ordered; duplicates are intentional):");
     if cfg.default_models.is_empty() {
         println!("  (none)");
     } else {
@@ -41,7 +41,5 @@ pub fn run() -> anyhow::Result<()> {
                 .join(" ")
         );
     }
-    println!("\nOutput labels:");
-    println!("  duplicate resolved models use ## Model: <id>#K only when repeated");
     Ok(())
 }

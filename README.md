@@ -583,13 +583,20 @@ consult-llm config set no_update_check true
 consult-llm config set allowed_models '[gemini, openai]'
 ```
 
-`default_model` controls ordinary single-response CLI calls where `-m` is omitted. `default_models` controls workflow skills that fan out to multiple model calls; it preserves order and duplicates, so `[openai, openai]` intentionally samples OpenAI twice.
+Model selection has three layers:
+
+- `allowed_models` is the allowlist: it restricts which exact model IDs are enabled and which selectors can resolve. It also validates `default_model`, `default_models`, and explicit `--<selector>` skill flags.
+- `default_model` controls ordinary single-response CLI calls where `-m` is omitted.
+- `default_models` controls workflow skills that fan out to multiple model calls; it preserves order and duplicates, so `[openai, openai]` intentionally samples OpenAI twice.
+
+If `default_models` is unset, workflow skills default to the enabled models after applying `allowed_models` and backend availability. If `default_models` names a model excluded by `allowed_models`, config loading fails instead of silently using it.
 
 Example `~/.config/consult-llm/config.yaml`:
 
 ```yaml
-default_model: gemini
-default_models: [gemini, openai, openai]
+allowed_models: [gemini-3.1-pro-preview, gpt-5.5]
+default_model: gpt-5.5
+default_models: [gpt-5.5, gpt-5.5]
 
 gemini:
   backend: gemini-cli
@@ -670,7 +677,8 @@ Environment variables override config file values.
 | `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                   |                                          |
 | `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                   |                                          |
 | `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                   |                                          |
-| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use when `-m` is omitted                 | selector or exact model ID                        | first available                          |
+| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use for single-response calls when `-m` is omitted | selector or exact model ID                        | first available                          |
+| `CONSULT_LLM_DEFAULT_MODELS`             | Comma-separated ordered fan-out defaults for workflow skills; duplicates are preserved | selectors or exact model IDs                      | enabled models                           |
 | `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`        | `api`                                    |
 | `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`         | `api`                                    |
 | `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                                  | `api`                                    |
@@ -792,7 +800,7 @@ Platforms supported:
 
 ### Workflow skills
 
-All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, multi-model skills use the `Default models:` list printed by `consult-llm models`, which comes from `default_models` and may intentionally repeat a model.
+All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, multi-model skills use the ordered `Default models` list printed by `consult-llm models`, which comes from `default_models`; duplicate entries are intentional and preserved.
 
 - [`consult`](skills/consult/SKILL.md): ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
 - [`collab`](skills/collab/SKILL.md): multiple LLMs brainstorm together, building on each other's ideas

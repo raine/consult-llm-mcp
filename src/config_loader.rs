@@ -81,6 +81,13 @@ impl LayeredEnv {
             if let Some(v) = map.get(key) {
                 return Some((v.clone(), src.clone()));
             }
+            if matches!(
+                key,
+                "CONSULT_LLM_DEFAULT_MODEL" | "CONSULT_LLM_DEFAULT_MODELS"
+            ) && map.contains_key("CONSULT_LLM_ALLOWED_MODELS")
+            {
+                return None;
+            }
         }
         None
     }
@@ -155,6 +162,57 @@ mod tests {
         let env = LayeredEnv::load(&paths).unwrap();
         // Use a key unlikely to be set in the test environment
         assert!(env.lookup("CONSULT_LLM_NONEXISTENT_KEY_XYZ").is_none());
+    }
+
+    #[test]
+    fn test_project_allowed_models_blocks_user_default_models() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_path = write_yaml(&dir, "project.yaml", "allowed_models: [gpt-5.5]\n");
+        let user_path = write_yaml(
+            &dir,
+            "user.yaml",
+            "default_models: [gpt-5.5, deepseek-v4-pro]\n",
+        );
+        let paths = DiscoveredPaths {
+            user: Some(user_path),
+            project: Some(project_path),
+            project_local: None,
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+        assert!(env.lookup("CONSULT_LLM_DEFAULT_MODELS").is_none());
+    }
+
+    #[test]
+    fn test_project_allowed_models_blocks_user_default_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_path = write_yaml(&dir, "project.yaml", "allowed_models: [gpt-5.5]\n");
+        let user_path = write_yaml(&dir, "user.yaml", "default_model: deepseek-v4-pro\n");
+        let paths = DiscoveredPaths {
+            user: Some(user_path),
+            project: Some(project_path),
+            project_local: None,
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+        assert!(env.lookup("CONSULT_LLM_DEFAULT_MODEL").is_none());
+    }
+
+    #[test]
+    fn test_project_default_models_still_beats_user_with_allowed_models() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_path = write_yaml(
+            &dir,
+            "project.yaml",
+            "allowed_models: [gpt-5.5]\ndefault_models: [gpt-5.5, gpt-5.5]\n",
+        );
+        let user_path = write_yaml(&dir, "user.yaml", "default_models: [deepseek-v4-pro]\n");
+        let paths = DiscoveredPaths {
+            user: Some(user_path),
+            project: Some(project_path),
+            project_local: None,
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+        let (val, _) = env.lookup("CONSULT_LLM_DEFAULT_MODELS").unwrap();
+        assert_eq!(val, "gpt-5.5,gpt-5.5");
     }
 
     #[test]
