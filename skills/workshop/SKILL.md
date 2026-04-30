@@ -29,6 +29,7 @@ Check `$ARGUMENTS` for flags:
 - `--max-approaches N` — cap how many distinct approaches surface in Phase 2 after dedup. Default `4`. Min `2`, max `5`.
 - `--no-critique` — skip the Phase 4 multi-LLM critique pass on the finalized design.
 - `--no-save` — print the design at the end but do not write to `history/`.
+- `--consult-first` — before Phase 1, fan the user's raw description out to the selected experts to surface clarifying dimensions and candidate options. Phase 1 then walks the user through those LLM-suggested questions step by step instead of starting from scratch. 
 
 Strip all flags from arguments to get the user's initial idea description. If empty, ask the user to describe their idea before continuing.
 
@@ -36,9 +37,49 @@ Strip all flags from arguments to get the user's initial idea description. If em
 
 Load it now. Follow its invocation contract for every CLI call.
 
+## Phase 0.5: Consult-first (only with `--consult-first`)
+
+Skip this phase unless `--consult-first` was passed. When enabled, this phase runs **before** Phase 1 and produces a list of clarifying questions (with candidate options) that drive Phase 1.
+
+Fan the raw user description to all selected experts in a single parallel `consult-llm` call. Pass relevant codebase files as `-f <path>` if the description references them. Capture the `[thread_id:group_xxx]` from line 1 — reuse it as the Phase 2 group thread so experts retain context.
+
+**Consult-first prompt:**
+
+```
+A user has a rough idea they want to design a solution for. The idea is not yet clarified — your job is NOT to propose approaches. Your job is to surface the questions that must be answered before approaches can be proposed.
+
+User's raw description:
+[verbatim user description]
+
+Output 4–8 clarifying questions a designer would need answered before committing to an approach. For each question, output exactly:
+
+### Question <N>: <short label>
+**Why it matters:** <one sentence on what hinges on the answer>
+**Candidate options:**
+- <option 1 — 1–5 word label> — <one-line description>
+- <option 2 — ...>
+- <option 3 — ...>
+- (2–4 options per question; the user can always answer "Other")
+
+Focus on questions where different answers lead to materially different designs (scope, constraints, success criteria, hard limits, existing patterns to preserve). Skip cosmetic or trivially-answerable questions. Do not propose solutions or approaches.
+```
+
+**Synthesize the questions:**
+
+- Collect all questions across experts.
+- Group near-duplicates (same dimension, different surface label); merge their option sets, deduping options.
+- Drop questions that are obviously irrelevant or already answered by the user's description.
+- Order by dependency — questions whose answers constrain later questions go first (e.g. scope before performance budget).
+
+The result is an ordered list of questions, each with 2–4 deduped candidate options. Carry this list into Phase 1.
+
 ## Phase 1: Clarify the idea (user dialogue, no LLMs)
 
-This phase is purely user + agent. Do not call external LLMs yet — premature LLM input anchors on a half-formed framing and pollutes Phase 2.
+This phase is purely user + agent. Do not call external LLMs in this phase — Phase 0.5 already gathered LLM input on what to ask; further LLM calls here would anchor on a half-formed framing and pollute Phase 2.
+
+**With `--consult-first`:** walk the synthesized question list from Phase 0.5 one question at a time via `AskUserQuestion`, using the LLM-suggested options (plus "Other"). After each answer, decide whether the next pre-built question still applies; drop or rephrase ones the answer made obsolete. You may also insert your own follow-up questions when an answer surfaces a gap the LLM list didn't anticipate. Stop when the problem statement is tight — don't grind through every pre-built question if you have enough.
+
+**Without `--consult-first`:** clarify from scratch as below.
 
 1. If the idea references the codebase, explore briefly with Glob/Grep/Read to ground later questions.
 2. Use `AskUserQuestion` to ask clarifying questions **one at a time**:
@@ -86,7 +127,7 @@ Propose 2–3 distinct approaches. Approaches must differ in their underlying st
 Do not propose implementations or pseudo-code. Do not pick a winner. Do not soften trade-offs.
 ```
 
-Invoke `consult-llm` with one `-m <selector>` per expert and `-f` for relevant files. Capture the `[thread_id:group_xxx]` from line 1 — needed for Phase 4 critique continuation.
+Invoke `consult-llm` with one `-m <selector>` per expert and `-f` for relevant files. **With `--consult-first`:** pass `-t <group_thread_id>` from Phase 0.5 so experts retain the clarification context — only the finalized problem statement needs to go in the new prompt. Capture the `[thread_id:group_xxx]` from line 1 — needed for Phase 4 critique continuation.
 
 ### Synthesize approaches
 
@@ -219,7 +260,7 @@ Print the saved path and a one-paragraph recap of the chosen approach to the use
 
 ## Critical rules
 
-- **Phase 1 is LLM-free.** No external calls until the problem statement is tight. Premature LLM input anchors on bad framing.
+- **Phase 1 is LLM-free.** No external calls during user dialogue. With `--consult-first`, LLMs are called once in Phase 0.5 to seed the question list, then Phase 1 dialogue itself stays LLM-free.
 - **Phase 2 experts are independent.** A single parallel `consult-llm` call with one `-m` per expert; never show one expert's proposals to another in this phase. Anchoring defeat is the whole point.
 - **Phase 3 is LLM-free.** The user is the human-in-the-loop. No mid-phase LLM interruptions.
 - **One question at a time.** All `AskUserQuestion` calls follow the brainstorm rule — single question, 2–4 options, "Other" available.
