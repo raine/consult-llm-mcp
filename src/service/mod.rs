@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -5,7 +6,7 @@ use crate::catalog::ModelRegistry;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
-use crate::group_thread_store::{self, StoredGroup, is_group_id};
+use crate::group_thread_store::{self, GroupEntry, StoredGroup, is_group_id};
 use crate::llm::ExecutorProvider;
 use crate::prompt_builder::build_prompt;
 use crate::schema::{ConsultLlmArgs, GitDiffArgs, TaskMode};
@@ -47,10 +48,12 @@ pub enum ConsultOutcome {
     },
 }
 
+#[derive(Clone)]
 pub struct ConsultJob {
     pub model: String,
     pub prompt: String,
     pub thread_id: Option<String>,
+    pub entry_index: Option<usize>,
 }
 
 pub struct ConsultService {
@@ -102,7 +105,45 @@ fn build_shared_inputs_from_files(
     })
 }
 
+fn merge_group_entries(
+    existing_group: Option<&StoredGroup>,
+    results: &[SingleResult],
+) -> anyhow::Result<Vec<GroupEntry>> {
+    let mut entries = existing_group
+        .map(|g| g.entries.clone())
+        .unwrap_or_default();
+
+    for r in results {
+        if r.failed {
+            continue;
+        }
+        let Some(tid) = &r.thread_id else {
+            continue;
+        };
+        let entry = GroupEntry {
+            model: r.model.clone(),
+            thread_id: tid.clone(),
+        };
+        if let Some(idx) = r.entry_index {
+            let Some(slot) = entries.get_mut(idx) else {
+                anyhow::bail!("matched group entry index {idx} is out of bounds");
+            };
+            *slot = entry;
+        } else {
+            entries.push(entry);
+        }
+    }
+
+    Ok(entries)
+}
+
 fn assemble_group_markdown(group_id: &str, results: &[SingleResult]) -> String {
+    let mut counts: HashMap<&str, usize> = HashMap::new();
+    for r in results {
+        *counts.entry(&r.model).or_default() += 1;
+    }
+
+    let mut seen: HashMap<&str, usize> = HashMap::new();
     let mut out = format!("[thread_id:{group_id}]");
     for (idx, r) in results.iter().enumerate() {
         if idx == 0 {
@@ -110,7 +151,14 @@ fn assemble_group_markdown(group_id: &str, results: &[SingleResult]) -> String {
         } else {
             out.push_str("\n\n---\n\n");
         }
-        out.push_str(&format!("## Model: {}\n[model:{}]", r.model, r.model));
+        let label = if counts[&r.model.as_str()] > 1 {
+            let n = seen.entry(&r.model).or_default();
+            *n += 1;
+            format!("{}#{}", r.model, *n)
+        } else {
+            r.model.clone()
+        };
+        out.push_str(&format!("## Model: {label}\n[model:{label}]"));
         if let Some(tid) = &r.thread_id {
             out.push_str(&format!(" [thread_id:{tid}]"));
         }
@@ -144,10 +192,13 @@ impl ConsultService {
 
         let jobs: Vec<ConsultJob> = models
             .iter()
-            .map(|m| ConsultJob {
+            .zip(plan.threads.iter())
+            .zip(plan.matched_entry_indices.iter())
+            .map(|((m, thread_id), entry_index)| ConsultJob {
                 model: m.clone(),
                 prompt: args.prompt.clone(),
-                thread_id: plan.threads.get(m).cloned().flatten(),
+                thread_id: thread_id.clone(),
+                entry_index: *entry_index,
             })
             .collect();
 
@@ -183,6 +234,7 @@ impl ConsultService {
         unwrap_single: bool,
     ) -> anyhow::Result<ConsultOutcome> {
         let models: Vec<String> = jobs.iter().map(|j| j.model.clone()).collect();
+        let result_jobs = jobs.clone();
 
         let executors: Vec<Arc<dyn LlmExecutor>> = models
             .iter()
@@ -203,6 +255,7 @@ impl ConsultService {
                             job.model,
                             exec,
                             job.thread_id,
+                            job.entry_index,
                             job.prompt,
                             task_mode,
                         )
@@ -231,14 +284,15 @@ impl ConsultService {
 
         // Multi-model path: collect successes, render errors inline.
         let mut results: Vec<SingleResult> = Vec::new();
-        for (model, outcome) in models.iter().zip(outcomes) {
+        for (job, outcome) in result_jobs.iter().zip(outcomes) {
             match outcome {
                 Ok(r) => results.push(r),
                 Err(e) => results.push(SingleResult {
-                    model: model.clone(),
+                    model: job.model.clone(),
                     body: format!("**Error:** {e:#}"),
                     usage: None,
                     thread_id: None,
+                    entry_index: job.entry_index,
                     failed: true,
                 }),
             }
@@ -277,42 +331,9 @@ impl ConsultService {
                 );
             }
 
-            let mut members = existing_group
-                .as_ref()
-                .map(|g| g.members.clone())
-                .unwrap_or_default();
-
-            // Preserve the existing display order; only append models new to this group.
-            let mut member_order: Vec<String> = existing_group
-                .as_ref()
-                .map(|g| {
-                    if g.member_order.is_empty() {
-                        g.members.keys().cloned().collect()
-                    } else {
-                        g.member_order.clone()
-                    }
-                })
-                .unwrap_or_default();
-
-            for r in &results {
-                // Only record a model in the group if we actually captured a
-                // thread id for it — otherwise a later resume that picks the
-                // model from member_order would fail in plan_resume because
-                // there's no member entry to look up.
-                if !r.failed
-                    && let Some(tid) = &r.thread_id
-                {
-                    members.insert(r.model.clone(), tid.clone());
-                    if !member_order.contains(&r.model) {
-                        member_order.push(r.model.clone());
-                    }
-                }
-            }
-
             group_thread_store::save(&StoredGroup {
                 id: group_id.clone(),
-                members,
-                member_order,
+                entries: merge_group_entries(existing_group.as_ref(), &results)?,
             })
         })?;
 
@@ -349,5 +370,119 @@ impl ConsultService {
             clipboard_text,
             file_count,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn result(
+        model: &str,
+        thread_id: Option<&str>,
+        entry_index: Option<usize>,
+        failed: bool,
+    ) -> SingleResult {
+        SingleResult {
+            model: model.into(),
+            body: format!("body for {model}"),
+            usage: None,
+            thread_id: thread_id.map(str::to_string),
+            entry_index,
+            failed,
+        }
+    }
+
+    #[test]
+    fn group_markdown_suffixes_only_duplicate_models() {
+        let out = assemble_group_markdown(
+            "group_abc",
+            &[
+                result("gpt-5.2", Some("api_1"), None, false),
+                result("gemini-2.5-pro", Some("api_g"), None, false),
+                result("gpt-5.2", Some("api_2"), None, false),
+            ],
+        );
+        assert!(out.contains("## Model: gpt-5.2#1\n[model:gpt-5.2#1] [thread_id:api_1]"));
+        assert!(out.contains("## Model: gemini-2.5-pro\n[model:gemini-2.5-pro] [thread_id:api_g]"));
+        assert!(out.contains("## Model: gpt-5.2#2\n[model:gpt-5.2#2] [thread_id:api_2]"));
+    }
+
+    #[test]
+    fn group_markdown_distinct_models_stays_plain() {
+        let out = assemble_group_markdown(
+            "group_abc",
+            &[
+                result("gpt-5.2", Some("api_1"), None, false),
+                result("gemini-2.5-pro", Some("api_g"), None, false),
+            ],
+        );
+        assert!(out.contains("## Model: gpt-5.2\n[model:gpt-5.2] [thread_id:api_1]"));
+        assert!(out.contains("## Model: gemini-2.5-pro\n[model:gemini-2.5-pro] [thread_id:api_g]"));
+        assert!(!out.contains("#1"));
+    }
+
+    #[test]
+    fn merge_group_entries_preserves_failed_resume_position() {
+        let existing = StoredGroup {
+            id: "group_abc".into(),
+            entries: vec![
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_old_1".into(),
+                },
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_old_2".into(),
+                },
+            ],
+        };
+        let entries = merge_group_entries(
+            Some(&existing),
+            &[
+                result("gpt-5.2", None, Some(0), true),
+                result("gpt-5.2", Some("api_new_2"), Some(1), false),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            entries,
+            vec![
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_old_1".into(),
+                },
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_new_2".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_group_entries_appends_first_turn_successes() {
+        let entries = merge_group_entries(
+            None,
+            &[
+                result("gpt-5.2", Some("api_1"), None, false),
+                result("gpt-5.2", None, None, true),
+                result("gpt-5.2", Some("api_3"), None, false),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            entries,
+            vec![
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_1".into(),
+                },
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_3".into(),
+                },
+            ]
+        );
     }
 }

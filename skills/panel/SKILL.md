@@ -37,7 +37,7 @@ After picking, **show the chosen roles to the user before Round 1** so they can 
 - `--diff-base <ref>` — review mode only. Default is auto-detected (see Phase 1). Pass an explicit ref to override.
 - `--react` — opt in to a second round where each role responds to the agent's draft synthesis on its own thread.
 
-**Model assignment:** any `--<selector>` from the Models block selects a backing model. Repeat for multiple. With no selectors, use all listed selectors in their listed order. Roles map to selectors positionally — first role to first selector, etc. Each role must end up on a **distinct** resolved model (`--run` rejects duplicates).
+**Model assignment:** any `--<selector>` from the Models block selects a backing model. Repeat for multiple. With no selectors, use all listed selectors in their listed order. Roles map to selectors positionally — first role to first selector, etc. This workflow requires each role to end up on a **distinct** resolved model; enforce that before invoking `--run`.
 
 Strip all flags; the remainder is the panel focus. In `design` mode, treat it as the proposal/decision under analysis. In `review` mode, treat it as optional review focus.
 
@@ -208,7 +208,7 @@ Print the saved path and a short final-recommendation summary to the user.
 ## Critical rules
 
 - **Strict asymmetry.** Each role gets only its own persona prompt. Never leak other roles' prompts. Roles drifting into general commentary weaken the panel — enforce focus through the persona framing.
-- **Distinct models per role.** `--run` rejects duplicates. Fail fast with the error format above.
+- **Distinct models per role.** Validate this workflow's distinct-model requirement before invoking `--run`. Fail fast with the error format above.
 - **Mode → task mapping.** `design` ⇒ `--task plan`. `review` ⇒ `--task review` plus `--diff-files`/`--diff-base`.
 - **`--react` continues threads.** Do not start fresh threads for the reaction round.
 - **Defer to security on safety conflicts. Prefer simpler when trade-offs balance.**

@@ -14,6 +14,7 @@ pub struct SingleResult {
     pub body: String,
     pub usage: Option<Usage>,
     pub thread_id: Option<String>,
+    pub entry_index: Option<usize>,
     pub failed: bool,
 }
 
@@ -22,6 +23,7 @@ pub fn run_single_model(
     model: String,
     executor: Arc<dyn LlmExecutor>,
     thread_id: Option<String>,
+    entry_index: Option<usize>,
     prompt: String,
     task_mode: TaskMode,
 ) -> anyhow::Result<SingleResult> {
@@ -147,6 +149,7 @@ pub fn run_single_model(
         body,
         usage,
         thread_id: result_thread_id,
+        entry_index,
         failed: false,
     })
 }

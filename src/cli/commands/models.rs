@@ -20,5 +20,12 @@ pub fn run() -> anyhow::Result<()> {
             .unwrap_or("unknown");
         println!("  {m} ({backend})");
     }
+    println!("\nCapabilities:");
+    println!(
+        "  duplicate resolved models: supported via repeated -m or duplicate --run entries (max 5 total runs)"
+    );
+    println!(
+        "  duplicate output labels: ## Model: <id>#K only when a resolved model appears more than once"
+    );
     Ok(())
 }

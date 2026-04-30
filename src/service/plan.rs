@@ -1,12 +1,11 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::catalog::ModelRegistry;
 use crate::group_thread_store::{StoredGroup, is_group_id};
 use crate::schema::ModelSelector;
 
 #[derive(Debug)]
 pub struct ResumePlan {
-    pub threads: HashMap<String, Option<String>>,
+    pub threads: Vec<Option<String>>,
+    pub matched_entry_indices: Vec<Option<usize>>,
     pub group_id: Option<String>,
     pub unwrap_single: bool,
 }
@@ -19,29 +18,22 @@ pub fn normalize_models(
     let raw = match selector {
         Some(s) => s.into_vec(),
         None => match group_fallback {
-            Some(g) => {
-                if !g.member_order.is_empty() {
-                    g.member_order.clone()
-                } else {
-                    g.members.keys().cloned().collect()
-                }
-            }
+            Some(g) => g.entries.iter().map(|e| e.model.clone()).collect(),
             None => vec![registry.resolve_model(None)?],
         },
     };
     if raw.is_empty() {
         anyhow::bail!("`model` array must contain at least one entry");
     }
-    let mut resolved: Vec<String> = Vec::new();
-    let mut seen = HashSet::new();
-    for item in raw {
-        let concrete = registry.resolve_model(Some(&item))?;
-        if seen.insert(concrete.clone()) {
-            resolved.push(concrete);
-        }
+    if raw.len() > 5 {
+        anyhow::bail!(
+            "max 5 total runs per call, including duplicates (got {})",
+            raw.len()
+        );
     }
-    if resolved.len() > 5 {
-        anyhow::bail!("max 5 models per call (got {})", resolved.len());
+    let mut resolved: Vec<String> = Vec::with_capacity(raw.len());
+    for item in raw {
+        resolved.push(registry.resolve_model(Some(&item))?);
     }
     Ok(resolved)
 }
@@ -53,26 +45,35 @@ pub fn plan_resume(
 ) -> anyhow::Result<ResumePlan> {
     match (thread_id, loaded_group) {
         (None, _) => Ok(ResumePlan {
-            threads: resolved_models.iter().map(|m| (m.clone(), None)).collect(),
+            threads: vec![None; resolved_models.len()],
+            matched_entry_indices: vec![None; resolved_models.len()],
             group_id: None,
             unwrap_single: resolved_models.len() == 1,
         }),
         (Some(tid), Some(group)) if is_group_id(tid) => {
-            let mut threads = HashMap::new();
+            let mut threads = Vec::with_capacity(resolved_models.len());
+            let mut matched_entry_indices = Vec::with_capacity(resolved_models.len());
+            let mut consumed = vec![false; group.entries.len()];
             for m in resolved_models {
-                let Some(member_tid) = group.members.get(m) else {
+                let Some((idx, entry)) = group
+                    .entries
+                    .iter()
+                    .enumerate()
+                    .find(|(idx, entry)| !consumed[*idx] && entry.model == *m)
+                else {
                     anyhow::bail!(
-                        "group {tid} has no member for model {m}; group members: {:?}",
-                        group.members.keys().collect::<Vec<_>>()
+                        "group {tid} has no remaining member for model {m}; group entries: {:?}",
+                        group.entries.iter().map(|e| &e.model).collect::<Vec<_>>()
                     );
                 };
-                threads.insert(m.clone(), Some(member_tid.clone()));
+                consumed[idx] = true;
+                threads.push(Some(entry.thread_id.clone()));
+                matched_entry_indices.push(Some(idx));
             }
             Ok(ResumePlan {
                 threads,
+                matched_entry_indices,
                 group_id: Some(tid.to_string()),
-                // Always use the group output path when resuming a group thread,
-                // even if only one model is selected, so the group ID is preserved.
                 unwrap_single: false,
             })
         }
@@ -85,10 +86,9 @@ pub fn plan_resume(
                     "per-model thread_id cannot be used with multiple models; pass a group thread id or omit thread_id"
                 );
             }
-            let mut threads = HashMap::new();
-            threads.insert(resolved_models[0].clone(), Some(tid.to_string()));
             Ok(ResumePlan {
-                threads,
+                threads: vec![Some(tid.to_string())],
+                matched_entry_indices: vec![None],
                 group_id: None,
                 unwrap_single: true,
             })
@@ -98,10 +98,9 @@ pub fn plan_resume(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use super::*;
     use crate::catalog::ModelRegistry;
+    use crate::group_thread_store::GroupEntry;
 
     fn reg() -> ModelRegistry {
         ModelRegistry {
@@ -113,6 +112,13 @@ mod tests {
             ],
             fallback_model: "gpt-5.2".into(),
             default_model: None,
+        }
+    }
+
+    fn entry(model: &str, thread_id: &str) -> GroupEntry {
+        GroupEntry {
+            model: model.into(),
+            thread_id: thread_id.into(),
         }
     }
 
@@ -130,7 +136,7 @@ mod tests {
     }
 
     #[test]
-    fn normalize_dedupes_after_resolution() {
+    fn normalize_preserves_duplicates_after_resolution() {
         let out = normalize_models(
             &reg(),
             Some(ModelSelector::Many(vec![
@@ -141,38 +147,36 @@ mod tests {
             None,
         )
         .unwrap();
-        assert_eq!(out, vec!["gemini-3.1-pro-preview", "gpt-5.4"]);
+        assert_eq!(
+            out,
+            vec![
+                "gemini-3.1-pro-preview",
+                "gemini-3.1-pro-preview",
+                "gpt-5.4"
+            ]
+        );
     }
 
     #[test]
-    fn normalize_caps_at_5() {
-        // Need 6 distinct resolvable models — build a registry with 6 allowed models.
-        let big_reg = ModelRegistry {
-            allowed_models: vec![
-                "m1".into(),
-                "m2".into(),
-                "m3".into(),
-                "m4".into(),
-                "m5".into(),
-                "m6".into(),
-            ],
-            fallback_model: "m1".into(),
-            default_model: None,
-        };
+    fn normalize_caps_at_5_including_duplicates() {
         let out = normalize_models(
-            &big_reg,
+            &reg(),
             Some(ModelSelector::Many(vec![
-                "m1".into(),
-                "m2".into(),
-                "m3".into(),
-                "m4".into(),
-                "m5".into(),
-                "m6".into(),
+                "openai".into(),
+                "openai".into(),
+                "openai".into(),
+                "openai".into(),
+                "openai".into(),
+                "openai".into(),
             ])),
             None,
         );
         assert!(out.is_err());
-        assert!(out.unwrap_err().to_string().contains("max 5"));
+        assert!(
+            out.unwrap_err()
+                .to_string()
+                .contains("including duplicates")
+        );
     }
 
     #[test]
@@ -182,19 +186,17 @@ mod tests {
     }
 
     #[test]
-    fn normalize_falls_back_to_group_members() {
-        let mut members = BTreeMap::new();
-        members.insert("gpt-5.2".to_string(), "api_x".to_string());
-        members.insert("gemini-2.5-pro".to_string(), "api_y".to_string());
+    fn normalize_falls_back_to_group_entries() {
         let group = StoredGroup {
             id: "group_abc".into(),
-            members,
-            member_order: vec![],
+            entries: vec![
+                entry("gpt-5.2", "api_x"),
+                entry("gpt-5.2", "api_y"),
+                entry("gemini-2.5-pro", "api_z"),
+            ],
         };
         let out = normalize_models(&reg(), None, Some(&group)).unwrap();
-        assert_eq!(out.len(), 2);
-        assert!(out.contains(&"gpt-5.2".to_string()));
-        assert!(out.contains(&"gemini-2.5-pro".to_string()));
+        assert_eq!(out, vec!["gpt-5.2", "gpt-5.2", "gemini-2.5-pro"]);
     }
 
     #[test]
@@ -202,6 +204,7 @@ mod tests {
         let plan = plan_resume(None, &["gpt-5.2".into()], None).unwrap();
         assert!(plan.unwrap_single);
         assert!(plan.group_id.is_none());
+        assert_eq!(plan.threads, vec![None]);
     }
 
     #[test]
@@ -209,6 +212,7 @@ mod tests {
         let plan = plan_resume(None, &["gpt-5.2".into(), "gemini-2.5-pro".into()], None).unwrap();
         assert!(!plan.unwrap_single);
         assert!(plan.group_id.is_none());
+        assert_eq!(plan.threads, vec![None, None]);
     }
 
     #[test]
@@ -223,24 +227,25 @@ mod tests {
     }
 
     #[test]
+    fn plan_resume_per_model_tid_with_duplicate_multi_errors() {
+        let err =
+            plan_resume(Some("api_xxx"), &["gpt-5.2".into(), "gpt-5.2".into()], None).unwrap_err();
+        assert!(err.to_string().contains("per-model thread_id"));
+    }
+
+    #[test]
     fn plan_resume_per_model_tid_single() {
         let plan = plan_resume(Some("api_xxx"), &["gpt-5.2".into()], None).unwrap();
         assert!(plan.unwrap_single);
-        assert_eq!(
-            plan.threads.get("gpt-5.2").unwrap(),
-            &Some("api_xxx".to_string())
-        );
+        assert_eq!(plan.threads, vec![Some("api_xxx".to_string())]);
+        assert_eq!(plan.matched_entry_indices, vec![None]);
     }
 
     #[test]
     fn plan_resume_group_tid_member_subset() {
-        let mut members = BTreeMap::new();
-        members.insert("gpt-5.2".to_string(), "api_x".to_string());
-        members.insert("gemini-2.5-pro".to_string(), "api_y".to_string());
         let group = StoredGroup {
             id: "group_abc".into(),
-            members,
-            member_order: vec![],
+            entries: vec![entry("gpt-5.2", "api_x"), entry("gemini-2.5-pro", "api_y")],
         };
         let plan = plan_resume(
             Some("group_abc"),
@@ -250,24 +255,63 @@ mod tests {
         .unwrap();
         assert_eq!(plan.group_id.as_deref(), Some("group_abc"));
         assert_eq!(
-            plan.threads.get("gpt-5.2").unwrap(),
-            &Some("api_x".to_string())
+            plan.threads,
+            vec![Some("api_x".to_string()), Some("api_y".to_string())]
         );
+        assert_eq!(plan.matched_entry_indices, vec![Some(0), Some(1)]);
+    }
+
+    #[test]
+    fn plan_resume_group_tid_duplicate_greedy() {
+        let group = StoredGroup {
+            id: "group_abc".into(),
+            entries: vec![
+                entry("gpt-5.2", "api_1"),
+                entry("gemini-2.5-pro", "api_g"),
+                entry("gpt-5.2", "api_2"),
+            ],
+        };
+        let plan = plan_resume(
+            Some("group_abc"),
+            &["gpt-5.2".into(), "gpt-5.2".into()],
+            Some(group),
+        )
+        .unwrap();
         assert_eq!(
-            plan.threads.get("gemini-2.5-pro").unwrap(),
-            &Some("api_y".to_string())
+            plan.threads,
+            vec![Some("api_1".to_string()), Some("api_2".to_string())]
         );
+        assert_eq!(plan.matched_entry_indices, vec![Some(0), Some(2)]);
+    }
+
+    #[test]
+    fn plan_resume_group_tid_duplicate_subset_consumes_first_match() {
+        let group = StoredGroup {
+            id: "group_abc".into(),
+            entries: vec![
+                entry("gpt-5.2", "api_1"),
+                entry("gpt-5.2", "api_2"),
+                entry("gemini-2.5-pro", "api_g"),
+            ],
+        };
+        let plan = plan_resume(
+            Some("group_abc"),
+            &["gpt-5.2".into(), "gemini-2.5-pro".into()],
+            Some(group),
+        )
+        .unwrap();
+        assert_eq!(
+            plan.threads,
+            vec![Some("api_1".to_string()), Some("api_g".to_string())]
+        );
+        assert_eq!(plan.matched_entry_indices, vec![Some(0), Some(2)]);
     }
 
     #[test]
     fn plan_resume_group_tid_single_member_unwraps() {
-        let mut members = BTreeMap::new();
-        members.insert("gpt-5.2".to_string(), "api_x".to_string());
-        members.insert("gemini-2.5-pro".to_string(), "api_y".to_string());
         let group = StoredGroup {
             id: "group_abc".into(),
-            members,
-            member_order: vec![],
+            entries: vec![entry("gpt-5.2", "api_x"), entry("gemini-2.5-pro", "api_y")],
         };
         let plan = plan_resume(Some("group_abc"), &["gpt-5.2".into()], Some(group)).unwrap();
         assert!(
@@ -279,16 +323,28 @@ mod tests {
 
     #[test]
     fn plan_resume_group_tid_model_not_in_group_errors() {
-        let mut members = BTreeMap::new();
-        members.insert("gpt-5.2".to_string(), "api_x".to_string());
         let group = StoredGroup {
             id: "group_abc".into(),
-            members,
-            member_order: vec![],
+            entries: vec![entry("gpt-5.2", "api_x")],
         };
         let err =
             plan_resume(Some("group_abc"), &["gemini-2.5-pro".into()], Some(group)).unwrap_err();
-        assert!(err.to_string().contains("no member for model"));
+        assert!(err.to_string().contains("no remaining member for model"));
+    }
+
+    #[test]
+    fn plan_resume_group_tid_duplicate_not_enough_matches_errors() {
+        let group = StoredGroup {
+            id: "group_abc".into(),
+            entries: vec![entry("gpt-5.2", "api_x")],
+        };
+        let err = plan_resume(
+            Some("group_abc"),
+            &["gpt-5.2".into(), "gpt-5.2".into()],
+            Some(group),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("no remaining member for model"));
     }
 
     #[test]

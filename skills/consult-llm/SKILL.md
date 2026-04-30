@@ -36,7 +36,7 @@ Selectors and allowed models resolvable in this environment (availability depend
 
 Pass a selector or an exact model ID to `-m`. Only enabled selectors are listed — anything not shown has no available model. **Usually omit `-m`** to use the configured default; pass it explicitly only when the user names a specific model. `-m` is ignored when `--web` is used.
 
-**Multi-model:** repeat `-m` to consult multiple models in parallel (e.g. `-m gemini -m openai`, max 5). The response is a group format: first line is `[thread_id:group_xxx]`, each model's answer under a `## Model: <id>` header preceded by `[model:<id>] [thread_id:<per-model-id>]`. Pass `-t group_xxx` to resume all models together on the next turn; pass an individual per-model thread ID with a single `-m <model>` to resume just that model while keeping the group context.
+**Multi-model:** repeat `-m` to consult multiple model positions in parallel (e.g. `-m gemini -m openai`, max 5 total runs). You may repeat the same selector/model (e.g. `-m openai -m openai`) to get independent calls with the same prompt. The response is a group format: first line is `[thread_id:group_xxx]`, each model's answer under a `## Model: <id>` header preceded by `[model:<id>] [thread_id:<per-model-id>]`. When the same resolved model appears more than once, only those duplicate sections use `## Model: <id>#K` and `[model:<id>#K]` labels. Pass `-t group_xxx` to resume all group positions together on the next turn; pass an individual per-model thread ID with a single `-m <model>` to resume just that model outside the group context.
 
 ## Task modes
 
@@ -96,14 +96,19 @@ consult-llm \
   --run "model=gemini,prompt-file=$GEMINI_PROMPT" \
   --run "model=openai,prompt-file=$CODEX_PROMPT"
 
-# Subsequent calls — continue each model's thread
+# Subsequent calls — continue each per-run thread
 consult-llm \
   --run "model=gemini,thread=$GEMINI_THREAD,prompt-file=$GEMINI_PROMPT" \
   --run "model=openai,thread=$CODEX_THREAD,prompt-file=$CODEX_PROMPT"
+
+# Duplicate resolved models are allowed; use distinct prompt files and distinct per-run threads.
+consult-llm \
+  --run "model=openai,prompt-file=$PROMPT_A" \
+  --run "model=openai,prompt-file=$PROMPT_B"
 ```
 
 Each `--run` value accepts `model=<selector-or-id>`, `prompt-file=<path>`, and optionally `thread=<id>`. Use `mktemp` for temporary prompt files and always use `__CONSULT_LLM_END__` as the heredoc terminator. Use `>|` to overwrite temp files in zsh (avoids `noclobber` errors).
 
-Constraints: max 5 runs, cannot combine with `-m`/`-t`/`--prompt-file`/`--web`, duplicate resolved models are rejected, shared `-f` and `--diff-*` context applies to every run, prompt-file paths with commas are unsupported.
+Constraints: max 5 total runs, cannot combine with `-m`/`-t`/`--prompt-file`/`--web`, duplicate resolved models are allowed, duplicate explicit `thread=<id>` values are rejected, `thread=group_*` is rejected because `--run` uses per-run thread IDs, shared `-f` and `--diff-*` context applies to every run, prompt-file paths with commas are unsupported.
 
-Output is the same group format as multi-model `-m` calls. Extract per-model thread IDs from `[thread_id:xxx]` in each model's section header for subsequent turns.
+Output is the same group format as multi-model `-m` calls. Extract per-run thread IDs from each section header for subsequent `--run thread=...` turns.

@@ -4,17 +4,81 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
 use fs2::FileExt;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroupEntry {
+    pub model: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StoredGroup {
     pub id: String,
-    /// model → per-model thread ID
-    pub members: BTreeMap<String, String>,
-    /// Ordered list of model IDs preserving original selection order.
-    /// Missing in groups written by older versions; falls back to BTreeMap key order.
-    #[serde(default)]
-    pub member_order: Vec<String>,
+    pub entries: Vec<GroupEntry>,
+}
+
+impl<'de> Deserialize<'de> for StoredGroup {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct RawStoredGroup {
+            id: String,
+            entries: Option<Vec<GroupEntry>>,
+            members: Option<BTreeMap<String, String>>,
+            #[serde(default)]
+            member_order: Vec<String>,
+        }
+
+        let raw = RawStoredGroup::deserialize(deserializer)?;
+        if raw.entries.is_some() && (raw.members.is_some() || !raw.member_order.is_empty()) {
+            return Err(serde::de::Error::custom(
+                "group JSON cannot contain both entries and legacy members/member_order",
+            ));
+        }
+
+        if let Some(entries) = raw.entries {
+            return Ok(StoredGroup {
+                id: raw.id,
+                entries,
+            });
+        }
+
+        let members = raw.members.unwrap_or_default();
+        let order = if raw.member_order.is_empty() {
+            members.keys().cloned().collect()
+        } else {
+            let mut seen = std::collections::HashSet::new();
+            for model in &raw.member_order {
+                if !seen.insert(model) {
+                    return Err(serde::de::Error::custom(format!(
+                        "legacy member_order contains duplicate model {model:?}"
+                    )));
+                }
+            }
+            raw.member_order
+        };
+
+        let mut entries = Vec::with_capacity(order.len());
+        for model in order {
+            let Some(thread_id) = members.get(&model) else {
+                return Err(serde::de::Error::custom(format!(
+                    "legacy member_order references missing member {model:?}"
+                )));
+            };
+            entries.push(GroupEntry {
+                model,
+                thread_id: thread_id.clone(),
+            });
+        }
+
+        Ok(StoredGroup {
+            id: raw.id,
+            entries,
+        })
+    }
 }
 
 fn groups_dir() -> PathBuf {
@@ -115,19 +179,101 @@ mod tests {
             std::env::set_var("XDG_STATE_HOME", tmp.path());
         }
         let id = generate_group_id();
-        let mut members = BTreeMap::new();
-        members.insert("gemini-2.5-pro".to_string(), "api_aaa".to_string());
-        members.insert("gpt-5.2".to_string(), "api_bbb".to_string());
-        let member_order = vec!["gemini-2.5-pro".to_string(), "gpt-5.2".to_string()];
+        let entries = vec![
+            GroupEntry {
+                model: "gemini-2.5-pro".to_string(),
+                thread_id: "api_aaa".to_string(),
+            },
+            GroupEntry {
+                model: "gpt-5.2".to_string(),
+                thread_id: "api_bbb".to_string(),
+            },
+        ];
         let group = StoredGroup {
             id: id.clone(),
-            members: members.clone(),
-            member_order: member_order.clone(),
+            entries: entries.clone(),
         };
         save(&group).unwrap();
         let loaded = load(&id).unwrap().expect("group should load");
         assert_eq!(loaded.id, id);
-        assert_eq!(loaded.members, members);
-        assert_eq!(loaded.member_order, member_order);
+        assert_eq!(loaded.entries, entries);
+    }
+
+    #[test]
+    fn legacy_group_loads_from_member_order() {
+        let json = r#"{
+            "id":"group_abc",
+            "members":{"gpt-5.2":"api_x","gemini-2.5-pro":"api_y"},
+            "member_order":["gemini-2.5-pro","gpt-5.2"]
+        }"#;
+        let group: StoredGroup = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            group.entries,
+            vec![
+                GroupEntry {
+                    model: "gemini-2.5-pro".into(),
+                    thread_id: "api_y".into(),
+                },
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_x".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn legacy_group_loads_from_member_key_order() {
+        let json = r#"{
+            "id":"group_abc",
+            "members":{"gpt-5.2":"api_x","gemini-2.5-pro":"api_y"}
+        }"#;
+        let group: StoredGroup = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            group.entries,
+            vec![
+                GroupEntry {
+                    model: "gemini-2.5-pro".into(),
+                    thread_id: "api_y".into(),
+                },
+                GroupEntry {
+                    model: "gpt-5.2".into(),
+                    thread_id: "api_x".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn legacy_group_errors_on_missing_order_member() {
+        let json = r#"{
+            "id":"group_abc",
+            "members":{"gpt-5.2":"api_x"},
+            "member_order":["gpt-5.2","gemini-2.5-pro"]
+        }"#;
+        let err = serde_json::from_str::<StoredGroup>(json).unwrap_err();
+        assert!(err.to_string().contains("missing member"));
+    }
+
+    #[test]
+    fn legacy_group_errors_on_duplicate_order_member() {
+        let json = r#"{
+            "id":"group_abc",
+            "members":{"gpt-5.2":"api_x"},
+            "member_order":["gpt-5.2","gpt-5.2"]
+        }"#;
+        let err = serde_json::from_str::<StoredGroup>(json).unwrap_err();
+        assert!(err.to_string().contains("duplicate model"));
+    }
+
+    #[test]
+    fn group_errors_on_mixed_schema() {
+        let json = r#"{
+            "id":"group_abc",
+            "entries":[{"model":"gpt-5.2","thread_id":"api_x"}],
+            "members":{"gpt-5.2":"api_x"}
+        }"#;
+        let err = serde_json::from_str::<StoredGroup>(json).unwrap_err();
+        assert!(err.to_string().contains("both entries and legacy"));
     }
 }

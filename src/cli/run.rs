@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::cli::run_spec::RunSpec;
@@ -39,6 +40,24 @@ pub fn build_args(cli: &Cli, prompt: String) -> ConsultLlmArgs {
     }
 }
 
+fn validate_run_threads(specs: &[RunSpec]) -> Result<(), String> {
+    let mut seen_threads = HashSet::new();
+    for spec in specs {
+        let Some(thread_id) = &spec.thread_id else {
+            continue;
+        };
+        if crate::group_thread_store::is_group_id(thread_id) {
+            return Err(format!(
+                "--run: thread= expects a per-model thread id, got group thread '{thread_id}'"
+            ));
+        }
+        if !seen_threads.insert(thread_id) {
+            return Err(format!("--run: duplicate explicit thread '{thread_id}'"));
+        }
+    }
+    Ok(())
+}
+
 pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
     if !cli.runs.is_empty() {
         if !cli.model.is_empty() || cli.thread_id.is_some() || cli.prompt_file.is_some() || cli.web
@@ -62,17 +81,13 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
 
         let registry = config::init_config().map_err(|e| input::CliError::Config(e.to_string()))?;
 
+        validate_run_threads(&specs).map_err(input::CliError::Generic)?;
+
         let mut jobs: Vec<ConsultJob> = Vec::with_capacity(specs.len());
-        let mut seen_models = std::collections::HashSet::new();
         for spec in &specs {
             let model = registry
                 .resolve_model(Some(&spec.model))
                 .map_err(|e| input::CliError::Generic(e.to_string()))?;
-            if !seen_models.insert(model.clone()) {
-                return Err(input::CliError::Generic(format!(
-                    "--run: duplicate resolved model '{model}'"
-                )));
-            }
             let prompt = std::fs::read_to_string(&spec.prompt_file).map_err(|e| {
                 input::CliError::Generic(format!(
                     "--run: cannot read prompt-file {:?}: {e}",
@@ -83,6 +98,7 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
                 model,
                 prompt,
                 thread_id: spec.thread_id.clone(),
+                entry_index: None,
             });
         }
 
@@ -148,4 +164,42 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn spec(model: &str, thread_id: Option<&str>) -> RunSpec {
+        RunSpec {
+            model: model.into(),
+            thread_id: thread_id.map(str::to_string),
+            prompt_file: "/tmp/prompt.md".into(),
+        }
+    }
+
+    #[test]
+    fn validate_run_threads_allows_duplicate_models_without_threads() {
+        validate_run_threads(&[spec("openai", None), spec("openai", None)]).unwrap();
+    }
+
+    #[test]
+    fn validate_run_threads_allows_duplicate_models_with_distinct_threads() {
+        validate_run_threads(&[spec("openai", Some("api_1")), spec("openai", Some("api_2"))])
+            .unwrap();
+    }
+
+    #[test]
+    fn validate_run_threads_rejects_duplicate_explicit_thread() {
+        let err =
+            validate_run_threads(&[spec("openai", Some("api_1")), spec("openai", Some("api_1"))])
+                .unwrap_err();
+        assert!(err.contains("duplicate explicit thread"));
+    }
+
+    #[test]
+    fn validate_run_threads_rejects_group_thread() {
+        let err = validate_run_threads(&[spec("openai", Some("group_abc"))]).unwrap_err();
+        assert!(err.contains("per-model thread id"));
+    }
 }
