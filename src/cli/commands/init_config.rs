@@ -2,6 +2,7 @@ const TEMPLATE: &str = r#"# consult-llm user config
 # See: https://github.com/raine/consult-llm#configuration
 
 # default_model: gemini
+# default_models: [gemini, openai, openai]
 # allowed_models: [gemini, openai]
 # extra_models: []
 

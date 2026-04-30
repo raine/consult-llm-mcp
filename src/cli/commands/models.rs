@@ -20,12 +20,28 @@ pub fn run() -> anyhow::Result<()> {
             .unwrap_or("unknown");
         println!("  {m} ({backend})");
     }
-    println!("\nCapabilities:");
-    println!(
-        "  duplicate resolved models: supported via repeated -m or duplicate --run entries (max 5 total runs)"
-    );
-    println!(
-        "  duplicate output labels: ## Model: <id>#K only when a resolved model appears more than once"
-    );
+    println!("\nDefault models:");
+    if cfg.default_models.is_empty() {
+        println!("  (none)");
+    } else {
+        for m in &cfg.default_models {
+            println!("  {m}");
+        }
+    }
+    println!("\nDefault -m args:");
+    if cfg.default_models.is_empty() {
+        println!("  (none)");
+    } else {
+        println!(
+            "  {}",
+            cfg.default_models
+                .iter()
+                .map(|m| format!("-m {m}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+    }
+    println!("\nOutput labels:");
+    println!("  duplicate resolved models use ## Model: <id>#K only when repeated");
     Ok(())
 }

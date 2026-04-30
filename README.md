@@ -409,7 +409,7 @@ consult-llm install-skills            # install bundled skills to platform skill
 consult-llm update                    # self-update the binary
 ```
 
-`consult-llm models` shows which models are active based on the configuration loaded for the current directory, useful for verifying that project-level config overrides and `allowed_models` restrictions are taking effect as expected.
+`consult-llm models` shows which models are active based on the configuration loaded for the current directory and prints `Default models:`, the ordered list workflow skills use when the user does not pass explicit model flags. The `Default -m args:` line is a convenience for same-prompt calls; `--run` workflows use the model list to build one `--run model=...` entry per prompt.
 
 `consult-llm doctor` checks that each provider's backend dependency (API key or CLI binary) is satisfied, shows which config files were loaded, and validates session storage. Pass `--verbose` to see all config keys including unset defaults.
 
@@ -568,6 +568,7 @@ Scaffold the user config and set values:
 ```bash
 consult-llm init-config
 consult-llm config set default_model gemini
+consult-llm config set default_models '[gemini, openai, openai]'
 consult-llm config set gemini.backend gemini-cli
 # Write to project config instead of user config:
 consult-llm config set --project default_model openai
@@ -582,10 +583,13 @@ consult-llm config set no_update_check true
 consult-llm config set allowed_models '[gemini, openai]'
 ```
 
+`default_model` controls ordinary single-response CLI calls where `-m` is omitted. `default_models` controls workflow skills that fan out to multiple model calls; it preserves order and duplicates, so `[openai, openai]` intentionally samples OpenAI twice.
+
 Example `~/.config/consult-llm/config.yaml`:
 
 ```yaml
 default_model: gemini
+default_models: [gemini, openai, openai]
 
 gemini:
   backend: gemini-cli
@@ -788,7 +792,7 @@ Platforms supported:
 
 ### Workflow skills
 
-All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, the multi-model skills default to consulting all available selectors.
+All workflow skills accept `--<selector>` flags matching the selectors reported by `consult-llm models` (e.g. `--gemini`, `--openai`, `--deepseek`). With no selector flag, multi-model skills use the `Default models:` list printed by `consult-llm models`, which comes from `default_models` and may intentionally repeat a model.
 
 - [`consult`](skills/consult/SKILL.md): ask one or more external LLMs; any number of `--<selector>` flags, plus `--browser` for clipboard/web mode
 - [`collab`](skills/collab/SKILL.md): multiple LLMs brainstorm together, building on each other's ideas

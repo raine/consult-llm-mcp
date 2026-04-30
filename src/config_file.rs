@@ -7,6 +7,7 @@ use crate::models::PROVIDER_SPECS;
 #[serde(deny_unknown_fields)]
 pub struct ConfigFile {
     pub default_model: Option<String>,
+    pub default_models: Option<Vec<String>>,
     pub allowed_models: Option<Vec<String>>,
     pub extra_models: Option<Vec<String>>,
     pub system_prompt_path: Option<String>,
@@ -90,6 +91,9 @@ impl ConfigFile {
         let mut m = HashMap::new();
         if let Some(v) = &self.default_model {
             m.insert("CONSULT_LLM_DEFAULT_MODEL".into(), v.clone());
+        }
+        if let Some(v) = &self.default_models {
+            m.insert("CONSULT_LLM_DEFAULT_MODELS".into(), v.join(","));
         }
         if let Some(v) = &self.allowed_models {
             m.insert("CONSULT_LLM_ALLOWED_MODELS".into(), v.join(","));
@@ -188,6 +192,7 @@ mod tests {
     fn test_to_env_map_fully_populated() {
         let cfg = ConfigFile {
             default_model: Some("gemini".into()),
+            default_models: Some(vec!["gemini".into(), "openai".into(), "openai".into()]),
             allowed_models: Some(vec!["gemini-2.5-pro".into(), "gpt-5.2".into()]),
             extra_models: Some(vec!["custom-model".into()]),
             system_prompt_path: Some("/path/to/prompt.md".into()),
@@ -216,6 +221,7 @@ mod tests {
 
         let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["CONSULT_LLM_DEFAULT_MODEL"], "gemini");
+        assert_eq!(m["CONSULT_LLM_DEFAULT_MODELS"], "gemini,openai,openai");
         assert_eq!(m["CONSULT_LLM_ALLOWED_MODELS"], "gemini-2.5-pro,gpt-5.2");
         assert_eq!(m["CONSULT_LLM_EXTRA_MODELS"], "custom-model");
         assert_eq!(m["CONSULT_LLM_SYSTEM_PROMPT_PATH"], "/path/to/prompt.md");

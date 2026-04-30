@@ -50,6 +50,7 @@ pub struct Config {
     pub(crate) providers: HashMap<Provider, ProviderRuntimeConfig>,
     #[allow(dead_code)]
     pub default_model: Option<String>,
+    pub default_models: Vec<String>,
     pub codex_reasoning_effort: String,
     pub codex_extra_args: Vec<String>,
     pub gemini_extra_args: Vec<String>,
@@ -91,6 +92,13 @@ pub enum ConfigError {
     InvalidDefaultModel {
         model: String,
         allowed: Vec<String>,
+    },
+    InvalidDefaultModels {
+        model: String,
+        allowed: Vec<String>,
+    },
+    TooManyDefaultModels {
+        count: usize,
     },
     InvalidCodexReasoningEffort(String),
     InvalidExtraArgs {
@@ -139,6 +147,23 @@ impl fmt::Display for ConfigError {
                     selectors.join(", ")
                 )
             }
+            ConfigError::InvalidDefaultModels { model, allowed } => {
+                let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
+                let opts = allowed
+                    .iter()
+                    .map(|m| format!("'{m}'"))
+                    .collect::<Vec<_>>()
+                    .join(" | ");
+                write!(
+                    f,
+                    "Invalid environment variables:\n  defaultModels: Invalid value '{model}'. Expected a selector ({}) or exact model ({opts})",
+                    selectors.join(", ")
+                )
+            }
+            ConfigError::TooManyDefaultModels { count } => write!(
+                f,
+                "Invalid environment variables:\n  defaultModels: max 5 total runs, including duplicates (got {count})"
+            ),
             ConfigError::InvalidCodexReasoningEffort(effort) => write!(
                 f,
                 "Invalid environment variables:\n  codexReasoningEffort: Invalid enum value. Expected 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh', received '{effort}'"

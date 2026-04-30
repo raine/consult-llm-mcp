@@ -12,7 +12,7 @@ pub struct ConfigArgs {
 pub enum ConfigCommand {
     /// Set a config value
     Set {
-        /// Config key in dot notation (e.g. gemini.backend, default_model)
+        /// Config key in dot notation (e.g. gemini.backend, default_model, default_models)
         key: String,
         /// Value to set (parsed as YAML: true/false, numbers, [a,b] lists)
         #[arg(allow_hyphen_values = true)]
