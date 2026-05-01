@@ -5,6 +5,16 @@ use std::time::Instant;
 use super::child_guard::ChildGuard;
 use crate::logger::log_cli_debug;
 
+const WORKMUX_DISABLE_SET_WINDOW_STATUS_ENV: &str = "WORKMUX_DISABLE_SET_WINDOW_STATUS";
+const WORKMUX_DISABLE_SET_WINDOW_STATUS_VALUE: &str = "1";
+
+fn apply_workmux_disable_env(cmd: &mut Command) {
+    cmd.env(
+        WORKMUX_DISABLE_SET_WINDOW_STATUS_ENV,
+        WORKMUX_DISABLE_SET_WINDOW_STATUS_VALUE,
+    );
+}
+
 #[derive(Debug)]
 pub struct CliResult {
     pub stdout_bytes: usize,
@@ -40,6 +50,7 @@ where
     let use_stdin = stdin_data.is_some();
     let start = Instant::now();
     let mut cmd = Command::new(command);
+    apply_workmux_disable_env(&mut cmd);
     cmd.args(args)
         .stdin(if use_stdin {
             Stdio::piped()
@@ -177,6 +188,34 @@ mod tests {
         let result = run_cli_streaming("sh", &args, None, None, |_| {}).expect("run");
         assert_eq!(result.code, Some(7));
         assert!(result.stderr.contains("oops"));
+    }
+
+    #[test]
+    fn sets_workmux_disable_env_for_child() {
+        let mut cmd = Command::new("sh");
+        cmd.env(WORKMUX_DISABLE_SET_WINDOW_STATUS_ENV, "0");
+        apply_workmux_disable_env(&mut cmd);
+
+        let value = cmd
+            .get_envs()
+            .find_map(|(key, value)| {
+                (key == WORKMUX_DISABLE_SET_WINDOW_STATUS_ENV).then_some(value)
+            })
+            .flatten();
+        assert_eq!(value, Some(std::ffi::OsStr::new("1")));
+    }
+
+    #[test]
+    fn workmux_disable_env_reaches_descendant_process() {
+        let args = vec![
+            "-c".to_string(),
+            "sh -c 'printf \"%s\\n\" \"$WORKMUX_DISABLE_SET_WINDOW_STATUS\"'".to_string(),
+        ];
+        let mut got = String::new();
+        let result =
+            run_cli_streaming("sh", &args, None, None, |l| got = l.to_string()).expect("run");
+        assert_eq!(result.code, Some(0));
+        assert_eq!(got, "1");
     }
 
     #[test]
