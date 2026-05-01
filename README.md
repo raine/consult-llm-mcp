@@ -22,8 +22,8 @@
 `consult-llm` is a tool for getting a second opinion from another AI model,
 right inside your existing agent workflow. Use it to plan architecture,
 review changes, debate approaches, or get unstuck on tricky bugs. It supports GPT-5.5, Gemini 3.1 Pro, Claude Opus 4.7,
-DeepSeek V4 Pro, and MiniMax M2.7, with API and local CLI backends, multi-turn
-threads, git diff context, web-mode clipboard export, and a live monitor TUI.
+DeepSeek V4 Pro, MiniMax M2.7, and Grok 4.3, with API and local CLI backends,
+multi-turn threads, git diff context, web-mode clipboard export, and a live monitor TUI.
 
 ## Why a second opinion?
 
@@ -100,7 +100,8 @@ Or set API keys:
 ```bash
 consult-llm config set openai.api_key your_openai_key
 consult-llm config set gemini.api_key your_gemini_key
-# or via environment variables: OPENAI_API_KEY, GEMINI_API_KEY, etc.
+consult-llm config set grok.api_key your_xai_key
+# or via environment variables: OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY, etc.
 ```
 
 3. Verify your setup:
@@ -417,7 +418,7 @@ consult-llm update                    # self-update the binary
 
 `consult-llm` separates **model families** from **backends**.
 
-A **model family** is what you ask for: `gemini`, `openai`, `deepseek`, `minimax`, or `anthropic`.
+A **model family** is what you ask for: `gemini`, `openai`, `deepseek`, `minimax`, `anthropic`, or `grok`.
 
 A **backend** is how `consult-llm` reaches that model family:
 
@@ -431,6 +432,7 @@ A **backend** is how `consult-llm` reaches that model family:
 | DeepSeek     | yes           | `opencode`                             | `DEEPSEEK_API_KEY`  |
 | MiniMax      | yes           | `opencode`                             | `MINIMAX_API_KEY`   |
 | Anthropic    | yes           | none                                   | `ANTHROPIC_API_KEY` |
+| Grok         | yes           | none                                   | `XAI_API_KEY`       |
 
 ### API backend
 
@@ -440,10 +442,12 @@ Direct HTTP calls to the provider. Requires an API key. Set it in your user conf
 # User config (recommended, persists across sessions)
 consult-llm config set openai.api_key your_openai_key
 consult-llm config set gemini.api_key your_gemini_key
+consult-llm config set grok.api_key your_xai_key
 
 # Or as environment variables
 export OPENAI_API_KEY=your_openai_key
 export GEMINI_API_KEY=your_gemini_key
+export XAI_API_KEY=your_xai_key
 ```
 
 The `api` backend is the default. To set it explicitly:
@@ -451,6 +455,7 @@ The `api` backend is the default. To set it explicitly:
 ```bash
 consult-llm config set gemini.backend api
 consult-llm config set openai.backend api
+consult-llm config set grok.backend api
 ```
 
 ### CLI backends
@@ -594,7 +599,7 @@ If `default_models` is unset, workflow skills default to the enabled models afte
 Example `~/.config/consult-llm/config.yaml`:
 
 ```yaml
-allowed_models: [gemini-3.1-pro-preview, gpt-5.5]
+allowed_models: [gemini-3.1-pro-preview, gpt-5.5, grok-4.3]
 default_model: gpt-5.5
 default_models: [gpt-5.5, gpt-5.5]
 
@@ -604,6 +609,9 @@ gemini:
 openai:
   backend: codex-cli
   reasoning_effort: high
+
+grok:
+  api_key: your_xai_key
 
 opencode:
   default_provider: copilot
@@ -620,6 +628,8 @@ openai:
   api_key: your_openai_key
 gemini:
   api_key: your_gemini_key
+grok:
+  api_key: your_xai_key
 ```
 
 **Project-local config** (`.consult-llm.local.yaml` in the repo root, gitignored), overrides the user config for that project:
@@ -638,6 +648,7 @@ API keys are **not** allowed in `.consult-llm.yaml` (the committed project confi
 - `ANTHROPIC_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `MINIMAX_API_KEY`
+- `XAI_API_KEY`
 
 **[direnv](https://direnv.net/)** is an alternative to `.consult-llm.local.yaml` for project-specific keys via environment variables. Add a `.envrc` in the repo root and `direnv allow` it, then put keys in a `.env` file (both gitignored):
 
@@ -677,6 +688,7 @@ Environment variables override config file values.
 | `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                   |                                          |
 | `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                   |                                          |
 | `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                   |                                          |
+| `XAI_API_KEY`                            | xAI API key for Grok models                                   |                                                   |                                          |
 | `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use for single-response calls when `-m` is omitted | selector or exact model ID                        | first available                          |
 | `CONSULT_LLM_DEFAULT_MODELS`             | Comma-separated ordered fan-out defaults for workflow skills; duplicates are preserved | selectors or exact model IDs                      | enabled models                           |
 | `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`        | `api`                                    |
@@ -684,6 +696,7 @@ Environment variables override config file values.
 | `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                                  | `api`                                    |
 | `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                                  | `api`                                    |
 | `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                             | `api`                                    |
+| `CONSULT_LLM_GROK_BACKEND`               | Backend for Grok models                                       | `api`                                             | `api`                                    |
 | `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                         | all                                      |
 | `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                         |                                          |
 | `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh`    | `high`                                   |
