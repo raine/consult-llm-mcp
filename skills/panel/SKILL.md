@@ -69,6 +69,8 @@ Build a context summary that every role sees verbatim. Reasonable assumptions on
 **Both modes:**
 
 - Use Glob/Grep/Read to find files, patterns, conventions, constraints related to the focus.
+- Before planning or consulting, do enough research to understand how the requested behavior actually works. Before starting, think about what resources would be useful to obtain first: relevant source files, tests, logs, generated files, config, examples, command output, external docs, or authoritative upstream source. Gather the cheapest useful evidence before forming a plan.
+- Do not stop at the first plausible file, definition, setting, or example. Follow references, callers, related tests, and runtime usage until you can explain the current behavior and the likely impact of changing it.
 - Note compatibility requirements, security boundaries, deployment concerns, prior decisions, known unknowns.
 - Exclude generated files, lockfiles, vendored dependencies unless central.
 

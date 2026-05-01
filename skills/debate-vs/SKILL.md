@@ -52,6 +52,10 @@ listing the selectors from the Models block.
    - Existing patterns and conventions
    - Dependencies and interfaces
 
+   Before planning or consulting, do enough research to understand how the requested behavior actually works. Before starting, think about what resources would be useful to obtain first: relevant source files, tests, logs, generated files, config, examples, command output, external docs, or authoritative upstream source. Gather the cheapest useful evidence before forming a plan.
+
+   Do not stop at the first plausible file, definition, setting, or example. Follow references, callers, related tests, and runtime usage until you can explain the current behavior and the likely impact of changing it.
+
 2. **Ground external semantics before planning** - understand the requested behavior in the real system, not just this repo
    - If the task depends on an external product, CLI, API, protocol, file format, or ecosystem convention, verify the relevant behavior using the cheapest authoritative evidence available: local binaries/flags, generated files, official docs, public source, package/library code, or web search.
    - Capture only decision-relevant facts that affect scope, acceptance criteria, compatibility, or implementation constraints.

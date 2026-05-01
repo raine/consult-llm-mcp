@@ -2,6 +2,7 @@
 name: phased-implement
 description: Coordinator skill that runs a multi-phase implementation across workmux worktrees. Each phase invokes /implement in its own worktree; the coordinator handles dispatch ordering (sequential, parallel, DAG), merge sequencing, and failure isolation. Composes /implement, /merge, workmux, and consult-llm.
 allowed-tools: Bash, Read, Write, Glob, Grep
+disable-model-invocation: true
 ---
 
 # Phased Implement
@@ -22,7 +23,7 @@ You are a coordinator. You **never** edit source files yourself. You write a mas
 **Coordinator-level flags (apply ONLY to master-plan generation, not forwarded to per-phase `/implement`):**
 
 - `--consult-first` — gather independent reviewer proposals before drafting the master plan (mirrors `implement` skill's Phase 2A).
-- `--<selector>` (e.g. `--gemini`, `--openai`) — reviewer selection, repeatable. Translate model flags and defaults according to the loaded `consult-llm` skill's model-selection rules.
+- `--<selector>` (e.g. `--gemini`, `--openai`) — reviewer selection, repeatable. Default: all available selectors from `consult-llm models`.
 
 **Per-phase flags** — declared in the plan's YAML `implement_flags:` list. The coordinator never injects flags into a phase.
 

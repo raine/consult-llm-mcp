@@ -42,7 +42,9 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
 
 - Use Glob/Grep to find relevant files.
 - Read key files to confirm relevance.
-- Select files directly related to the question — quality over quantity.
+- Do enough research to understand how the requested behavior actually works. Before starting, think about what resources would be useful to obtain first: relevant source files, tests, logs, generated files, config, examples, command output, external docs, or authoritative upstream source. Gather the cheapest useful evidence before consulting.
+- Do not stop at the first plausible file, definition, setting, or example. Follow references, callers, related tests, and runtime usage until you can explain the current behavior and the likely impact of changing it.
+- Select files that let reviewers understand the behavior being discussed and verify your assumptions.
 
 ### 2. Invoke
 

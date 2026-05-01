@@ -39,7 +39,11 @@ Halt conditions (do not auto-recover):
 
 ## Phase 1: Gather context
 
-Use Glob, Grep, Read to map the task surface. Make reasonable assumptions; do **not** ask the user clarifying questions.
+Use Glob, Grep, Read to research the task surface. Make reasonable assumptions; do **not** ask the user clarifying questions.
+
+Before planning or consulting, do enough research to understand how the requested behavior actually works. Before starting, think about what resources would be useful to obtain first: relevant source files, tests, logs, generated files, config, examples, command output, external docs, or authoritative upstream source. Gather the cheapest useful evidence before forming a plan.
+
+Do not stop at the first plausible file, definition, setting, or example. Follow references, callers, related tests, and runtime usage until you can explain the current behavior and the likely impact of changing it.
 
 Before planning, ground the requested behavior in the real system, not just this repo. If the task depends on an external product, CLI, API, protocol, file format, or ecosystem convention, verify the relevant behavior using the cheapest authoritative evidence available: local binaries/flags, generated files, official docs, public source, package/library code, or web search. Capture only decision-relevant facts that affect scope, acceptance criteria, compatibility, or implementation constraints; do not create a separate research artifact unless the evidence materially changes the plan.
 
@@ -50,7 +54,7 @@ Capture:
 - External behavior facts that define requested semantics or constraints, with source/path/command evidence.
 - Validation contract: how do tests/types/lints run? Look in `CLAUDE.md`, `CLAUDE.local.md`, `justfile`, `Makefile`, `package.json`, `pyproject.toml`. Record the canonical command (e.g. `just check`).
 
-Select a small set of source files most relevant to the change. These are passed as shared `-f <path>` to every reviewer call.
+Select source files that let reviewers understand the behavior being changed and verify your assumptions. These are passed as shared `-f <path>` to every reviewer call.
 
 ## Phase 2: Spec and plan
 
@@ -158,10 +162,14 @@ Required only when the change touches schema, on-disk format, or a public API co
 ### Task 1 — <short description>
 - **Files:** create/modify with exact paths (and line ranges for modify)
 - **Steps:** specific actions
+- **Code:**
+  ```language
+  // actual code, not placeholders
+  ```
 - **Verifies acceptance criteria:** #1, #3
 ````
 
-Guidelines: exact paths only, never "somewhere in src/". Each task small (2-5 minutes) and tied to acceptance criteria. DRY, YAGNI — only what the spec demands. Do not embed full implementation code in plan tasks; brief snippets only when the design choice is non-obvious.
+Guidelines: exact paths only, never "somewhere in src/". Each task small (2-5 minutes) and tied to acceptance criteria. DRY, YAGNI — only what the spec demands. Include the actual code to be written under **Code:** — concrete snippets, not pseudocode or placeholders — so reviewers can verify correctness against the source context.
 
 ## Phase 3: Plan review
 
