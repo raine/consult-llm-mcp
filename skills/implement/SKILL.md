@@ -41,10 +41,13 @@ Halt conditions (do not auto-recover):
 
 Use Glob, Grep, Read to map the task surface. Make reasonable assumptions; do **not** ask the user clarifying questions.
 
+Before planning, ground the requested behavior in the real system, not just this repo. If the task depends on an external product, CLI, API, protocol, file format, or ecosystem convention, verify the relevant behavior using the cheapest authoritative evidence available: local binaries/flags, generated files, official docs, public source, package/library code, or web search. Capture only decision-relevant facts that affect scope, acceptance criteria, compatibility, or implementation constraints; do not create a separate research artifact unless the evidence materially changes the plan.
+
 Capture:
 
 - Files, modules, public interfaces, dependents, migration concerns.
 - Existing patterns and conventions.
+- External behavior facts that define requested semantics or constraints, with source/path/command evidence.
 - Validation contract: how do tests/types/lints run? Look in `CLAUDE.md`, `CLAUDE.local.md`, `justfile`, `Makefile`, `package.json`, `pyproject.toml`. Record the canonical command (e.g. `just check`).
 
 Select a small set of source files most relevant to the change. These are passed as shared `-f <path>` to every reviewer call.

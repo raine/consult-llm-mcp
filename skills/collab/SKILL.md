@@ -32,12 +32,17 @@ Load it now. Follow its invocation contract for all CLI calls in this workflow.
    - Existing patterns and conventions
    - Dependencies and interfaces
 
-2. **Make reasonable assumptions** - do NOT ask clarifying questions
-   - Use best judgment based on codebase context
+2. **Ground external semantics before planning** - understand the requested behavior in the real system, not just this repo
+   - If the task depends on an external product, CLI, API, protocol, file format, or ecosystem convention, verify the relevant behavior using the cheapest authoritative evidence available: local binaries/flags, generated files, official docs, public source, package/library code, or web search.
+   - Capture only decision-relevant facts that affect scope, acceptance criteria, compatibility, or implementation constraints.
+   - Do not create a separate research artifact unless the evidence materially changes the plan.
+
+3. **Make evidence-backed assumptions** - do NOT ask clarifying questions
+   - Use best judgment based on codebase and external context
    - Prefer simpler solutions when ambiguous
    - Follow existing patterns in the codebase
 
-3. **Prepare context summary** - create a brief summary of:
+4. **Prepare context summary** - create a brief summary of:
    - The task to be implemented
    - Relevant files discovered
    - Key patterns and conventions in the codebase
