@@ -690,6 +690,8 @@ estimates show as zero for models without pricing data.
 | `MiniMax-M2.7`           | $0.30/M | $1.20/M  |
 | **Anthropic models**     |
 | `claude-opus-4-7`        | $5.00/M | $25.00/M |
+| **Grok models**          |
+| `grok-4.3`               | $1.25/M | $2.50/M  |
 
 Pricing is per million tokens (M). Check the provider's current pricing page
 before relying on estimates for billing decisions.

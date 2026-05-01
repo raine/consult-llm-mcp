@@ -51,6 +51,10 @@ fn get_pricing(model: &str) -> Option<ModelPricing> {
             input_per_million: 5.0,
             output_per_million: 25.0,
         },
+        "grok-4.3" => ModelPricing {
+            input_per_million: 1.25,
+            output_per_million: 2.50,
+        },
         _ => return None,
     })
 }
