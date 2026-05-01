@@ -599,10 +599,37 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_config_with_grok_key() {
+        let env = env_from(&[("XAI_API_KEY", "xai-test")]);
+        let (config, registry) = parse_config(env).unwrap();
+        assert!(config.allowed_models.contains(&"grok-4.3".to_string()));
+        assert_eq!(config.providers[&Provider::Grok].backend, Backend::Api);
+        assert_eq!(registry.resolve_model(Some("grok")).unwrap(), "grok-4.3");
+        assert_eq!(config.default_models, vec!["grok-4.3"]);
+    }
+
+    #[test]
+    fn test_parse_config_without_grok_key_filters_grok() {
+        let env = env_from(&[("OPENAI_API_KEY", "key")]);
+        let (config, _) = parse_config(env).unwrap();
+        assert!(!config.allowed_models.contains(&"grok-4.3".to_string()));
+    }
+
+    #[test]
     fn test_parse_config_invalid_anthropic_backend() {
         let env = env_from(&[
             ("CONSULT_LLM_ANTHROPIC_BACKEND", "codex-cli"),
             ("ANTHROPIC_API_KEY", "key"),
+        ]);
+        let err = parse_config(env).unwrap_err();
+        assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
+    }
+
+    #[test]
+    fn test_parse_config_invalid_grok_backend() {
+        let env = env_from(&[
+            ("CONSULT_LLM_GROK_BACKEND", "codex-cli"),
+            ("XAI_API_KEY", "key"),
         ]);
         let err = parse_config(env).unwrap_err();
         assert!(matches!(err, ConfigError::InvalidBackend { ref raw, .. } if raw == "codex-cli"));
@@ -654,8 +681,15 @@ mod tests {
                 "gpt-5.2-codex",
                 "MiniMax-M2.7",
                 "claude-opus-4-7",
+                "grok-4.3",
             ]
         );
+    }
+
+    #[test]
+    fn test_grok_provider_metadata() {
+        assert_eq!(Provider::from_model("grok-4.3"), Some(Provider::Grok));
+        assert_eq!(Provider::Grok.api_base_url(), Some("https://api.x.ai/v1"));
     }
 
     #[test]
@@ -669,6 +703,7 @@ mod tests {
             Provider::Gemini,
             Provider::DeepSeek,
             Provider::MiniMax,
+            Provider::Grok,
         ] {
             assert_eq!(p.api_protocol(), crate::models::ApiProtocol::OpenAiCompat);
         }

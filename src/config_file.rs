@@ -18,6 +18,7 @@ pub struct ConfigFile {
     pub anthropic: Option<ProviderBlock>,
     pub deepseek: Option<ProviderBlock>,
     pub minimax: Option<ProviderBlock>,
+    pub grok: Option<ProviderBlock>,
 
     pub opencode: Option<OpencodeBlock>,
 }
@@ -111,12 +112,13 @@ impl ConfigFile {
             );
         }
 
-        let blocks: [(&str, Option<&ProviderBlock>); 5] = [
+        let blocks: [(&str, Option<&ProviderBlock>); 6] = [
             ("gemini", self.gemini.as_ref()),
             ("openai", self.openai.as_ref()),
             ("anthropic", self.anthropic.as_ref()),
             ("deepseek", self.deepseek.as_ref()),
             ("minimax", self.minimax.as_ref()),
+            ("grok", self.grok.as_ref()),
         ];
 
         for (id, block) in blocks {
@@ -214,6 +216,13 @@ mod tests {
             anthropic: None,
             deepseek: None,
             minimax: None,
+            grok: Some(ProviderBlock {
+                backend: Some("api".into()),
+                opencode_provider: None,
+                reasoning_effort: None,
+                api_key: Some("xai-test".into()),
+                extra_args: None,
+            }),
             opencode: Some(OpencodeBlock {
                 default_provider: Some("copilot".into()),
             }),
@@ -229,6 +238,8 @@ mod tests {
         assert_eq!(m["CONSULT_LLM_GEMINI_BACKEND"], "gemini-cli");
         assert_eq!(m["CONSULT_LLM_OPENCODE_GEMINI_PROVIDER"], "google");
         assert_eq!(m["CONSULT_LLM_OPENAI_BACKEND"], "api");
+        assert_eq!(m["CONSULT_LLM_GROK_BACKEND"], "api");
+        assert_eq!(m["XAI_API_KEY"], "xai-test");
         assert_eq!(m["CONSULT_LLM_CODEX_REASONING_EFFORT"], "high");
         assert_eq!(
             m["CONSULT_LLM_CODEX_EXTRA_ARGS"],
@@ -270,6 +281,19 @@ mod tests {
         };
         let err = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap_err();
         assert_eq!(err.provider, "gemini");
+    }
+
+    #[test]
+    fn test_grok_api_key_rejected_in_project_layer() {
+        let cfg = ConfigFile {
+            grok: Some(ProviderBlock {
+                api_key: Some("xai-test".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let err = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap_err();
+        assert_eq!(err.provider, "grok");
     }
 
     #[test]
@@ -331,6 +355,10 @@ mod tests {
                 api_key: Some(key.into()),
                 ..Default::default()
             }),
+            grok: Some(ProviderBlock {
+                api_key: Some(key.into()),
+                ..Default::default()
+            }),
             ..Default::default()
         };
         let m = make("x").to_env_map(ApiKeyPolicy::Allow).unwrap();
@@ -338,5 +366,6 @@ mod tests {
         assert!(m.contains_key("ANTHROPIC_API_KEY"));
         assert!(m.contains_key("DEEPSEEK_API_KEY"));
         assert!(m.contains_key("MINIMAX_API_KEY"));
+        assert!(m.contains_key("XAI_API_KEY"));
     }
 }

@@ -24,6 +24,7 @@ pub enum Provider {
     DeepSeek,
     MiniMax,
     Anthropic,
+    Grok,
 }
 
 /// HTTP wire-format family used when calling the provider's native API.
@@ -45,6 +46,7 @@ pub const ALL_PROVIDERS: &[Provider] = &[
     Provider::OpenAI,
     Provider::MiniMax,
     Provider::Anthropic,
+    Provider::Grok,
 ];
 
 /// Static metadata for a provider — the single place to define provider-specific constants.
@@ -171,6 +173,22 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         opencode_env: "CONSULT_LLM_OPENCODE_ANTHROPIC_PROVIDER",
         default_opencode_provider: "anthropic",
     },
+    ProviderSpec {
+        provider: Provider::Grok,
+        id: "grok",
+        model_prefixes: &["grok-"],
+        api_base_url: Some("https://api.x.ai/v1"),
+        api_protocol: ApiProtocol::OpenAiCompat,
+        builtin_models: &["grok-4.3"],
+        api_key_env: "XAI_API_KEY",
+        backend_env: "CONSULT_LLM_GROK_BACKEND",
+        legacy_backend_env: None,
+        legacy_mode_env: None,
+        cli_backend_value: None,
+        allowed_backends: &["api"],
+        opencode_env: "CONSULT_LLM_OPENCODE_GROK_PROVIDER",
+        default_opencode_provider: "xai",
+    },
 ];
 
 impl Provider {
@@ -235,4 +253,5 @@ pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
     ("deepseek", &["deepseek-v4-pro"]),
     ("minimax", &["MiniMax-M2.7"]),
     ("anthropic", &["claude-opus-4-7"]),
+    ("grok", &["grok-4.3"]),
 ];
