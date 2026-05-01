@@ -664,6 +664,38 @@ OPENAI_API_KEY=your_project_specific_key
 
 direnv loads the variables automatically when you enter the directory and unloads them when you leave.
 
+### Known models with pricing
+
+Cost estimates are displayed for known models. Any model name is accepted; cost
+estimates show as zero for models without pricing data.
+
+<details>
+<summary>Pricing table</summary>
+
+| Model                    | Input   | Output   |
+| ------------------------ | ------- | -------- |
+| **OpenAI models**        |
+| `gpt-5.5`                | $5.00/M | $30.00/M |
+| `gpt-5.4`                | $2.50/M | $15.00/M |
+| `gpt-5.3-codex`          | $2.50/M | $10.00/M |
+| `gpt-5.2`                | $1.75/M | $14.00/M |
+| `gpt-5.2-codex`          | $1.75/M | $7.00/M  |
+| **Google Gemini models** |
+| `gemini-2.5-pro`         | $1.25/M | $10.00/M |
+| `gemini-3-pro-preview`   | $2.00/M | $12.00/M |
+| `gemini-3.1-pro-preview` | $2.00/M | $12.00/M |
+| **DeepSeek models**      |
+| `deepseek-v4-pro`        | $0.55/M | $2.19/M  |
+| **MiniMax models**       |
+| `MiniMax-M2.7`           | $0.30/M | $1.20/M  |
+| **Anthropic models**     |
+| `claude-opus-4-7`        | $5.00/M | $25.00/M |
+
+Pricing is per million tokens (M). Check the provider's current pricing page
+before relying on estimates for billing decisions.
+
+</details>
+
 ### Custom system prompt
 
 ```bash
@@ -681,34 +713,34 @@ system_prompt_path: /path/to/project/.consult-llm/SYSTEM_PROMPT.md
 
 Environment variables override config file values.
 
-| Variable                                 | Description                                                   | Allowed values                                    | Default                                  |
-| ---------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------- |
-| `OPENAI_API_KEY`                         | OpenAI API key                                                |                                                   |                                          |
-| `GEMINI_API_KEY`                         | Gemini API key                                                |                                                   |                                          |
-| `ANTHROPIC_API_KEY`                      | Anthropic API key                                             |                                                   |                                          |
-| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                              |                                                   |                                          |
-| `MINIMAX_API_KEY`                        | MiniMax API key                                               |                                                   |                                          |
-| `XAI_API_KEY`                            | xAI API key for Grok models                                   |                                                   |                                          |
-| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use for single-response calls when `-m` is omitted | selector or exact model ID                        | first available                          |
+| Variable                                 | Description                                                                            | Allowed values                                    | Default                                  |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------- |
+| `OPENAI_API_KEY`                         | OpenAI API key                                                                         |                                                   |                                          |
+| `GEMINI_API_KEY`                         | Gemini API key                                                                         |                                                   |                                          |
+| `ANTHROPIC_API_KEY`                      | Anthropic API key                                                                      |                                                   |                                          |
+| `DEEPSEEK_API_KEY`                       | DeepSeek API key                                                                       |                                                   |                                          |
+| `MINIMAX_API_KEY`                        | MiniMax API key                                                                        |                                                   |                                          |
+| `XAI_API_KEY`                            | xAI API key for Grok models                                                            |                                                   |                                          |
+| `CONSULT_LLM_DEFAULT_MODEL`              | Model or selector to use for single-response calls when `-m` is omitted                | selector or exact model ID                        | first available                          |
 | `CONSULT_LLM_DEFAULT_MODELS`             | Comma-separated ordered fan-out defaults for workflow skills; duplicates are preserved | selectors or exact model IDs                      | enabled models                           |
-| `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                     | `api` `gemini-cli` `cursor-cli` `opencode`        | `api`                                    |
-| `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                     | `api` `codex-cli` `cursor-cli` `opencode`         | `api`                                    |
-| `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                   | `api` `opencode`                                  | `api`                                    |
-| `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                    | `api` `opencode`                                  | `api`                                    |
-| `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                  | `api`                                             | `api`                                    |
-| `CONSULT_LLM_GROK_BACKEND`               | Backend for Grok models                                       | `api`                                             | `api`                                    |
-| `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled | model IDs                                         | all                                      |
-| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog         | model IDs                                         |                                          |
-| `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                        | `none` `minimal` `low` `medium` `high` `xhigh`    | `high`                                   |
-| `CONSULT_LLM_CODEX_EXTRA_ARGS`           | Extra CLI args appended to `codex exec` (shell-quoted)        | e.g. `--dangerously-bypass-approvals-and-sandbox` |                                          |
-| `CONSULT_LLM_GEMINI_EXTRA_ARGS`          | Extra CLI args appended to `gemini` (shell-quoted)            | shell-quoted args                                 |                                          |
-| `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models               | provider name                                     | per-model default                        |
-| `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                           | provider name                                     | `openai`                                 |
-| `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                           | provider name                                     | `google`                                 |
-| `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                         | provider name                                     | `deepseek`                               |
-| `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                          | provider name                                     | `minimax`                                |
-| `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                           | file path                                         | `~/.config/consult-llm/SYSTEM_PROMPT.md` |
-| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                              | `1` `true` `yes`                                  |                                          |
+| `CONSULT_LLM_GEMINI_BACKEND`             | Backend for Gemini models                                                              | `api` `gemini-cli` `cursor-cli` `opencode`        | `api`                                    |
+| `CONSULT_LLM_OPENAI_BACKEND`             | Backend for OpenAI models                                                              | `api` `codex-cli` `cursor-cli` `opencode`         | `api`                                    |
+| `CONSULT_LLM_DEEPSEEK_BACKEND`           | Backend for DeepSeek models                                                            | `api` `opencode`                                  | `api`                                    |
+| `CONSULT_LLM_MINIMAX_BACKEND`            | Backend for MiniMax models                                                             | `api` `opencode`                                  | `api`                                    |
+| `CONSULT_LLM_ANTHROPIC_BACKEND`          | Backend for Anthropic models                                                           | `api`                                             | `api`                                    |
+| `CONSULT_LLM_GROK_BACKEND`               | Backend for Grok models                                                                | `api`                                             | `api`                                    |
+| `CONSULT_LLM_ALLOWED_MODELS`             | Comma-separated allowlist; restricts which models are enabled                          | model IDs                                         | all                                      |
+| `CONSULT_LLM_EXTRA_MODELS`               | Comma-separated extra model IDs to add to the catalog                                  | model IDs                                         |                                          |
+| `CONSULT_LLM_CODEX_REASONING_EFFORT`     | Reasoning effort for Codex CLI backend                                                 | `none` `minimal` `low` `medium` `high` `xhigh`    | `high`                                   |
+| `CONSULT_LLM_CODEX_EXTRA_ARGS`           | Extra CLI args appended to `codex exec` (shell-quoted)                                 | e.g. `--dangerously-bypass-approvals-and-sandbox` |                                          |
+| `CONSULT_LLM_GEMINI_EXTRA_ARGS`          | Extra CLI args appended to `gemini` (shell-quoted)                                     | shell-quoted args                                 |                                          |
+| `CONSULT_LLM_OPENCODE_PROVIDER`          | Default OpenCode provider prefix for all models                                        | provider name                                     | per-model default                        |
+| `CONSULT_LLM_OPENCODE_OPENAI_PROVIDER`   | OpenCode provider for OpenAI models                                                    | provider name                                     | `openai`                                 |
+| `CONSULT_LLM_OPENCODE_GEMINI_PROVIDER`   | OpenCode provider for Gemini models                                                    | provider name                                     | `google`                                 |
+| `CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER` | OpenCode provider for DeepSeek models                                                  | provider name                                     | `deepseek`                               |
+| `CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER`  | OpenCode provider for MiniMax models                                                   | provider name                                     | `minimax`                                |
+| `CONSULT_LLM_SYSTEM_PROMPT_PATH`         | Path to a custom system prompt file                                                    | file path                                         | `~/.config/consult-llm/SYSTEM_PROMPT.md` |
+| `CONSULT_LLM_NO_UPDATE_CHECK`            | Disable background update checks                                                       | `1` `true` `yes`                                  |                                          |
 
 </details>
 
