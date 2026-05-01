@@ -26,7 +26,7 @@ impl ExecutorProvider {
         let idle_timeout_secs: u64 = std::env::var("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(120);
+            .unwrap_or(300);
         let idle_timeout = std::time::Duration::from_secs(idle_timeout_secs);
 
         let agent: ureq::Agent = ureq::Agent::config_builder()
