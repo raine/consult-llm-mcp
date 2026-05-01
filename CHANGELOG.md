@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.0.10 (2026-05-01)
+
+- Added Grok 4.3 as a first-class API model, including configuration docs and cost estimates for xAI runs
+- The same model can now be invoked multiple times in a single call (e.g. `-m gemini -m gemini`)
+- Project `allowed_models` settings now prevent user-level defaults from selecting models outside the project allowlist
+- `consult-llm models` now shows default model information
+
 ## v3.0.9 (2026-04-29)
 
 - `consult-llm-monitor` TUI now supports mouse input: click rows to select or open them, and use the scroll wheel to navigate
