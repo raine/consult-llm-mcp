@@ -223,18 +223,40 @@ For each issue:
 
 **Verify before adopting.** Treat every reviewer finding (including must-fix) as an unverified claim. Reviewer severity is advisory.
 
-Pick the cheapest method that proves or disproves the claim:
+For each finding, record the title, claim, suggested fix, and file/line references when available. Then pick the cheapest method that proves or disproves the claim:
 
 - **Plan claims** — re-read the cited plan section.
 - **Source claims** — read the cited file against current code.
 - **Library/API claims** — verify against library source or official docs. Use `gh search code` for usage patterns, `Grep` in `node_modules`/vendored deps, or a throwaway script in `/tmp/`.
 - **Premortem claims** — confirm the trigger actually occurs in the planned design.
 
-Classify each finding:
+For each finding, report a verdict:
 
-- **Confirmed and worth fixing** → adopt.
-- **Confirmed but YAGNI** → real but trigger requires contrived inputs no caller produces, or fix is disproportionate. Record as Watched Risk.
-- **Not a real issue** → reviewer misread plan/source. Record as rejected with disproof.
+- **CONFIRMED**: The finding is accurate and is a real issue.
+- **NOT AN ISSUE**: The finding is technically correct but does not matter in practice.
+- **INCORRECT**: The finding is wrong; show disproof.
+- **UNABLE TO VERIFY**: Cannot test this without external resources/setup.
+
+Then assess the impact of the smallest plausible fix. Question the suggested fix, not just the finding.
+
+- **Likelihood:** REGULAR | OCCASIONAL | RARE | COSMIC RAY | N/A
+- **Readability impact:** IMPROVES | NEUTRAL | WORSENS | N/A
+- **Architecture impact:** NONE | MINOR | MODERATE | MAJOR | N/A
+- **Recommendation:** FIX | FIX (with care) | DISCUSS | SPIN-OFF | DROP
+
+Recommendation rules:
+
+- **DROP**: False/unverifiable, rare with no clarity gain, no practical impact, duplicate defense, or readability worsens without regular impact.
+- **DISCUSS**: The real question is product behavior, policy, or user expectations rather than bug severity.
+- **SPIN-OFF**: The issue is real and important but needs its own design or broader work.
+- **FIX (with care)**: Confirmed and impactful, but the fix has moderate or major structural reach.
+- **FIX**: Confirmed and impactful with none or minor architecture cost.
+
+Classify each finding for the ledger:
+
+- **FIX** or **FIX (with care)** → accept if it is in scope for this implementation.
+- **DISCUSS** or **SPIN-OFF** → record as Watched Risk unless it blocks the current spec.
+- **DROP** → reject with evidence.
 
 With `--consult-first`, findings claiming `better_rejected_approach` or `incompatible_merge_detected: yes` must be verified against the raw proposals and source before adoption.
 
@@ -246,6 +268,11 @@ Append a Feedback Ledger to the plan file:
 - **finding-id:** <short kebab-case>
   - **reviewer(s):** <models>
   - **severity:** must-fix | should-fix | optional
+  - **verdict:** confirmed | not-an-issue | incorrect | unable-to-verify
+  - **likelihood:** regular | occasional | rare | cosmic-ray | n/a
+  - **readability:** improves | neutral | worsens | n/a
+  - **architecture:** none | minor | moderate | major | n/a
+  - **recommendation:** fix | fix-with-care | discuss | spin-off | drop
   - **decision:** accepted | rejected | watched-risk
   - **rationale & evidence:** <proof from codebase/docs>
   - **plan/spec/test change:** <action or "none">
@@ -260,6 +287,8 @@ Append a Feedback Ledger to the plan file:
 **Conflict tiebreakers** (in order): security on safety conflicts → spec coverage → existing patterns → simplicity.
 
 Any premortem finding rated `mitigation_sufficient: no` AND (`probability: high` OR `impact: high`) **must** be addressed before Phase 5 — change the plan, add a test-matrix row, or record explicitly in Watched Risks.
+
+For every **DISCUSS** and **SPIN-OFF** recommendation, write 100-200 words in the ledger explaining the decision needed or the design work required.
 
 **Multiple rounds (`--rounds N`):** for round 2+, reuse `-m` flags, pass `-t <group_thread_id>` and `-f <updated plan>`, and send: *"Revision N. Were previous concerns addressed? New issues introduced? Same four sections, focus on what changed."* Stop early if reviewers signal no further changes. Append a fresh ledger section per round.
 
@@ -374,16 +403,33 @@ Output exactly:
 
 ### Verify each finding before fixing
 
-The `evidence` is a claim — run or read it.
+The `evidence` is a claim — run or read it. For each finding, record the title, claim, suggested fix, and file/line references when available. Then report:
 
-- **Evidence reproduces, diff is responsible** → eligible to fix.
+- **Verdict:** CONFIRMED | NOT AN ISSUE | INCORRECT | UNABLE TO VERIFY
+- **Likelihood:** REGULAR | OCCASIONAL | RARE | COSMIC RAY | N/A
+- **Readability impact:** IMPROVES | NEUTRAL | WORSENS | N/A
+- **Architecture impact:** NONE | MINOR | MODERATE | MAJOR | N/A
+- **Recommendation:** FIX | FIX (with care) | DISCUSS | SPIN-OFF | DROP
+
+Recommendation rules are the same as Phase 4:
+
+- **DROP**: False/unverifiable, rare with no clarity gain, no practical impact, duplicate defense, or readability worsens without regular impact.
+- **DISCUSS**: The real question is product behavior, policy, or user expectations rather than bug severity.
+- **SPIN-OFF**: The issue is real and important but needs its own design or broader work.
+- **FIX (with care)**: Confirmed and impactful, but the fix has moderate or major structural reach.
+- **FIX**: Confirmed and impactful with none or minor architecture cost.
+
+Apply these outcomes:
+
+- **Evidence reproduces, diff is responsible, recommendation is FIX** → eligible to fix.
+- **Evidence reproduces, diff is responsible, recommendation is FIX (with care)** → hand off unless the fix is localized and has one clear answer.
 - **Evidence reproduces, different code is responsible** → re-target or note misattribution; do not silently fix the wrong place.
-- **Evidence does not reproduce or source citation is wrong** → drop. List under "rejected after verification" in the summary.
-- **Reproduces only via inputs no caller produces, or impossible timing** → record as Watched Risk; do not fix.
+- **Evidence does not reproduce or source citation is wrong** → DROP. List under "rejected after verification" in the summary.
+- **Reproduces only via inputs no caller produces, impossible timing, DISCUSS, or SPIN-OFF** → record as Watched Risk; do not fix.
 
 ### Apply fixes
 
-Apply only `Verified Findings` that survived verification AND are `must-fix` AND localized (single hunk, single right answer, no interface changes). For each fix:
+Apply only `Verified Findings` that survived verification, are `must-fix`, have recommendation **FIX**, and are localized (single hunk, single right answer, no interface changes). For each fix:
 
 1. Re-read the file and apply the smallest correct change.
 2. Run the validation command for the touched scope.
