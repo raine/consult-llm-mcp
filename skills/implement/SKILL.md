@@ -1,10 +1,10 @@
 ---
 name: implement
-description: Autonomously plan and implement a task with external LLM review. Writes a behavioral spec, runs an evidence-gated plan review (premortem + independent alternative), applies feedback through a decision ledger, implements with a triggered debug loop, and finishes with an evidence-gated red-team pass. No user interaction.
+description: Autonomously plan and implement a task with external LLM review. Writes a behavioral spec, runs an evidence-gated plan review (premortem + independent alternative), applies feedback through a decision ledger, implements with a triggered debug loop, and finishes with an evidence-gated post-implementation verification review. No user interaction.
 allowed-tools: Bash, Glob, Grep, Read, Edit, Write
 ---
 
-End-to-end autonomous workflow: spec → plan → review → implement → red-team → summary. Reviewers must produce structured findings with concrete evidence; conflicts resolve through a written decision ledger, not silent agent judgment.
+End-to-end autonomous workflow: spec → plan → review → implement → verification review → summary. Reviewers must produce structured findings with concrete evidence; conflicts resolve through a written decision ledger, not silent agent judgment.
 
 **Load the `consult-llm` skill before proceeding** — it defines the invocation contract. Do not call the CLI without loading it first.
 
@@ -18,7 +18,7 @@ End-to-end autonomous workflow: spec → plan → review → implement → red-t
 
 - `--consult-first` — gather independent reviewer proposals before writing the spec/plan, then synthesize into an Approach Decision Record. Use when scope is ambiguous, direction non-obvious, the change crosses module boundaries, or the repo is unfamiliar. Skip for typos, mechanical renames, exact bug fixes, or dependency bumps.
 - `--rounds N` — repeat the review-refine cycle (Phases 3–4) up to N times. Default `1`, max `3`.
-- `--no-review` — skip Phases 3, 4, and 6. Compatible with `--consult-first` (proposal generation still runs; plan review and red-team do not).
+- `--no-review` — skip Phases 3, 4, and 6. Compatible with `--consult-first` (proposal generation still runs; plan review and verification review do not).
 
 Strip all flags from arguments to get the task description.
 
@@ -309,9 +309,9 @@ Give ranked hypotheses with concrete evidence checks. For each hypothesis, state
 
 If the third hypothesis fails, stop. Record blocker, hypotheses, and unanswered evidence question in the Phase 7 summary. Do not loop.
 
-## Phase 6: Red-team review
+## Phase 6: Verification review
 
-Skip if `--no-review`. Whether the diff is too narrow for adversarial review is the reviewer's call (it exits cleanly), not the agent's.
+Skip if `--no-review`, or if the diff is mechanically trivial (renames, version bumps, comment/string typo fixes, formatting/whitespace only). The agent decides this — not the reviewer.
 
 Re-list changed files against `START_HEAD`:
 
@@ -325,48 +325,60 @@ If both empty, stop and report nothing implemented. Otherwise pass tracked files
 Invoke `consult-llm` with `--task review`, `-t <group_thread_id>` from Phase 4, `--diff-base <START_HEAD>`, the file flags above, and `-f <plan path>`.
 
 ```
-Adversarially review this diff against the Behavioral Spec and Test Matrix in the plan file.
+Verify this diff against the Behavioral Spec and Test Matrix in the plan file. You are a verifier, not an attacker — the goal is to confirm the implementation is correct, complete, and consistent with the plan and the surrounding system. Do not manufacture threat models for code that has no relevant surface.
 
-Use only attack lenses relevant to the changed surface:
-- auth-bypass / authorization confusion
-- injection / unsafe parsing
-- race / concurrency / ordering
-- data loss / migration / rollback
-- fuzz / malformed or boundary input
-- API contract / compatibility break
-- spec violation / missing invariant enforcement
+Apply these lenses in order. For each lens, either report findings or state it does not apply and why:
 
-A finding counts as Verified only if it includes a concrete repro: failing input, curl command, race-window with timing, or a unit test that reproduces the bug. Speculation goes under "Unverified hypotheses" and may not be marked must-fix.
+1. **Spec conformance** — every acceptance criterion satisfied; invariants preserved on every path; no silent deviation from the plan.
+2. **Regression & compatibility** — existing callers, public APIs, output formats, ordering, error types, and performance characteristics unchanged unless the plan says so.
+3. **Edge cases & invariants** — boundary inputs, empty/null/missing, large inputs, error paths, resource lifecycle, concurrent access where the code is actually concurrent.
+4. **Test adequacy** — tests assert the important observable behavior, not just that code runs; acceptance criteria from the plan are covered.
+5. **Implementation quality** — unnecessary complexity, dead code, duplicated logic, brittle coupling, naming/patterns inconsistent with the surrounding code, simpler alternatives.
+6. **Security** (apply ONLY when the changed surface touches authn/authz, secrets, untrusted external input, parsing/serialization of untrusted data, file/path access, network boundaries, tenant isolation, crypto, dependency loading, or shared mutable state across trust boundaries) — auth bypass, injection, unsafe parsing, data exposure, race conditions with security impact.
 
-If the diff is too narrow for meaningful adversarial review (e.g. <20 lines, no auth/data/input surface), say so and exit cleanly.
+A finding may be marked **Verified** only if it includes concrete evidence: a failing input, a failing or insufficient test, a diff/source citation showing a contract mismatch, or a minimal reproduction. Speculation goes under "Unverified Hypotheses" and may not be marked must-fix.
+
+If no material issues are found across any applicable lens, say so explicitly under "No Issues Found" and still report which lenses you considered. A clean review is a valid result.
 
 Output exactly:
+
+## Lenses Considered
+- applied: <list>
+- skipped (with reason): <list>
 
 ## Verified Findings
 
 ### Finding N
 - severity: must-fix | should-fix
-- persona: <attack lens>
+- category: spec-drift | regression | edge-case | test-gap | compatibility | maintainability | security
 - location: path:line
 - spec_or_invariant_violated: <reference, or "none">
-- repro_or_poc: <concrete reproduction>
-- expected_failure:
+- evidence: <failing test, input, command output, or source/diff citation that demonstrates the issue>
+- expected_behavior:
+- actual_behavior:
 - rationale:
+- recommended_change:
 
 ## Unverified Hypotheses
-- <bullet>
+- <bullet, or "none">
 
-## Spec Coverage Gaps
-- <criterion or invariant the diff does not satisfy>
+## Test Coverage Gaps
+- <criterion or invariant the diff does not exercise, or "none">
+
+## Maintainability Notes
+- <non-blocking simplification or structural concern, or "none">
+
+## No Issues Found
+- <only if all sections above are empty: state this explicitly>
 ```
 
 ### Verify each finding before fixing
 
-The `repro_or_poc` is a claim — run it.
+The `evidence` is a claim — run or read it.
 
-- **PoC reproduces, diff is responsible** → eligible to fix.
-- **PoC reproduces, different code is responsible** → re-target the fix or note misattribution; do not silently fix the wrong place.
-- **PoC does not reproduce** → drop. List under "rejected after verification" in the summary.
+- **Evidence reproduces, diff is responsible** → eligible to fix.
+- **Evidence reproduces, different code is responsible** → re-target or note misattribution; do not silently fix the wrong place.
+- **Evidence does not reproduce or source citation is wrong** → drop. List under "rejected after verification" in the summary.
 - **Reproduces only via inputs no caller produces, or impossible timing** → record as Watched Risk; do not fix.
 
 ### Apply fixes
@@ -377,7 +389,7 @@ Apply only `Verified Findings` that survived verification AND are `must-fix` AND
 2. Run the validation command for the touched scope.
 3. **Commit each fix separately** with a lowercase imperative subject and a body that names the failure mode prevented.
 
-Do **not** auto-fix `should-fix`, `Unverified Hypotheses`, or `Spec Coverage Gaps`. List them in the Phase 7 summary.
+Do **not** auto-fix `should-fix`, `Unverified Hypotheses`, `Test Coverage Gaps`, or `Maintainability Notes`. List them in the Phase 7 summary.
 
 If any `must-fix` cannot be fixed safely, stop and hand off — do not loop another review pass.
 
@@ -406,11 +418,13 @@ Print:
 - validation: passed | failed (<command>)
 - plan deviations: <list, or "none">
 
-**Red-team:**
+**Verification review:**
 - verified findings auto-fixed: <count>
 - verified findings handed off: <list>
+- rejected after verification: <count>
 - unverified hypotheses: <count>
-- spec coverage gaps: <list, or "none">
+- test coverage gaps: <list, or "none">
+- maintainability notes: <list, or "none">
 
 **Blockers (if any):**
 - <description, hypotheses tried, evidence question outstanding>
