@@ -2,12 +2,19 @@ use crate::catalog::ModelRegistry;
 use crate::group_thread_store::{StoredGroup, is_group_id};
 use crate::schema::ModelSelector;
 
+/// Where the result of a run is rendered: a single Response, or a group
+/// markdown document persisted to the group thread store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputShape {
+    Single,
+    Group { existing_id: Option<String> },
+}
+
 #[derive(Debug)]
 pub struct ResumePlan {
     pub threads: Vec<Option<String>>,
     pub matched_entry_indices: Vec<Option<usize>>,
-    pub group_id: Option<String>,
-    pub unwrap_single: bool,
+    pub output: OutputShape,
 }
 
 pub fn normalize_models(
@@ -47,8 +54,11 @@ pub fn plan_resume(
         (None, _) => Ok(ResumePlan {
             threads: vec![None; resolved_models.len()],
             matched_entry_indices: vec![None; resolved_models.len()],
-            group_id: None,
-            unwrap_single: resolved_models.len() == 1,
+            output: if resolved_models.len() == 1 {
+                OutputShape::Single
+            } else {
+                OutputShape::Group { existing_id: None }
+            },
         }),
         (Some(tid), Some(group)) if is_group_id(tid) => {
             let mut threads = Vec::with_capacity(resolved_models.len());
@@ -73,8 +83,9 @@ pub fn plan_resume(
             Ok(ResumePlan {
                 threads,
                 matched_entry_indices,
-                group_id: Some(tid.to_string()),
-                unwrap_single: false,
+                output: OutputShape::Group {
+                    existing_id: Some(tid.to_string()),
+                },
             })
         }
         (Some(tid), _) if is_group_id(tid) => {
@@ -89,8 +100,7 @@ pub fn plan_resume(
             Ok(ResumePlan {
                 threads: vec![Some(tid.to_string())],
                 matched_entry_indices: vec![None],
-                group_id: None,
-                unwrap_single: true,
+                output: OutputShape::Single,
             })
         }
     }
@@ -200,18 +210,16 @@ mod tests {
     }
 
     #[test]
-    fn plan_resume_no_tid_single_unwraps() {
+    fn plan_resume_no_tid_single_is_single_output() {
         let plan = plan_resume(None, &["gpt-5.2".into()], None).unwrap();
-        assert!(plan.unwrap_single);
-        assert!(plan.group_id.is_none());
+        assert_eq!(plan.output, OutputShape::Single);
         assert_eq!(plan.threads, vec![None]);
     }
 
     #[test]
-    fn plan_resume_no_tid_multi_no_unwrap() {
+    fn plan_resume_no_tid_multi_is_group_output() {
         let plan = plan_resume(None, &["gpt-5.2".into(), "gemini-2.5-pro".into()], None).unwrap();
-        assert!(!plan.unwrap_single);
-        assert!(plan.group_id.is_none());
+        assert_eq!(plan.output, OutputShape::Group { existing_id: None });
         assert_eq!(plan.threads, vec![None, None]);
     }
 
@@ -236,7 +244,7 @@ mod tests {
     #[test]
     fn plan_resume_per_model_tid_single() {
         let plan = plan_resume(Some("api_xxx"), &["gpt-5.2".into()], None).unwrap();
-        assert!(plan.unwrap_single);
+        assert_eq!(plan.output, OutputShape::Single);
         assert_eq!(plan.threads, vec![Some("api_xxx".to_string())]);
         assert_eq!(plan.matched_entry_indices, vec![None]);
     }
@@ -253,7 +261,12 @@ mod tests {
             Some(group),
         )
         .unwrap();
-        assert_eq!(plan.group_id.as_deref(), Some("group_abc"));
+        assert_eq!(
+            plan.output,
+            OutputShape::Group {
+                existing_id: Some("group_abc".into())
+            }
+        );
         assert_eq!(
             plan.threads,
             vec![Some("api_x".to_string()), Some("api_y".to_string())]
@@ -308,17 +321,19 @@ mod tests {
     }
 
     #[test]
-    fn plan_resume_group_tid_single_member_unwraps() {
+    fn plan_resume_group_tid_single_member_uses_group_output() {
         let group = StoredGroup {
             id: "group_abc".into(),
             entries: vec![entry("gpt-5.2", "api_x"), entry("gemini-2.5-pro", "api_y")],
         };
         let plan = plan_resume(Some("group_abc"), &["gpt-5.2".into()], Some(group)).unwrap();
-        assert!(
-            !plan.unwrap_single,
+        assert_eq!(
+            plan.output,
+            OutputShape::Group {
+                existing_id: Some("group_abc".into())
+            },
             "group resumes always use the group path"
         );
-        assert_eq!(plan.group_id.as_deref(), Some("group_abc"));
     }
 
     #[test]

@@ -16,7 +16,7 @@ use crate::system_prompt::get_system_prompt;
 pub mod plan;
 pub mod runner;
 
-use plan::{normalize_models, plan_resume};
+use plan::{OutputShape, normalize_models, plan_resume};
 use runner::SingleResult;
 
 fn resolve_git_diff(git_diff: Option<&GitDiffArgs>) -> Option<String> {
@@ -55,6 +55,14 @@ pub struct ConsultJob {
     pub prompt: String,
     pub thread_id: Option<String>,
     pub entry_index: Option<usize>,
+}
+
+/// A fully-resolved set of model jobs together with the output shape that
+/// determines how their results are rendered. Both `consult` and
+/// `consult_jobs` build a `RunPlan` and hand it to `execute`.
+pub struct RunPlan {
+    pub jobs: Vec<ConsultJob>,
+    pub output: OutputShape,
 }
 
 pub struct ConsultService {
@@ -170,6 +178,51 @@ fn assemble_group_markdown(group_id: &str, results: &[SingleResult]) -> String {
     out
 }
 
+/// Single-model output assembly: surface the worker error directly.
+fn single_outcome(outcomes: Vec<anyhow::Result<SingleResult>>) -> anyhow::Result<ConsultOutcome> {
+    let r = outcomes
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("single-model run produced no outcome"))??;
+    Ok(ConsultOutcome::Response {
+        body: r.body,
+        usage: r.usage,
+        model: r.model,
+        thread_id: r.thread_id,
+    })
+}
+
+/// Group output assembly: render per-model errors inline; only bail when
+/// every model failed.
+fn collect_group_results(
+    jobs: &[ConsultJob],
+    outcomes: Vec<anyhow::Result<SingleResult>>,
+) -> anyhow::Result<Vec<SingleResult>> {
+    let mut results: Vec<SingleResult> = Vec::with_capacity(outcomes.len());
+    for (job, outcome) in jobs.iter().zip(outcomes) {
+        match outcome {
+            Ok(r) => results.push(r),
+            Err(e) => results.push(SingleResult {
+                model: job.model.clone(),
+                body: format!("**Error:** {e:#}"),
+                usage: None,
+                thread_id: None,
+                entry_index: job.entry_index,
+                failed: true,
+            }),
+        }
+    }
+    if results.iter().all(|r| r.failed) {
+        let details = results
+            .iter()
+            .map(|r| format!("{}: {}", r.model, r.body))
+            .collect::<Vec<_>>()
+            .join("\n");
+        anyhow::bail!("all model consultations failed\n{details}");
+    }
+    Ok(results)
+}
+
 impl ConsultService {
     pub fn new(
         config: Arc<Config>,
@@ -199,31 +252,34 @@ impl ConsultService {
         };
 
         let models = normalize_models(&self.registry, args.model.clone(), loaded_group.as_ref())?;
-        let plan = plan_resume(args.thread_id.as_deref(), &models, loaded_group)?;
+        let resume = plan_resume(args.thread_id.as_deref(), &models, loaded_group)?;
         let shared = build_shared_inputs(&args)?;
 
         let jobs: Vec<ConsultJob> = models
-            .iter()
-            .zip(plan.threads.iter())
-            .zip(plan.matched_entry_indices.iter())
-            .map(|((m, thread_id), entry_index)| ConsultJob {
-                model: m.clone(),
+            .into_iter()
+            .zip(resume.threads)
+            .zip(resume.matched_entry_indices)
+            .map(|((model, thread_id), entry_index)| ConsultJob {
+                model,
                 prompt: args.prompt.clone(),
-                thread_id: thread_id.clone(),
-                entry_index: *entry_index,
+                thread_id,
+                entry_index,
             })
             .collect();
 
-        self.run_jobs(
-            jobs,
+        self.execute(
+            RunPlan {
+                jobs,
+                output: resume.output,
+            },
             shared,
             args.task_mode,
-            plan.group_id,
-            plan.unwrap_single,
         )
     }
 
-    /// Run a set of pre-built jobs with per-job prompts in parallel.
+    /// Run a set of pre-built jobs with per-job prompts in parallel. Always
+    /// renders as a group document — the `--run` surface never unwraps to a
+    /// plain Response.
     pub fn consult_jobs(
         &self,
         jobs: Vec<ConsultJob>,
@@ -233,39 +289,60 @@ impl ConsultService {
         existing_group_id: Option<String>,
     ) -> anyhow::Result<ConsultOutcome> {
         let shared = build_shared_inputs_from_files(files, git_diff_args)?;
-        // --run always uses the group output path; never unwrap to a plain Response.
-        self.run_jobs(jobs, shared, task_mode, existing_group_id, false)
+        self.execute(
+            RunPlan {
+                jobs,
+                output: OutputShape::Group {
+                    existing_id: existing_group_id,
+                },
+            },
+            shared,
+            task_mode,
+        )
     }
 
-    fn run_jobs(
+    fn execute(
         &self,
-        jobs: Vec<ConsultJob>,
+        plan: RunPlan,
         shared: SharedInputs,
         task_mode: TaskMode,
-        existing_group_id: Option<String>,
-        unwrap_single: bool,
     ) -> anyhow::Result<ConsultOutcome> {
-        let models: Vec<String> = jobs.iter().map(|j| j.model.clone()).collect();
-        let result_jobs = jobs.clone();
+        let RunPlan { jobs, output } = plan;
+        let outcomes = self.run_workers(&jobs, &shared, task_mode)?;
 
-        let executors: Vec<Arc<dyn LlmExecutor>> = models
+        match output {
+            OutputShape::Single => single_outcome(outcomes),
+            OutputShape::Group { existing_id } => {
+                let results = collect_group_results(&jobs, outcomes)?;
+                self.persist_group_and_render(existing_id, results)
+            }
+        }
+    }
+
+    fn run_workers(
+        &self,
+        jobs: &[ConsultJob],
+        shared: &SharedInputs,
+        task_mode: TaskMode,
+    ) -> anyhow::Result<Vec<anyhow::Result<SingleResult>>> {
+        let executors: Vec<Arc<dyn LlmExecutor>> = jobs
             .iter()
-            .map(|m| self.executor_provider.get_executor(m))
+            .map(|j| self.executor_provider.get_executor(&j.model))
             .collect::<anyhow::Result<Vec<_>>>()?;
 
         // Fan out one OS thread per job. `std::thread::scope` joins them
         // deterministically and lets each thread borrow `shared`.
-        let outcomes: Vec<anyhow::Result<runner::SingleResult>> = std::thread::scope(|s| {
+        Ok(std::thread::scope(|s| {
             let handles: Vec<_> = jobs
-                .into_iter()
+                .iter()
+                .cloned()
                 .zip(executors)
                 .map(|(job, exec)| {
-                    let shared_ref = &shared;
                     let config = Arc::clone(&self.config);
                     s.spawn(move || {
                         runner::run_single_model(
                             &config,
-                            shared_ref,
+                            shared,
                             job.model,
                             exec,
                             job.thread_id,
@@ -283,43 +360,14 @@ impl ConsultService {
                     Err(_) => Err(anyhow::anyhow!("worker thread panicked")),
                 })
                 .collect()
-        });
+        }))
+    }
 
-        if unwrap_single {
-            // Single-model path: propagate errors directly.
-            let r = outcomes.into_iter().next().unwrap()?;
-            return Ok(ConsultOutcome::Response {
-                body: r.body,
-                usage: r.usage,
-                model: r.model,
-                thread_id: r.thread_id,
-            });
-        }
-
-        // Multi-model path: collect successes, render errors inline.
-        let mut results: Vec<SingleResult> = Vec::new();
-        for (job, outcome) in result_jobs.iter().zip(outcomes) {
-            match outcome {
-                Ok(r) => results.push(r),
-                Err(e) => results.push(SingleResult {
-                    model: job.model.clone(),
-                    body: format!("**Error:** {e:#}"),
-                    usage: None,
-                    thread_id: None,
-                    entry_index: job.entry_index,
-                    failed: true,
-                }),
-            }
-        }
-        if results.iter().all(|r| r.failed) {
-            let details = results
-                .iter()
-                .map(|r| format!("{}: {}", r.model, r.body))
-                .collect::<Vec<_>>()
-                .join("\n");
-            anyhow::bail!("all model consultations failed\n{details}");
-        }
-
+    fn persist_group_and_render(
+        &self,
+        existing_group_id: Option<String>,
+        results: Vec<SingleResult>,
+    ) -> anyhow::Result<ConsultOutcome> {
         let group_id = existing_group_id
             .clone()
             .unwrap_or_else(group_thread_store::generate_group_id);
@@ -436,6 +484,15 @@ mod tests {
         }
     }
 
+    fn job(model: &str) -> ConsultJob {
+        ConsultJob {
+            model: model.into(),
+            prompt: "p".into(),
+            thread_id: None,
+            entry_index: None,
+        }
+    }
+
     #[test]
     fn group_markdown_suffixes_only_duplicate_models() {
         let out = assemble_group_markdown(
@@ -527,5 +584,61 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn single_outcome_propagates_worker_error() {
+        let err = match single_outcome(vec![Err(anyhow::anyhow!("boom"))]) {
+            Ok(_) => panic!("expected error"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("boom"));
+    }
+
+    #[test]
+    fn single_outcome_returns_response_on_success() {
+        let outcome =
+            single_outcome(vec![Ok(result("gpt-5.2", Some("api_1"), None, false))]).unwrap();
+        match outcome {
+            ConsultOutcome::Response {
+                model, thread_id, ..
+            } => {
+                assert_eq!(model, "gpt-5.2");
+                assert_eq!(thread_id.as_deref(), Some("api_1"));
+            }
+            _ => panic!("expected Response"),
+        }
+    }
+
+    #[test]
+    fn multi_outcome_renders_partial_failures_inline() {
+        let jobs = vec![job("gpt-5.2"), job("gemini-2.5-pro")];
+        let outcomes = vec![
+            Ok(result("gpt-5.2", Some("api_1"), None, false)),
+            Err(anyhow::anyhow!("network kaput")),
+        ];
+        let results = collect_group_results(&jobs, outcomes).unwrap();
+        assert_eq!(results.len(), 2);
+        assert!(!results[0].failed);
+        assert!(results[1].failed);
+        assert!(results[1].body.contains("network kaput"));
+        assert_eq!(results[1].model, "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn multi_outcome_bails_when_all_fail() {
+        let jobs = vec![job("gpt-5.2"), job("gemini-2.5-pro")];
+        let outcomes = vec![
+            Err(anyhow::anyhow!("first failed")),
+            Err(anyhow::anyhow!("second failed")),
+        ];
+        let err = match collect_group_results(&jobs, outcomes) {
+            Ok(_) => panic!("expected error"),
+            Err(e) => e,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("all model consultations failed"));
+        assert!(msg.contains("first failed"));
+        assert!(msg.contains("second failed"));
     }
 }
