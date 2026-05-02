@@ -5,15 +5,17 @@
 //!
 //! Adapted from claude-history's TUI markdown renderer.
 
-use std::sync::OnceLock;
+mod highlight;
+mod wrap;
+
+pub use highlight::init_syntax;
+
+use highlight::highlight_code;
+use wrap::wrap_code_lines;
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::{FontStyle, ThemeSet};
-use syntect::parsing::SyntaxSet;
-use syntect::util::LinesWithEndings;
 
 const HEADING_COLOR: Color = Color::Rgb(180, 190, 200);
 const CODE_COLOR: Color = Color::Rgb(147, 161, 199);
@@ -510,102 +512,4 @@ fn render_table(rows: &[Vec<String>]) -> Vec<Vec<StyledSpan>> {
 
     lines.push(build_border('└', '┴', '┘'));
     lines
-}
-
-// ── Syntax highlighting ─────────────────────────────────────────────────
-
-static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
-static THEME_SET: OnceLock<ThemeSet> = OnceLock::new();
-
-/// Pre-initialize syntax and theme sets to avoid UI stutter on first code block.
-pub fn init_syntax() {
-    get_syntax_set();
-    get_theme_set();
-}
-
-fn get_syntax_set() -> &'static SyntaxSet {
-    SYNTAX_SET.get_or_init(SyntaxSet::load_defaults_newlines)
-}
-
-fn get_theme_set() -> &'static ThemeSet {
-    THEME_SET.get_or_init(ThemeSet::load_defaults)
-}
-
-fn normalize_language(lang: &str) -> &str {
-    let lang = lang.split([',', ' ']).next().unwrap_or(lang).trim();
-    match lang.to_lowercase().as_str() {
-        "js" => "javascript",
-        "ts" => "typescript",
-        "sh" | "shell" => "bash",
-        "yml" => "yaml",
-        "py" => "python",
-        "rb" => "ruby",
-        "md" => "markdown",
-        "dockerfile" => "Dockerfile",
-        _ => lang,
-    }
-}
-
-type HighlightedLine = Vec<(String, Color, bool, bool)>;
-
-/// Returns highlighted tokens per line: Vec<(text, fg_color, bold, italic)>
-fn highlight_code(code: &str, lang: &str) -> Option<Vec<HighlightedLine>> {
-    let ps = get_syntax_set();
-    let ts = get_theme_set();
-
-    let lang = normalize_language(lang);
-    let syntax = ps.find_syntax_by_token(lang)?;
-    let theme = ts.themes.get("base16-ocean.dark")?;
-
-    let mut highlighter = HighlightLines::new(syntax, theme);
-    let mut lines = Vec::new();
-
-    for line in LinesWithEndings::from(code) {
-        let ranges = highlighter.highlight_line(line, ps).ok()?;
-        let tokens: Vec<_> = ranges
-            .into_iter()
-            .map(|(style, text)| {
-                let fg = style.foreground;
-                (
-                    text.to_string(),
-                    Color::Rgb(fg.r, fg.g, fg.b),
-                    style.font_style.contains(FontStyle::BOLD),
-                    style.font_style.contains(FontStyle::ITALIC),
-                )
-            })
-            .collect();
-        lines.push(tokens);
-    }
-
-    Some(lines)
-}
-
-// ── Code wrapping ───────────────────────────────────────────────────────
-
-fn wrap_code_lines(code: &str, max_width: usize) -> String {
-    if max_width == 0 {
-        return code.to_string();
-    }
-
-    let mut result = String::new();
-    for line in code.lines() {
-        let line_width = line.chars().count();
-        if line_width <= max_width {
-            result.push_str(line);
-            result.push('\n');
-        } else {
-            let mut current_width = 0;
-            for ch in line.chars() {
-                let ch_width = 1; // simplified from UnicodeWidthChar
-                if current_width + ch_width > max_width && current_width > 0 {
-                    result.push('\n');
-                    current_width = 0;
-                }
-                result.push(ch);
-                current_width += ch_width;
-            }
-            result.push('\n');
-        }
-    }
-    result
 }
