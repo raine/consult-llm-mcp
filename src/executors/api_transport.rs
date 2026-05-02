@@ -195,12 +195,15 @@ mod tests {
     #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use std::thread;
 
-    use consult_llm_core::monitoring::{RunEvent, RunEventKind, RunMeta, RunSpool};
+    use consult_llm_core::monitoring::RunSpool;
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
+    use consult_llm_core::monitoring::{RunEvent, RunEventKind, RunMeta};
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use consult_llm_core::stream_events::ParsedStreamEvent;
 
     use super::super::anthropic_api::AnthropicApiExecutor;
     use super::super::anthropic_events::AnthropicStreamHandler;
-    use super::super::api::{ApiExecutor, Dialect};
+    use super::super::api::ApiExecutor;
     use super::super::api_chat::ChatStreamHandler;
     #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use super::super::types::{ExecutionRequest, LlmExecutor};
@@ -459,6 +462,7 @@ data: {\"type\":\"message_stop\"}\n\n\
         build_request_with_spool(prompt, model, RunSpool::disabled())
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn build_request_with_spool(
         prompt: &str,
         model: &str,
@@ -483,8 +487,9 @@ data: {\"type\":\"message_stop\"}\n\n\
         runtime
     }
 
-    fn active_spool(model: &str) -> (tempfile::TempDir, RunSpool) {
-        let state = isolate_state_dir();
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
+    fn active_spool(model: &str) -> (crate::test_util::XdgStateGuard, RunSpool) {
+        let state = crate::test_util::XdgStateGuard::temp();
         let spool = RunSpool::new(RunMeta {
             v: 1,
             run_id: format!("run-{model}"),
@@ -501,6 +506,7 @@ data: {\"type\":\"message_stop\"}\n\n\
         (state, spool)
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn recorded_thinking_events(run_id: &str) -> Vec<String> {
         let path = consult_llm_core::monitoring::runs_dir().join(format!("{run_id}.events.jsonl"));
         let events = std::fs::read_to_string(path).unwrap();
@@ -516,11 +522,9 @@ data: {\"type\":\"message_stop\"}\n\n\
             .collect()
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     #[test]
     fn mock_server_gemini_runtime_metadata_ignores_base_url() {
-        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
         let (state, spool) = active_spool("gemini-2.5-pro");
 
         let gemini_sse = b"\
@@ -561,11 +565,9 @@ data: [DONE]\n\n\
         drop(state);
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     #[test]
     fn mock_server_minimax_runtime_metadata_ignores_base_url() {
-        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
         let (state, spool) = active_spool("MiniMax-M2.7");
 
         let minimax_sse = b"\
@@ -600,8 +602,9 @@ data: [DONE]\n\n\
             "test-openai-key".to_string(),
             Some("http://example.test/v1/".to_string()),
             std::time::Duration::from_secs(5),
+            runtime_for(Provider::OpenAI),
         );
-        let (prepared, dialect) = openai
+        let prepared = openai
             .build_stream_request(
                 "gpt-test".to_string(),
                 "you are helpful",
@@ -610,7 +613,6 @@ data: [DONE]\n\n\
             )
             .unwrap();
 
-        assert_eq!(dialect, Dialect::Generic);
         assert_eq!(prepared.url, "http://example.test/v1/chat/completions");
         assert_eq!(
             prepared.headers,
