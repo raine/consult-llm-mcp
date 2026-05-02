@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::models::{PROVIDER_SPECS, Provider, ProviderSpec};
+use crate::models::{PROVIDERS, Provider, ProviderSpec};
 
 use super::super::migrate::{migrate_backend_env, migrate_prefixed_env};
 use super::super::types::{Backend, ConfigError, ProviderRuntimeConfig};
@@ -78,14 +78,14 @@ pub fn parse_all_providers(
     let opencode_global = env("CONSULT_LLM_OPENCODE_PROVIDER");
 
     let mut providers = HashMap::new();
-    for spec in PROVIDER_SPECS {
+    for spec in PROVIDERS {
         let provider_config = parse_provider_config(spec, env, &opencode_global)?;
         providers.insert(spec.provider, provider_config);
     }
     debug_assert_eq!(
         providers.len(),
         crate::models::ALL_PROVIDERS.len(),
-        "PROVIDER_SPECS is out of sync with ALL_PROVIDERS"
+        "PROVIDERS is out of sync with ALL_PROVIDERS"
     );
     Ok(providers)
 }
@@ -207,9 +207,9 @@ mod tests {
             assert!(!spec.id.is_empty());
         }
 
-        assert_eq!(PROVIDER_SPECS.len(), ALL_PROVIDERS.len());
+        assert_eq!(PROVIDERS.len(), ALL_PROVIDERS.len());
         let mut seen = std::collections::HashSet::new();
-        for spec in PROVIDER_SPECS {
+        for spec in PROVIDERS {
             assert!(
                 seen.insert(spec.provider),
                 "Duplicate ProviderSpec for {:?}",

@@ -1,10 +1,23 @@
 use serde::Deserialize;
+use serde::de::{Deserializer, Error as DeError};
+use serde_yaml::Value;
 use std::collections::HashMap;
 
-use crate::models::PROVIDER_SPECS;
+use crate::models::{PROVIDERS, Provider};
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// Top-level keys that map to typed fields rather than provider blocks. Listed once so
+/// the custom deserializer below can assert disjointness with provider IDs.
+const TYPED_TOP_KEYS: &[&str] = &[
+    "default_model",
+    "default_models",
+    "allowed_models",
+    "extra_models",
+    "system_prompt_path",
+    "no_update_check",
+    "opencode",
+];
+
+#[derive(Debug, Default)]
 pub struct ConfigFile {
     pub default_model: Option<String>,
     pub default_models: Option<Vec<String>>,
@@ -13,12 +26,9 @@ pub struct ConfigFile {
     pub system_prompt_path: Option<String>,
     pub no_update_check: Option<bool>,
 
-    pub gemini: Option<ProviderBlock>,
-    pub openai: Option<ProviderBlock>,
-    pub anthropic: Option<ProviderBlock>,
-    pub deepseek: Option<ProviderBlock>,
-    pub minimax: Option<ProviderBlock>,
-    pub grok: Option<ProviderBlock>,
+    /// Provider-keyed YAML blocks (e.g. `gemini:`, `openai:` …). Routed by ID through the
+    /// registry so adding a new provider only edits `src/models.rs`.
+    pub providers: HashMap<Provider, ProviderBlock>,
 
     pub opencode: Option<OpencodeBlock>,
 }
@@ -68,6 +78,75 @@ impl std::fmt::Display for ApiKeyInProjectConfig {
     }
 }
 
+impl<'de> Deserialize<'de> for ConfigFile {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let value = Value::deserialize(d)?;
+        let map = match value {
+            Value::Null => return Ok(Self::default()),
+            Value::Mapping(m) => m,
+            other => {
+                return Err(D::Error::custom(format!(
+                    "expected a mapping at the top level, got {other:?}"
+                )));
+            }
+        };
+
+        let mut cfg = Self::default();
+        for (k, v) in map {
+            let key = match k {
+                Value::String(s) => s,
+                other => {
+                    return Err(D::Error::custom(format!(
+                        "non-string top-level key: {other:?}"
+                    )));
+                }
+            };
+
+            match key.as_str() {
+                "default_model" => cfg.default_model = parse_inner(&key, v)?,
+                "default_models" => cfg.default_models = parse_inner(&key, v)?,
+                "allowed_models" => cfg.allowed_models = parse_inner(&key, v)?,
+                "extra_models" => cfg.extra_models = parse_inner(&key, v)?,
+                "system_prompt_path" => cfg.system_prompt_path = parse_inner(&key, v)?,
+                "no_update_check" => cfg.no_update_check = parse_inner(&key, v)?,
+                "opencode" => cfg.opencode = parse_inner(&key, v)?,
+                _ => {
+                    let provider = Provider::from_id(&key).ok_or_else(|| {
+                        let known = known_top_keys_hint().join(", ");
+                        D::Error::custom(format!("unknown field `{key}`, expected one of: {known}"))
+                    })?;
+                    if cfg.providers.contains_key(&provider) {
+                        return Err(D::Error::custom(format!("duplicate field `{key}`")));
+                    }
+                    let block: ProviderBlock = parse_inner(&key, v)?;
+                    cfg.providers.insert(provider, block);
+                }
+            }
+        }
+        Ok(cfg)
+    }
+}
+
+fn parse_inner<E, T>(field: &str, value: Value) -> Result<T, E>
+where
+    E: DeError,
+    T: for<'de> Deserialize<'de>,
+{
+    serde_yaml::from_value(value)
+        .map_err(|err| E::custom(format!("invalid value for `{field}`: {err}")))
+}
+
+/// Hint shown to users when an unknown top-level key is encountered. Combines the
+/// fixed top-level keys with every registered provider id, so the error is accurate
+/// even after providers are added.
+fn known_top_keys_hint() -> Vec<&'static str> {
+    let mut keys: Vec<&'static str> = TYPED_TOP_KEYS.to_vec();
+    for spec in PROVIDERS {
+        keys.push(spec.id);
+    }
+    keys
+}
+
 impl ConfigFile {
     pub fn parse(yaml: &str) -> Result<Self, serde_yaml::Error> {
         if yaml.trim().is_empty() {
@@ -112,23 +191,14 @@ impl ConfigFile {
             );
         }
 
-        let blocks: [(&str, Option<&ProviderBlock>); 6] = [
-            ("gemini", self.gemini.as_ref()),
-            ("openai", self.openai.as_ref()),
-            ("anthropic", self.anthropic.as_ref()),
-            ("deepseek", self.deepseek.as_ref()),
-            ("minimax", self.minimax.as_ref()),
-            ("grok", self.grok.as_ref()),
-        ];
+        // Iterate the registry — every provider's YAML block routes through here, so
+        // adding a provider in `src/models.rs` is enough; this loop never grows.
+        for spec in PROVIDERS {
+            let Some(block) = self.providers.get(&spec.provider) else {
+                continue;
+            };
 
-        for (id, block) in blocks {
-            let Some(b) = block else { continue };
-            let spec = PROVIDER_SPECS
-                .iter()
-                .find(|s| s.id == id)
-                .expect("every provider block id must have a ProviderSpec");
-
-            if let Some(v) = &b.api_key {
+            if let Some(v) = &block.api_key {
                 let trimmed = v.trim();
                 if !trimmed.is_empty() {
                     if policy == ApiKeyPolicy::Forbid {
@@ -139,29 +209,18 @@ impl ConfigFile {
                 // blank/whitespace-only: silently skip (treat as unset)
             }
 
-            if let Some(v) = &b.backend {
+            if let Some(v) = &block.backend {
                 m.insert(spec.backend_env.to_string(), v.clone());
             }
-            if let Some(v) = &b.opencode_provider {
+            if let Some(v) = &block.opencode_provider {
                 m.insert(spec.opencode_env.to_string(), v.clone());
             }
-        }
-
-        if let Some(b) = &self.openai
-            && let Some(v) = &b.reasoning_effort
-        {
-            m.insert("CONSULT_LLM_CODEX_REASONING_EFFORT".into(), v.clone());
-        }
-
-        if let Some(b) = &self.openai
-            && let Some(v) = &b.extra_args
-        {
-            m.insert("CONSULT_LLM_CODEX_EXTRA_ARGS".into(), v.clone());
-        }
-        if let Some(b) = &self.gemini
-            && let Some(v) = &b.extra_args
-        {
-            m.insert("CONSULT_LLM_GEMINI_EXTRA_ARGS".into(), v.clone());
+            if let (Some(env), Some(v)) = (spec.reasoning_effort_env, &block.reasoning_effort) {
+                m.insert(env.to_string(), v.clone());
+            }
+            if let (Some(env), Some(v)) = (spec.extra_args_env, &block.extra_args) {
+                m.insert(env.to_string(), v.clone());
+            }
         }
 
         if let Some(oc) = &self.opencode
@@ -178,6 +237,16 @@ impl ConfigFile {
 mod tests {
     use super::*;
 
+    /// Test helper: build a `ConfigFile` with the given provider blocks. Keeps tests
+    /// readable now that provider blocks live in a HashMap rather than typed fields.
+    fn cfg_with(blocks: Vec<(Provider, ProviderBlock)>) -> ConfigFile {
+        let mut cfg = ConfigFile::default();
+        for (p, b) in blocks {
+            cfg.providers.insert(p, b);
+        }
+        cfg
+    }
+
     #[test]
     fn test_parse_rejects_unknown_top_level_keys() {
         let yaml = "unknown_key: value\n";
@@ -191,61 +260,99 @@ mod tests {
     }
 
     #[test]
-    fn test_to_env_map_fully_populated() {
-        let cfg = ConfigFile {
-            default_model: Some("gemini".into()),
-            default_models: Some(vec!["gemini".into(), "openai".into(), "openai".into()]),
-            allowed_models: Some(vec!["gemini-2.5-pro".into(), "gpt-5.2".into()]),
-            extra_models: Some(vec!["custom-model".into()]),
-            system_prompt_path: Some("/path/to/prompt.md".into()),
-            no_update_check: Some(true),
-            gemini: Some(ProviderBlock {
-                backend: Some("gemini-cli".into()),
-                opencode_provider: Some("google".into()),
-                reasoning_effort: None,
-                api_key: None,
-                extra_args: Some("--yolo".into()),
-            }),
-            openai: Some(ProviderBlock {
-                backend: Some("api".into()),
-                opencode_provider: None,
-                reasoning_effort: Some("high".into()),
-                api_key: None,
-                extra_args: Some("--dangerously-bypass-approvals-and-sandbox".into()),
-            }),
-            anthropic: None,
-            deepseek: None,
-            minimax: None,
-            grok: Some(ProviderBlock {
-                backend: Some("api".into()),
-                opencode_provider: None,
-                reasoning_effort: None,
-                api_key: Some("xai-test".into()),
-                extra_args: None,
-            }),
-            opencode: Some(OpencodeBlock {
-                default_provider: Some("copilot".into()),
-            }),
-        };
+    fn test_parse_rejects_duplicate_provider_block() {
+        let yaml = "gemini:\n  backend: api\ngemini:\n  backend: gemini-cli\n";
+        // serde_yaml itself rejects duplicate mapping keys; this test pins that.
+        assert!(ConfigFile::parse(yaml).is_err());
+    }
+
+    #[test]
+    fn test_parse_routes_every_provider_block() {
+        // Round-trip: every currently-supported provider block parses, gets routed into
+        // the providers map keyed by the registry's Provider variant, and survives
+        // to_env_map(Allow). This is the all-providers fixture required by the phase.
+        let yaml = r#"
+default_model: gemini
+default_models:
+  - gemini
+  - openai
+allowed_models:
+  - gemini-2.5-pro
+  - gpt-5.2
+extra_models:
+  - custom-model
+system_prompt_path: /path/to/prompt.md
+no_update_check: true
+
+gemini:
+  backend: gemini-cli
+  opencode_provider: google
+  api_key: gem-key
+  extra_args: --yolo
+openai:
+  backend: api
+  reasoning_effort: high
+  api_key: sk-test
+  extra_args: --dangerously-bypass-approvals-and-sandbox
+anthropic:
+  backend: api
+  api_key: sk-ant-test
+deepseek:
+  backend: api
+  api_key: ds-test
+minimax:
+  backend: api
+  api_key: mm-test
+grok:
+  backend: api
+  api_key: xai-test
+opencode:
+  default_provider: copilot
+"#;
+        let cfg = ConfigFile::parse(yaml).expect("parses");
+        assert_eq!(cfg.providers.len(), 6);
+        for spec in PROVIDERS {
+            assert!(
+                cfg.providers.contains_key(&spec.provider),
+                "missing provider {} after parse",
+                spec.id
+            );
+        }
 
         let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["CONSULT_LLM_DEFAULT_MODEL"], "gemini");
-        assert_eq!(m["CONSULT_LLM_DEFAULT_MODELS"], "gemini,openai,openai");
+        assert_eq!(m["CONSULT_LLM_DEFAULT_MODELS"], "gemini,openai");
         assert_eq!(m["CONSULT_LLM_ALLOWED_MODELS"], "gemini-2.5-pro,gpt-5.2");
         assert_eq!(m["CONSULT_LLM_EXTRA_MODELS"], "custom-model");
         assert_eq!(m["CONSULT_LLM_SYSTEM_PROMPT_PATH"], "/path/to/prompt.md");
         assert_eq!(m["CONSULT_LLM_NO_UPDATE_CHECK"], "1");
-        assert_eq!(m["CONSULT_LLM_GEMINI_BACKEND"], "gemini-cli");
-        assert_eq!(m["CONSULT_LLM_OPENCODE_GEMINI_PROVIDER"], "google");
-        assert_eq!(m["CONSULT_LLM_OPENAI_BACKEND"], "api");
-        assert_eq!(m["CONSULT_LLM_GROK_BACKEND"], "api");
+
+        // Per-provider API keys land at the registry-declared env names.
+        assert_eq!(m["GEMINI_API_KEY"], "gem-key");
+        assert_eq!(m["OPENAI_API_KEY"], "sk-test");
+        assert_eq!(m["ANTHROPIC_API_KEY"], "sk-ant-test");
+        assert_eq!(m["DEEPSEEK_API_KEY"], "ds-test");
+        assert_eq!(m["MINIMAX_API_KEY"], "mm-test");
         assert_eq!(m["XAI_API_KEY"], "xai-test");
+
+        // Backends.
+        assert_eq!(m["CONSULT_LLM_GEMINI_BACKEND"], "gemini-cli");
+        assert_eq!(m["CONSULT_LLM_OPENAI_BACKEND"], "api");
+        assert_eq!(m["CONSULT_LLM_ANTHROPIC_BACKEND"], "api");
+        assert_eq!(m["CONSULT_LLM_DEEPSEEK_BACKEND"], "api");
+        assert_eq!(m["CONSULT_LLM_MINIMAX_BACKEND"], "api");
+        assert_eq!(m["CONSULT_LLM_GROK_BACKEND"], "api");
+
+        // Reasoning + extra args use the spec-declared env names.
         assert_eq!(m["CONSULT_LLM_CODEX_REASONING_EFFORT"], "high");
         assert_eq!(
             m["CONSULT_LLM_CODEX_EXTRA_ARGS"],
             "--dangerously-bypass-approvals-and-sandbox"
         );
         assert_eq!(m["CONSULT_LLM_GEMINI_EXTRA_ARGS"], "--yolo");
+        assert_eq!(m["CONSULT_LLM_OPENCODE_GEMINI_PROVIDER"], "google");
+
+        // Opencode global default.
         assert_eq!(m["CONSULT_LLM_OPENCODE_PROVIDER"], "copilot");
     }
 
@@ -259,39 +366,39 @@ mod tests {
 
     #[test]
     fn test_api_key_emitted_in_allow_layer() {
-        let cfg = ConfigFile {
-            openai: Some(ProviderBlock {
+        let cfg = cfg_with(vec![(
+            Provider::OpenAI,
+            ProviderBlock {
                 api_key: Some("sk-test".into()),
                 ..Default::default()
-            }),
-            ..Default::default()
-        };
+            },
+        )]);
         let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["OPENAI_API_KEY"], "sk-test");
     }
 
     #[test]
     fn test_api_key_rejected_in_project_layer() {
-        let cfg = ConfigFile {
-            gemini: Some(ProviderBlock {
+        let cfg = cfg_with(vec![(
+            Provider::Gemini,
+            ProviderBlock {
                 api_key: Some("key-abc".into()),
                 ..Default::default()
-            }),
-            ..Default::default()
-        };
+            },
+        )]);
         let err = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap_err();
         assert_eq!(err.provider, "gemini");
     }
 
     #[test]
     fn test_grok_api_key_rejected_in_project_layer() {
-        let cfg = ConfigFile {
-            grok: Some(ProviderBlock {
+        let cfg = cfg_with(vec![(
+            Provider::Grok,
+            ProviderBlock {
                 api_key: Some("xai-test".into()),
                 ..Default::default()
-            }),
-            ..Default::default()
-        };
+            },
+        )]);
         let err = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap_err();
         assert_eq!(err.provider, "grok");
     }
@@ -299,13 +406,13 @@ mod tests {
     #[test]
     fn test_blank_api_key_silently_skipped() {
         for blank in &["", "   ", "\t"] {
-            let cfg = ConfigFile {
-                openai: Some(ProviderBlock {
+            let cfg = cfg_with(vec![(
+                Provider::OpenAI,
+                ProviderBlock {
                     api_key: Some((*blank).into()),
                     ..Default::default()
-                }),
-                ..Default::default()
-            };
+                },
+            )]);
             // Not an error even with Forbid — blank key is not a secret
             let m = cfg.to_env_map(ApiKeyPolicy::Forbid).unwrap();
             assert!(
@@ -325,43 +432,57 @@ mod tests {
 
     #[test]
     fn test_api_key_is_trimmed() {
-        let cfg = ConfigFile {
-            openai: Some(ProviderBlock {
+        let cfg = cfg_with(vec![(
+            Provider::OpenAI,
+            ProviderBlock {
                 api_key: Some("  sk-padded  ".into()),
                 ..Default::default()
-            }),
-            ..Default::default()
-        };
+            },
+        )]);
         let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["OPENAI_API_KEY"], "sk-padded");
     }
 
     #[test]
     fn test_api_key_canonical_env_names() {
-        let make = |key: &str| ConfigFile {
-            gemini: Some(ProviderBlock {
-                api_key: Some(key.into()),
-                ..Default::default()
-            }),
-            anthropic: Some(ProviderBlock {
-                api_key: Some(key.into()),
-                ..Default::default()
-            }),
-            deepseek: Some(ProviderBlock {
-                api_key: Some(key.into()),
-                ..Default::default()
-            }),
-            minimax: Some(ProviderBlock {
-                api_key: Some(key.into()),
-                ..Default::default()
-            }),
-            grok: Some(ProviderBlock {
-                api_key: Some(key.into()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        let m = make("x").to_env_map(ApiKeyPolicy::Allow).unwrap();
+        let cfg = cfg_with(vec![
+            (
+                Provider::Gemini,
+                ProviderBlock {
+                    api_key: Some("x".into()),
+                    ..Default::default()
+                },
+            ),
+            (
+                Provider::Anthropic,
+                ProviderBlock {
+                    api_key: Some("x".into()),
+                    ..Default::default()
+                },
+            ),
+            (
+                Provider::DeepSeek,
+                ProviderBlock {
+                    api_key: Some("x".into()),
+                    ..Default::default()
+                },
+            ),
+            (
+                Provider::MiniMax,
+                ProviderBlock {
+                    api_key: Some("x".into()),
+                    ..Default::default()
+                },
+            ),
+            (
+                Provider::Grok,
+                ProviderBlock {
+                    api_key: Some("x".into()),
+                    ..Default::default()
+                },
+            ),
+        ]);
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert!(m.contains_key("GEMINI_API_KEY"));
         assert!(m.contains_key("ANTHROPIC_API_KEY"));
         assert!(m.contains_key("DEEPSEEK_API_KEY"));

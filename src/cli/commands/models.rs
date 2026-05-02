@@ -1,15 +1,14 @@
 use crate::config;
-use crate::models::{ALL_PROVIDERS, Provider};
+use crate::models::{PROVIDERS, Provider};
 
 pub fn run() -> anyhow::Result<()> {
     let (cfg, registry) = config::init_config().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("Selectors:");
-    for p in ALL_PROVIDERS {
-        let spec = p.spec();
+    for spec in PROVIDERS {
         let Ok(resolved) = registry.resolve_model(Some(spec.id)) else {
             continue;
         };
-        let backend = cfg.backend_for(*p).as_str();
+        let backend = cfg.backend_for(spec.provider).as_str();
         println!("  {:<10} -> {resolved} ({backend})", spec.id);
     }
     println!("\nAllowed models:");

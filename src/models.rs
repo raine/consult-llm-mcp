@@ -38,21 +38,13 @@ pub enum ApiProtocol {
     AnthropicMessages,
 }
 
-/// All known providers in deterministic order.
-/// Adding a provider means: add a variant to `Provider`, add it here, and add a `ProviderSpec`.
-pub const ALL_PROVIDERS: &[Provider] = &[
-    Provider::Gemini,
-    Provider::DeepSeek,
-    Provider::OpenAI,
-    Provider::MiniMax,
-    Provider::Anthropic,
-    Provider::Grok,
-];
-
 /// Static metadata for a provider — the single place to define provider-specific constants.
+/// Adding a new provider means: add a variant to `Provider`, add a `ProviderSpec` to `PROVIDERS`,
+/// and add the variant to `ALL_PROVIDERS`. Nothing else outside `models.rs` needs to change
+/// (unless the provider introduces a brand-new `ApiProtocol`, which adds one match arm in `llm.rs`).
 pub struct ProviderSpec {
     pub provider: Provider,
-    /// Lowercase identifier used for logging and config key generation (e.g. "openai").
+    /// Lowercase identifier used for logging, YAML keys, and config key generation (e.g. "openai").
     pub id: &'static str,
     /// Prefixes that identify this provider's models (e.g. &["gpt-", "o3-"]).
     pub model_prefixes: &'static [&'static str],
@@ -62,6 +54,11 @@ pub struct ProviderSpec {
     pub api_protocol: ApiProtocol,
     /// Built-in model IDs shipped with this provider.
     pub builtin_models: &'static [&'static str],
+    /// Selector resolution priority: ordered model IDs (best first). Used by
+    /// `catalog::resolve_selector` so that e.g. `-m openai` picks the highest-quality
+    /// available model. Distinct from `builtin_models` because catalog order doubles as
+    /// a stability/fallback hint, not a quality ranking.
+    pub selector_priorities: &'static [&'static str],
     /// Env var for the API key (e.g. "OPENAI_API_KEY").
     pub api_key_env: &'static str,
     /// Prefixed backend env var (e.g. "CONSULT_LLM_OPENAI_BACKEND").
@@ -78,11 +75,28 @@ pub struct ProviderSpec {
     pub opencode_env: &'static str,
     /// Default opencode provider prefix (e.g. "openai").
     pub default_opencode_provider: &'static str,
+    /// Env var that carries the YAML-block `reasoning_effort` value, if this provider
+    /// exposes one (currently only `openai` → `CONSULT_LLM_CODEX_REASONING_EFFORT`).
+    pub reasoning_effort_env: Option<&'static str>,
+    /// Env var that carries the YAML-block `extra_args` value, if this provider exposes
+    /// one (openai → `CONSULT_LLM_CODEX_EXTRA_ARGS`, gemini → `CONSULT_LLM_GEMINI_EXTRA_ARGS`).
+    pub extra_args_env: Option<&'static str>,
 }
 
-/// Order matters: `all_builtin_models()` flattens in this order, which determines the
-/// fallback model when gpt-5.2 is not available (first enabled model wins).
-pub static PROVIDER_SPECS: &[ProviderSpec] = &[
+/// All known providers in deterministic order. Derived integrity tests verify this
+/// matches `PROVIDERS` and that every variant has exactly one spec.
+pub const ALL_PROVIDERS: &[Provider] = &[
+    Provider::Gemini,
+    Provider::DeepSeek,
+    Provider::OpenAI,
+    Provider::MiniMax,
+    Provider::Anthropic,
+    Provider::Grok,
+];
+
+/// The provider registry. Order matters: `all_builtin_models()` flattens in this order,
+/// which determines the fallback model when gpt-5.2 is not available (first enabled wins).
+pub static PROVIDERS: &[ProviderSpec] = &[
     ProviderSpec {
         provider: Provider::Gemini,
         id: "gemini",
@@ -94,6 +108,11 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
             "gemini-3-pro-preview",
             "gemini-3.1-pro-preview",
         ],
+        selector_priorities: &[
+            "gemini-3.1-pro-preview",
+            "gemini-3-pro-preview",
+            "gemini-2.5-pro",
+        ],
         api_key_env: "GEMINI_API_KEY",
         backend_env: "CONSULT_LLM_GEMINI_BACKEND",
         legacy_backend_env: Some("GEMINI_BACKEND"),
@@ -102,6 +121,8 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api", "gemini-cli", "cursor-cli", "opencode"],
         opencode_env: "CONSULT_LLM_OPENCODE_GEMINI_PROVIDER",
         default_opencode_provider: "google",
+        reasoning_effort_env: None,
+        extra_args_env: Some("CONSULT_LLM_GEMINI_EXTRA_ARGS"),
     },
     ProviderSpec {
         provider: Provider::DeepSeek,
@@ -110,6 +131,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         api_base_url: Some("https://api.deepseek.com"),
         api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["deepseek-v4-pro"],
+        selector_priorities: &["deepseek-v4-pro"],
         api_key_env: "DEEPSEEK_API_KEY",
         backend_env: "CONSULT_LLM_DEEPSEEK_BACKEND",
         legacy_backend_env: None,
@@ -118,6 +140,8 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api", "opencode"],
         opencode_env: "CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER",
         default_opencode_provider: "deepseek",
+        reasoning_effort_env: None,
+        extra_args_env: None,
     },
     ProviderSpec {
         provider: Provider::OpenAI,
@@ -132,6 +156,13 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
             "gpt-5.3-codex",
             "gpt-5.2-codex",
         ],
+        selector_priorities: &[
+            "gpt-5.5",
+            "gpt-5.4",
+            "gpt-5.3-codex",
+            "gpt-5.2",
+            "gpt-5.2-codex",
+        ],
         api_key_env: "OPENAI_API_KEY",
         backend_env: "CONSULT_LLM_OPENAI_BACKEND",
         legacy_backend_env: Some("OPENAI_BACKEND"),
@@ -140,6 +171,8 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api", "codex-cli", "cursor-cli", "opencode"],
         opencode_env: "CONSULT_LLM_OPENCODE_OPENAI_PROVIDER",
         default_opencode_provider: "openai",
+        reasoning_effort_env: Some("CONSULT_LLM_CODEX_REASONING_EFFORT"),
+        extra_args_env: Some("CONSULT_LLM_CODEX_EXTRA_ARGS"),
     },
     ProviderSpec {
         provider: Provider::MiniMax,
@@ -148,6 +181,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         api_base_url: Some("https://api.minimax.io/v1"),
         api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["MiniMax-M2.7"],
+        selector_priorities: &["MiniMax-M2.7"],
         api_key_env: "MINIMAX_API_KEY",
         backend_env: "CONSULT_LLM_MINIMAX_BACKEND",
         legacy_backend_env: None,
@@ -156,6 +190,8 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api", "opencode"],
         opencode_env: "CONSULT_LLM_OPENCODE_MINIMAX_PROVIDER",
         default_opencode_provider: "minimax",
+        reasoning_effort_env: None,
+        extra_args_env: None,
     },
     ProviderSpec {
         provider: Provider::Anthropic,
@@ -164,6 +200,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         api_base_url: Some("https://api.anthropic.com"),
         api_protocol: ApiProtocol::AnthropicMessages,
         builtin_models: &["claude-opus-4-7"],
+        selector_priorities: &["claude-opus-4-7"],
         api_key_env: "ANTHROPIC_API_KEY",
         backend_env: "CONSULT_LLM_ANTHROPIC_BACKEND",
         legacy_backend_env: None,
@@ -172,6 +209,8 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api"],
         opencode_env: "CONSULT_LLM_OPENCODE_ANTHROPIC_PROVIDER",
         default_opencode_provider: "anthropic",
+        reasoning_effort_env: None,
+        extra_args_env: None,
     },
     ProviderSpec {
         provider: Provider::Grok,
@@ -180,6 +219,7 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         api_base_url: Some("https://api.x.ai/v1"),
         api_protocol: ApiProtocol::OpenAiCompat,
         builtin_models: &["grok-4.3"],
+        selector_priorities: &["grok-4.3"],
         api_key_env: "XAI_API_KEY",
         backend_env: "CONSULT_LLM_GROK_BACKEND",
         legacy_backend_env: None,
@@ -188,13 +228,15 @@ pub static PROVIDER_SPECS: &[ProviderSpec] = &[
         allowed_backends: &["api"],
         opencode_env: "CONSULT_LLM_OPENCODE_GROK_PROVIDER",
         default_opencode_provider: "xai",
+        reasoning_effort_env: None,
+        extra_args_env: None,
     },
 ];
 
 impl Provider {
     /// Look up the static spec for this provider.
     pub fn spec(&self) -> &'static ProviderSpec {
-        PROVIDER_SPECS
+        PROVIDERS
             .iter()
             .find(|s| s.provider == *self)
             .expect("every Provider variant must have a ProviderSpec entry")
@@ -202,9 +244,18 @@ impl Provider {
 
     /// Determine the provider for a model ID based on its prefix.
     pub fn from_model(model: &str) -> Option<Self> {
-        PROVIDER_SPECS
+        PROVIDERS
             .iter()
             .find(|spec| spec.model_prefixes.iter().any(|p| model.starts_with(p)))
+            .map(|spec| spec.provider)
+    }
+
+    /// Look up a provider by its short id (e.g. "openai", "gemini"). Used by config-file
+    /// deserialization to validate provider-block keys against the registry.
+    pub fn from_id(id: &str) -> Option<Self> {
+        PROVIDERS
+            .iter()
+            .find(|spec| spec.id == id)
             .map(|spec| spec.provider)
     }
 
@@ -221,44 +272,24 @@ impl Provider {
 
 /// Collect all builtin model IDs from the provider registry, in deterministic order.
 pub fn all_builtin_models() -> Vec<&'static str> {
-    PROVIDER_SPECS
+    PROVIDERS
         .iter()
         .flat_map(|spec| spec.builtin_models.iter().copied())
         .collect()
 }
 
-pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
-    (
-        "gemini",
-        &[
-            "gemini-3.1-pro-preview",
-            "gemini-3-pro-preview",
-            "gemini-2.5-pro",
-        ],
-    ),
-    (
-        "openai",
-        &[
-            "gpt-5.5",
-            "gpt-5.4",
-            "gpt-5.3-codex",
-            "gpt-5.2",
-            "gpt-5.2-codex",
-        ],
-    ),
-    ("deepseek", &["deepseek-v4-pro"]),
-    ("minimax", &["MiniMax-M2.7"]),
-    ("anthropic", &["claude-opus-4-7"]),
-    ("grok", &["grok-4.3"]),
-];
+/// Iterate (selector_id, priority_list) for every provider in registry order.
+/// Drives selector resolution in `catalog::resolve_selector` and selector listings
+/// in error messages.
+pub fn selector_priorities() -> impl Iterator<Item = (&'static str, &'static [&'static str])> + Clone
+{
+    PROVIDERS.iter().map(|s| (s.id, s.selector_priorities))
+}
 
-/// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
-/// When a user passes e.g. "gemini", the server picks the first available model from the list.
-/// Kept separate from the provider registry — selectors are a routing concept that may
-/// eventually span multiple providers (e.g. "reasoning" -> models from different providers).
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     /// Golden table mapping every builtin model to its expected provider.
     /// This is the stability anchor for the `provider-registry` phase: if
@@ -281,8 +312,6 @@ mod tests {
             ("grok-4.3", Provider::Grok),
         ];
 
-        // Every builtin model the catalogue currently produces must be in
-        // the expected table — no unaccounted-for entries.
         let builtins = all_builtin_models();
         let expected_models: Vec<&str> = expected.iter().map(|(m, _)| *m).collect();
         for m in &builtins {
@@ -301,6 +330,56 @@ mod tests {
             let got =
                 Provider::from_model(model).unwrap_or_else(|| panic!("no provider for {model:?}"));
             assert_eq!(got, *want, "provider mismatch for {model:?}");
+        }
+    }
+
+    #[test]
+    fn registry_integrity() {
+        assert_eq!(PROVIDERS.len(), ALL_PROVIDERS.len());
+
+        let mut ids = HashSet::new();
+        let mut variants = HashSet::new();
+        let mut models = HashSet::new();
+        for spec in PROVIDERS {
+            assert!(!spec.id.is_empty());
+            assert!(!spec.model_prefixes.is_empty());
+            assert!(!spec.builtin_models.is_empty());
+            assert!(!spec.selector_priorities.is_empty());
+            assert!(!spec.allowed_backends.is_empty());
+            assert!(ids.insert(spec.id), "duplicate provider id {:?}", spec.id);
+            assert!(
+                variants.insert(spec.provider),
+                "duplicate ProviderSpec for {:?}",
+                spec.provider
+            );
+            for m in spec.builtin_models {
+                assert!(models.insert(*m), "duplicate builtin model {m:?}");
+            }
+            for sm in spec.selector_priorities {
+                assert!(
+                    spec.builtin_models.contains(sm),
+                    "selector priority {sm:?} for {:?} not in builtin_models",
+                    spec.id
+                );
+            }
+        }
+
+        // Provider model prefixes must not overlap so `Provider::from_model` is unambiguous.
+        let prefixes: Vec<(&str, &str)> = PROVIDERS
+            .iter()
+            .flat_map(|s| s.model_prefixes.iter().map(move |p| (s.id, *p)))
+            .collect();
+        for (i, (id_a, pa)) in prefixes.iter().enumerate() {
+            for (id_b, pb) in &prefixes[i + 1..] {
+                assert!(
+                    !pa.starts_with(pb) && !pb.starts_with(pa),
+                    "model prefixes overlap: {id_a}:{pa:?} vs {id_b}:{pb:?}"
+                );
+            }
+        }
+
+        for p in ALL_PROVIDERS {
+            assert_eq!(Provider::from_id(p.spec().id), Some(*p));
         }
     }
 }

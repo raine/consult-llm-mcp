@@ -1,4 +1,4 @@
-use crate::models::SELECTOR_PRIORITIES;
+use crate::models::selector_priorities;
 
 /// Single source of truth for model availability — drives both schema and validation
 #[derive(Clone, Debug)]
@@ -28,7 +28,7 @@ impl ModelRegistry {
         };
 
         resolve_selector(target, &self.allowed_models).ok_or_else(|| {
-            let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
+            let selectors: Vec<&str> = selector_priorities().map(|(s, _)| s).collect();
             crate::errors::AppError::InvalidParams(format!(
                 "Invalid model or selector '{target}'. Selectors: {}. Available models: {}",
                 selectors.join(", "),
@@ -47,7 +47,7 @@ pub fn resolve_selector(target: &str, allowed_models: &[String]) -> Option<Strin
     }
 
     // 2. Selector match — first available model from priority list
-    if let Some((_, priorities)) = SELECTOR_PRIORITIES.iter().find(|(s, _)| *s == target) {
+    if let Some((_, priorities)) = selector_priorities().find(|(s, _)| *s == target) {
         return priorities
             .iter()
             .find(|&&m| allowed_models.iter().any(|a| a == m))

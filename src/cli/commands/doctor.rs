@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use consult_llm_core::monitoring::{active_dir, runs_dir, sessions_dir};
 
-use crate::models::PROVIDER_SPECS;
+use crate::models::PROVIDERS;
 
 // ---- terminal styling -------------------------------------------------------
 
@@ -157,16 +157,19 @@ fn config_keys() -> Vec<&'static str> {
         "CONSULT_LLM_DEFAULT_MODEL",
         "CONSULT_LLM_ALLOWED_MODELS",
         "CONSULT_LLM_EXTRA_MODELS",
-        "CONSULT_LLM_CODEX_REASONING_EFFORT",
-        "CONSULT_LLM_CODEX_EXTRA_ARGS",
-        "CONSULT_LLM_GEMINI_EXTRA_ARGS",
         "CONSULT_LLM_SYSTEM_PROMPT_PATH",
         "CONSULT_LLM_NO_UPDATE_CHECK",
         "CONSULT_LLM_OPENCODE_PROVIDER",
     ];
-    for spec in PROVIDER_SPECS {
+    for spec in PROVIDERS {
         keys.push(spec.backend_env);
         keys.push(spec.opencode_env);
+        if let Some(env) = spec.reasoning_effort_env {
+            keys.push(env);
+        }
+        if let Some(env) = spec.extra_args_env {
+            keys.push(env);
+        }
     }
     keys
 }
@@ -176,19 +179,24 @@ fn semantic_name(env_key: &str) -> String {
         "CONSULT_LLM_DEFAULT_MODEL" => "default_model".into(),
         "CONSULT_LLM_ALLOWED_MODELS" => "allowed_models".into(),
         "CONSULT_LLM_EXTRA_MODELS" => "extra_models".into(),
+        // Historical label predating the registry-driven view; kept stable.
         "CONSULT_LLM_CODEX_REASONING_EFFORT" => "codex.reasoning_effort".into(),
-        "CONSULT_LLM_CODEX_EXTRA_ARGS" => "openai.extra_args".into(),
-        "CONSULT_LLM_GEMINI_EXTRA_ARGS" => "gemini.extra_args".into(),
         "CONSULT_LLM_SYSTEM_PROMPT_PATH" => "system_prompt_path".into(),
         "CONSULT_LLM_NO_UPDATE_CHECK" => "no_update_check".into(),
         "CONSULT_LLM_OPENCODE_PROVIDER" => "opencode.provider".into(),
         k => {
-            for spec in PROVIDER_SPECS {
+            for spec in PROVIDERS {
                 if k == spec.backend_env {
                     return format!("{}.backend", spec.id);
                 }
                 if k == spec.opencode_env {
                     return format!("opencode.{}.provider", spec.id);
+                }
+                if Some(k) == spec.reasoning_effort_env {
+                    return format!("{}.reasoning_effort", spec.id);
+                }
+                if Some(k) == spec.extra_args_env {
+                    return format!("{}.extra_args", spec.id);
                 }
             }
             k.into()
@@ -328,7 +336,7 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
     let mut has_error = false;
     let mut cursor_list_cache: Option<crate::executors::cursor_models::ModelList> = None;
 
-    for spec in PROVIDER_SPECS {
+    for spec in PROVIDERS {
         let backend = env
             .lookup(spec.backend_env)
             .map(|(v, _)| v)

@@ -3,7 +3,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use crate::models::Provider;
-use crate::models::SELECTOR_PRIORITIES;
+use crate::models::selector_priorities;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Backend {
@@ -135,7 +135,7 @@ impl fmt::Display for ConfigError {
                 )
             }
             ConfigError::InvalidDefaultModel { model, allowed } => {
-                let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
+                let selectors: Vec<&str> = selector_priorities().map(|(s, _)| s).collect();
                 let opts = allowed
                     .iter()
                     .map(|m| format!("'{m}'"))
@@ -148,7 +148,7 @@ impl fmt::Display for ConfigError {
                 )
             }
             ConfigError::InvalidDefaultModels { model, allowed } => {
-                let selectors: Vec<&str> = SELECTOR_PRIORITIES.iter().map(|(s, _)| *s).collect();
+                let selectors: Vec<&str> = selector_priorities().map(|(s, _)| s).collect();
                 let opts = allowed
                     .iter()
                     .map(|m| format!("'{m}'"))
