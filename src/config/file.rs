@@ -260,6 +260,28 @@ mod tests {
     }
 
     #[test]
+    fn test_typed_top_keys_disjoint_from_provider_ids() {
+        // Provider ids must not collide with the reserved typed top-level keys; if a
+        // future provider id matches one of these, the custom deserializer would
+        // silently route the YAML block away from the providers map.
+        for spec in PROVIDERS {
+            assert!(
+                !TYPED_TOP_KEYS.contains(&spec.id),
+                "provider id {:?} collides with reserved top-level key",
+                spec.id
+            );
+        }
+    }
+
+    #[test]
+    fn test_parse_rejects_unknown_field_under_provider_block_via_new_path() {
+        // Pin the custom-Deserialize routing: an unknown inner field on a provider
+        // block must still be rejected by ProviderBlock's deny_unknown_fields.
+        let yaml = "openai:\n  not_a_real_field: oops\n";
+        assert!(ConfigFile::parse(yaml).is_err());
+    }
+
+    #[test]
     fn test_parse_rejects_duplicate_provider_block() {
         let yaml = "gemini:\n  backend: api\ngemini:\n  backend: gemini-cli\n";
         // serde_yaml itself rejects duplicate mapping keys; this test pins that.
@@ -275,6 +297,7 @@ mod tests {
 default_model: gemini
 default_models:
   - gemini
+  - openai
   - openai
 allowed_models:
   - gemini-2.5-pro
@@ -321,7 +344,8 @@ opencode:
 
         let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
         assert_eq!(m["CONSULT_LLM_DEFAULT_MODEL"], "gemini");
-        assert_eq!(m["CONSULT_LLM_DEFAULT_MODELS"], "gemini,openai");
+        // Duplicates in default_models are intentionally preserved.
+        assert_eq!(m["CONSULT_LLM_DEFAULT_MODELS"], "gemini,openai,openai");
         assert_eq!(m["CONSULT_LLM_ALLOWED_MODELS"], "gemini-2.5-pro,gpt-5.2");
         assert_eq!(m["CONSULT_LLM_EXTRA_MODELS"], "custom-model");
         assert_eq!(m["CONSULT_LLM_SYSTEM_PROMPT_PATH"], "/path/to/prompt.md");
@@ -354,6 +378,14 @@ opencode:
 
         // Opencode global default.
         assert_eq!(m["CONSULT_LLM_OPENCODE_PROVIDER"], "copilot");
+    }
+
+    #[test]
+    fn test_no_update_check_false_emits_zero() {
+        let yaml = "no_update_check: false\n";
+        let cfg = ConfigFile::parse(yaml).unwrap();
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
+        assert_eq!(m["CONSULT_LLM_NO_UPDATE_CHECK"], "0");
     }
 
     #[test]
