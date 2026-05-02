@@ -59,5 +59,9 @@ path = "src/main.rs"
 [profile.release]
 strip = true
 
+[features]
+net-tests = []
+no-net-tests = []
+
 [dev-dependencies]
 tempfile = "3"

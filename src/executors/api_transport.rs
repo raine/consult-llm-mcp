@@ -15,6 +15,29 @@ pub struct StreamLabels {
     pub stream: &'static str,
 }
 
+pub(super) struct PreparedStreamRequest {
+    pub url: String,
+    pub headers: Vec<(&'static str, String)>,
+    pub body: Vec<u8>,
+    pub idle_timeout: Duration,
+    pub model: String,
+    pub labels: StreamLabels,
+}
+
+impl PreparedStreamRequest {
+    pub fn into_stream_request(self, agent: &ureq::Agent) -> StreamRequest<'_> {
+        StreamRequest {
+            agent,
+            url: self.url,
+            headers: self.headers,
+            body: self.body,
+            idle_timeout: self.idle_timeout,
+            model: self.model,
+            labels: self.labels,
+        }
+    }
+}
+
 /// Inputs to a streaming POST request. The transport owns the wire phase
 /// (send + status check + SSE read loop + idle-timeout error mapping); the
 /// caller owns body construction and per-event decoding.
@@ -38,10 +61,7 @@ pub trait StreamHandler {
     fn finish(self, model: &str) -> anyhow::Result<Self::Outcome>;
 }
 
-pub fn run_stream<H: StreamHandler>(
-    req: StreamRequest,
-    mut handler: H,
-) -> anyhow::Result<H::Outcome> {
+pub fn run_stream<H: StreamHandler>(req: StreamRequest, handler: H) -> anyhow::Result<H::Outcome> {
     let StreamRequest {
         agent,
         url,
@@ -82,9 +102,35 @@ pub fn run_stream<H: StreamHandler>(
         );
     }
 
-    let mut reader = resp.into_body().into_reader();
+    drive_stream_reader(
+        resp.into_body().into_reader(),
+        handler,
+        &model,
+        labels,
+        idle_secs,
+    )
+}
+
+fn drive_stream_reader<H: StreamHandler, R: Read>(
+    reader: R,
+    handler: H,
+    model: &str,
+    labels: StreamLabels,
+    idle_secs: u64,
+) -> anyhow::Result<H::Outcome> {
+    drive_stream_reader_with_buf(reader, handler, model, labels, idle_secs, 8192)
+}
+
+fn drive_stream_reader_with_buf<H: StreamHandler, R: Read>(
+    mut reader: R,
+    mut handler: H,
+    model: &str,
+    labels: StreamLabels,
+    idle_secs: u64,
+    buf_size: usize,
+) -> anyhow::Result<H::Outcome> {
     let mut sse = SseParser::new();
-    let mut buf = [0u8; 8192];
+    let mut buf = vec![0u8; buf_size];
 
     let mut stopped = false;
     'outer: loop {
@@ -114,7 +160,7 @@ pub fn run_stream<H: StreamHandler>(
     if !stopped && let Some(ev) = sse.flush() {
         let _ = handler.on_event(&ev)?;
     }
-    handler.finish(&model)
+    handler.finish(model)
 }
 
 /// True if the IO error originated from a ureq timeout (or stdlib TimedOut).
@@ -138,16 +184,25 @@ mod tests {
     //! and (b) decoding a recorded response stream produces the expected
     //! `ExecuteResult`.
 
-    use std::io::{Read, Write};
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
+    use std::io::Write;
+    use std::io::{Cursor, ErrorKind, Read};
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use std::net::TcpListener;
-    use std::sync::{Arc, Mutex};
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use std::thread;
 
     use consult_llm_core::monitoring::{RunEvent, RunEventKind, RunMeta, RunSpool};
     use consult_llm_core::stream_events::ParsedStreamEvent;
 
     use super::super::anthropic_api::AnthropicApiExecutor;
-    use super::super::api::ApiExecutor;
+    use super::super::anthropic_events::AnthropicStreamHandler;
+    use super::super::api::{ApiExecutor, Dialect};
+    use super::super::api_chat::ChatStreamHandler;
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     use super::super::types::{ExecutionRequest, LlmExecutor};
     use super::*;
     use crate::models::{ApiProtocol, Provider};
@@ -155,6 +210,7 @@ mod tests {
     /// Spin up a one-shot HTTP/1.1 server on 127.0.0.1 that accepts a single
     /// POST, records the request body, and replies with `response_bytes`.
     /// Returns `(base_url, recorded_body_handle)`.
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn start_mock_server(response_bytes: Vec<u8>) -> (String, Arc<Mutex<Vec<u8>>>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().unwrap().port();
@@ -211,6 +267,7 @@ mod tests {
         (format!("http://127.0.0.1:{port}"), recorded)
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         if needle.is_empty() || haystack.len() < needle.len() {
             return None;
@@ -218,6 +275,7 @@ mod tests {
         haystack.windows(needle.len()).position(|w| w == needle)
     }
 
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn http_response(body: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(b"HTTP/1.1 200 OK\r\n");
@@ -226,18 +284,6 @@ mod tests {
         out.extend_from_slice(b"\r\n");
         out.extend_from_slice(body);
         out
-    }
-
-    fn isolate_state_dir() -> tempfile::TempDir {
-        // Test runs may persist stored threads via ApiChatSession::commit_turn.
-        // Pin XDG_STATE_HOME to a tempdir so we never write to the user's real
-        // state directory. The lock keeps us serialized with any other test
-        // in this crate that mutates XDG_STATE_HOME — see `test_util`.
-        let tmp = tempfile::tempdir().unwrap();
-        unsafe {
-            std::env::set_var("XDG_STATE_HOME", tmp.path());
-        }
-        tmp
     }
 
     struct RecordingHandler {
@@ -258,32 +304,24 @@ mod tests {
         }
     }
 
-    fn recording_stream_request(url: String) -> StreamRequest<'static> {
-        let agent = Box::leak(Box::new(ureq::Agent::new_with_defaults()));
-        StreamRequest {
-            agent,
-            url,
-            headers: vec![("Content-Type", "application/json".to_string())],
-            body: b"{}".to_vec(),
-            idle_timeout: std::time::Duration::from_secs(5),
-            model: "test-model".to_string(),
-            labels: StreamLabels {
-                request: "test request",
-                stream: "test stream",
-            },
+    fn test_labels() -> StreamLabels {
+        StreamLabels {
+            request: "test request",
+            stream: "test stream",
         }
     }
 
     #[test]
     fn run_stream_honors_terminal_event_from_eof_flush() {
-        let response = http_response(b"data: stop");
-        let (base, _recorded) = start_mock_server(response);
-        let seen = run_stream(
-            recording_stream_request(base),
+        let seen = drive_stream_reader(
+            Cursor::new(b"data: stop"),
             RecordingHandler {
                 seen: Vec::new(),
                 stop_on: "stop",
             },
+            "test-model",
+            test_labels(),
+            5,
         )
         .unwrap();
         assert_eq!(seen, vec!["stop"]);
@@ -291,19 +329,132 @@ mod tests {
 
     #[test]
     fn run_stream_skips_flush_after_in_loop_stop() {
-        let response = http_response(b"data: stop\n\ndata: later");
-        let (base, _recorded) = start_mock_server(response);
-        let seen = run_stream(
-            recording_stream_request(base),
+        let seen = drive_stream_reader(
+            Cursor::new(b"data: stop\n\ndata: later"),
             RecordingHandler {
                 seen: Vec::new(),
                 stop_on: "stop",
             },
+            "test-model",
+            test_labels(),
+            5,
         )
         .unwrap();
         assert_eq!(seen, vec!["stop"]);
     }
 
+    struct FailingReader {
+        kind: ErrorKind,
+        message: &'static str,
+    }
+
+    impl Read for FailingReader {
+        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(self.kind, self.message))
+        }
+    }
+
+    struct OversizedFrameReader {
+        remaining: usize,
+    }
+
+    impl Read for OversizedFrameReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.remaining == 0 {
+                return Ok(0);
+            }
+            let n = self.remaining.min(buf.len());
+            buf[..n].fill(b'x');
+            self.remaining -= n;
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn drive_stream_reader_labels_parse_errors() {
+        let err = drive_stream_reader_with_buf(
+            OversizedFrameReader {
+                remaining: 17 * 1024 * 1024,
+            },
+            RecordingHandler {
+                seen: Vec::new(),
+                stop_on: "stop",
+            },
+            "test-model",
+            test_labels(),
+            5,
+            17 * 1024 * 1024,
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.starts_with("test stream parse error for test-model: "));
+    }
+
+    #[test]
+    fn drive_stream_reader_labels_timeout_errors() {
+        let err = drive_stream_reader(
+            FailingReader {
+                kind: ErrorKind::TimedOut,
+                message: "timed out",
+            },
+            RecordingHandler {
+                seen: Vec::new(),
+                stop_on: "stop",
+            },
+            "test-model",
+            test_labels(),
+            5,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(
+            err,
+            "test stream idle timeout: no bytes from test-model for 5s"
+        );
+    }
+
+    #[test]
+    fn drive_stream_reader_labels_generic_read_errors() {
+        let err = drive_stream_reader(
+            FailingReader {
+                kind: ErrorKind::Other,
+                message: "broken pipe",
+            },
+            RecordingHandler {
+                seen: Vec::new(),
+                stop_on: "stop",
+            },
+            "test-model",
+            test_labels(),
+            5,
+        )
+        .unwrap_err()
+        .to_string();
+        assert_eq!(err, "test stream error for test-model: broken pipe");
+    }
+
+    fn openai_sse() -> &'static [u8] {
+        b"\
+data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n\
+data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"finish_reason\":\"stop\"}]}\n\n\
+data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n\
+data: [DONE]\n\n\
+"
+    }
+
+    fn anthropic_sse() -> &'static [u8] {
+        b"\
+data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":11,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n\n\
+data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\"}}\n\n\
+data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi \"}}\n\n\
+data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"there\"}}\n\n\
+data: {\"type\":\"content_block_stop\",\"index\":0}\n\n\
+data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n\
+data: {\"type\":\"message_stop\"}\n\n\
+"
+    }
+
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
     fn build_request(prompt: &str, model: &str) -> (ExecutionRequest, Arc<Mutex<RunSpool>>) {
         build_request_with_spool(prompt, model, RunSpool::disabled())
     }
@@ -442,20 +593,125 @@ data: [DONE]\n\n\
     }
 
     #[test]
-    fn mock_server_openai_and_anthropic_executors() {
-        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        let _state = isolate_state_dir();
+    fn offline_openai_request_golden() {
+        let agent = ureq::Agent::new_with_defaults();
+        let openai = ApiExecutor::new(
+            agent,
+            "test-openai-key".to_string(),
+            Some("http://example.test/v1/".to_string()),
+            std::time::Duration::from_secs(5),
+        );
+        let (prepared, dialect) = openai
+            .build_stream_request(
+                "gpt-test".to_string(),
+                "you are helpful",
+                "hi there",
+                std::iter::empty(),
+            )
+            .unwrap();
 
-        // --- OpenAI-compat provider -----------------------------------
-        let openai_sse = b"\
-data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n\
-data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"finish_reason\":\"stop\"}]}\n\n\
-data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n\
-data: [DONE]\n\n\
-";
-        let (openai_base, openai_recorded) = start_mock_server(http_response(openai_sse));
+        assert_eq!(dialect, Dialect::Generic);
+        assert_eq!(prepared.url, "http://example.test/v1/chat/completions");
+        assert_eq!(
+            prepared.headers,
+            vec![
+                ("Authorization", "Bearer test-openai-key".to_string()),
+                ("Content-Type", "application/json".to_string()),
+            ]
+        );
+        let recorded: serde_json::Value = serde_json::from_slice(&prepared.body).unwrap();
+        let expected_openai = serde_json::json!({
+            "model": "gpt-test",
+            "messages": [
+                {"role": "system", "content": "you are helpful"},
+                {"role": "user", "content": "hi there"},
+            ],
+            "stream": true,
+            "stream_options": {"include_usage": true},
+        });
+        assert_eq!(recorded, expected_openai);
+    }
+
+    #[test]
+    fn offline_anthropic_request_golden() {
+        let agent = ureq::Agent::new_with_defaults();
+        let anthropic = AnthropicApiExecutor::new(
+            agent,
+            "test-anthropic-key".to_string(),
+            Some("http://example.test".to_string()),
+            std::time::Duration::from_secs(5),
+        );
+        let prepared = anthropic
+            .build_stream_request(
+                "claude-test".to_string(),
+                "you are helpful".to_string(),
+                "hello?".to_string(),
+                std::iter::empty(),
+            )
+            .unwrap();
+
+        assert_eq!(prepared.url, "http://example.test/v1/messages");
+        assert_eq!(
+            prepared.headers,
+            vec![
+                ("x-api-key", "test-anthropic-key".to_string()),
+                ("anthropic-version", "2023-06-01".to_string()),
+                ("Content-Type", "application/json".to_string()),
+            ]
+        );
+        let recorded: serde_json::Value = serde_json::from_slice(&prepared.body).unwrap();
+        let expected_anthropic = serde_json::json!({
+            "model": "claude-test",
+            "system": "you are helpful",
+            "messages": [{"role": "user", "content": "hello?"}],
+            "max_tokens": 32_000,
+            "stream": true,
+        });
+        assert_eq!(recorded, expected_anthropic);
+    }
+
+    #[test]
+    fn offline_openai_response_golden() {
+        let spool = Mutex::new(RunSpool::disabled());
+        let outcome = drive_stream_reader(
+            Cursor::new(openai_sse()),
+            ChatStreamHandler::new(None, &spool),
+            "gpt-test",
+            test_labels(),
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(outcome.response, "Hello world");
+        let usage = outcome.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 7);
+        assert_eq!(usage.completion_tokens, 2);
+    }
+
+    #[test]
+    fn offline_anthropic_response_golden() {
+        let spool = Mutex::new(RunSpool::disabled());
+        let outcome = drive_stream_reader(
+            Cursor::new(anthropic_sse()),
+            AnthropicStreamHandler::new(&spool, 32_000),
+            "claude-test",
+            test_labels(),
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(outcome.response, "hi there");
+        let usage = outcome.usage.unwrap();
+        assert_eq!(usage.prompt_tokens, 11);
+        assert_eq!(usage.completion_tokens, 5);
+    }
+
+    #[cfg(all(feature = "net-tests", not(feature = "no-net-tests")))]
+    #[test]
+    fn mock_server_openai_and_anthropic_executors() {
+        let _state = crate::test_util::XdgStateGuard::temp();
+
+        let (openai_base, openai_recorded) = start_mock_server(http_response(openai_sse()));
         let agent = ureq::Agent::new_with_defaults();
         let openai = ApiExecutor::new(
             agent.clone(),
@@ -484,17 +740,8 @@ data: [DONE]\n\n\
         });
         assert_eq!(recorded, expected_openai);
 
-        // --- Anthropic provider --------------------------------------
-        let anthropic_sse = b"\
-data: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":11,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0}}}\n\n\
-data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\"}}\n\n\
-data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"hi \"}}\n\n\
-data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"there\"}}\n\n\
-data: {\"type\":\"content_block_stop\",\"index\":0}\n\n\
-data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n\
-data: {\"type\":\"message_stop\"}\n\n\
-";
-        let (anthropic_base, anthropic_recorded) = start_mock_server(http_response(anthropic_sse));
+        let (anthropic_base, anthropic_recorded) =
+            start_mock_server(http_response(anthropic_sse()));
         let anthropic = AnthropicApiExecutor::new(
             agent,
             "test-anthropic-key".to_string(),

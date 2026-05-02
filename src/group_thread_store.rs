@@ -174,13 +174,7 @@ mod tests {
 
     #[test]
     fn test_save_load_roundtrip() {
-        let _guard = crate::test_util::XDG_STATE_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        let tmp = tempfile::tempdir().unwrap();
-        unsafe {
-            std::env::set_var("XDG_STATE_HOME", tmp.path());
-        }
+        let _guard = crate::test_util::XdgStateGuard::temp();
         let id = generate_group_id();
         let entries = vec![
             GroupEntry {
