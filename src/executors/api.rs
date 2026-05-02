@@ -156,8 +156,11 @@ impl LlmExecutor for ApiExecutor {
                 agent: &self.agent,
                 url,
                 headers: vec![
-                    ("Authorization", format!("Bearer {}", &self.api_key)),
-                    ("Content-Type", "application/json".to_string()),
+                    (
+                        "Authorization".to_string(),
+                        format!("Bearer {}", &self.api_key),
+                    ),
+                    ("Content-Type".to_string(), "application/json".to_string()),
                 ],
                 body,
                 idle_timeout: self.idle_timeout,

@@ -116,9 +116,12 @@ impl LlmExecutor for AnthropicApiExecutor {
                 agent: &self.agent,
                 url,
                 headers: vec![
-                    ("x-api-key", self.api_key.clone()),
-                    ("anthropic-version", ANTHROPIC_VERSION.to_string()),
-                    ("Content-Type", "application/json".to_string()),
+                    ("x-api-key".to_string(), self.api_key.clone()),
+                    (
+                        "anthropic-version".to_string(),
+                        ANTHROPIC_VERSION.to_string(),
+                    ),
+                    ("Content-Type".to_string(), "application/json".to_string()),
                 ],
                 body,
                 idle_timeout: self.idle_timeout,

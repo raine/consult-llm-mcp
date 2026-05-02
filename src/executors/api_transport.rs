@@ -21,7 +21,7 @@ pub struct StreamLabels {
 pub struct StreamRequest<'a> {
     pub agent: &'a ureq::Agent,
     pub url: String,
-    pub headers: Vec<(&'static str, String)>,
+    pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
     pub idle_timeout: Duration,
     pub model: String,
@@ -152,14 +152,20 @@ mod tests {
     use super::*;
     use crate::models::{ApiProtocol, Provider};
 
+    type RecordedHeaders = Arc<Mutex<Vec<(String, String)>>>;
+
     /// Spin up a one-shot HTTP/1.1 server on 127.0.0.1 that accepts a single
-    /// POST, records the request body, and replies with `response_bytes`.
-    /// Returns `(base_url, recorded_body_handle)`.
-    fn start_mock_server(response_bytes: Vec<u8>) -> (String, Arc<Mutex<Vec<u8>>>) {
+    /// POST, records the request body and headers, and replies with
+    /// `response_bytes`. Returns `(base_url, recorded_body, recorded_headers)`.
+    fn start_mock_server(
+        response_bytes: Vec<u8>,
+    ) -> (String, Arc<Mutex<Vec<u8>>>, RecordedHeaders) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let port = listener.local_addr().unwrap().port();
-        let recorded = Arc::new(Mutex::new(Vec::<u8>::new()));
-        let recorded_clone = Arc::clone(&recorded);
+        let recorded_body = Arc::new(Mutex::new(Vec::<u8>::new()));
+        let recorded_headers = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+        let recorded_body_clone = Arc::clone(&recorded_body);
+        let recorded_headers_clone = Arc::clone(&recorded_headers);
 
         thread::spawn(move || {
             let (mut stream, _) = listener.accept().expect("accept");
@@ -180,6 +186,7 @@ mod tests {
                 all.extend_from_slice(&buf[..n]);
                 if let Some(hdr_end) = find_subslice(&all, b"\r\n\r\n") {
                     let headers = std::str::from_utf8(&all[..hdr_end]).unwrap_or("");
+                    *recorded_headers_clone.lock().unwrap() = parse_headers(headers);
                     let cl: usize = headers
                         .lines()
                         .find_map(|l| {
@@ -200,7 +207,7 @@ mod tests {
                     break all[body_start..body_start + cl].to_vec();
                 }
             };
-            *recorded_clone.lock().unwrap() = body;
+            *recorded_body_clone.lock().unwrap() = body;
 
             let _ = stream.write_all(&response_bytes);
             let _ = stream.flush();
@@ -208,7 +215,34 @@ mod tests {
             let _ = stream.shutdown(std::net::Shutdown::Write);
         });
 
-        (format!("http://127.0.0.1:{port}"), recorded)
+        (
+            format!("http://127.0.0.1:{port}"),
+            recorded_body,
+            recorded_headers,
+        )
+    }
+
+    fn parse_headers(headers: &str) -> Vec<(String, String)> {
+        headers
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                Some((name.to_ascii_lowercase(), value.trim().to_string()))
+            })
+            .collect()
+    }
+
+    fn assert_header(headers: &RecordedHeaders, name: &str, expected: &str) {
+        let name = name.to_ascii_lowercase();
+        let values: Vec<String> = headers
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(k, _)| k == &name)
+            .map(|(_, v)| v.clone())
+            .collect();
+        assert_eq!(values, vec![expected.to_string()]);
     }
 
     fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -263,7 +297,7 @@ mod tests {
         StreamRequest {
             agent,
             url,
-            headers: vec![("Content-Type", "application/json".to_string())],
+            headers: vec![("Content-Type".to_string(), "application/json".to_string())],
             body: b"{}".to_vec(),
             idle_timeout: std::time::Duration::from_secs(5),
             model: "test-model".to_string(),
@@ -277,7 +311,7 @@ mod tests {
     #[test]
     fn run_stream_honors_terminal_event_from_eof_flush() {
         let response = http_response(b"data: stop");
-        let (base, _recorded) = start_mock_server(response);
+        let (base, _recorded, _headers) = start_mock_server(response);
         let seen = run_stream(
             recording_stream_request(base),
             RecordingHandler {
@@ -292,7 +326,7 @@ mod tests {
     #[test]
     fn run_stream_skips_flush_after_in_loop_stop() {
         let response = http_response(b"data: stop\n\ndata: later");
-        let (base, _recorded) = start_mock_server(response);
+        let (base, _recorded, _headers) = start_mock_server(response);
         let seen = run_stream(
             recording_stream_request(base),
             RecordingHandler {
@@ -378,7 +412,7 @@ data: {\"choices\":[{\"delta\":{\"content\":\"ing</thought>Hello\"}}]}\n\n\
 data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n\
 ";
-        let (base, recorded) = start_mock_server(http_response(gemini_sse));
+        let (base, recorded, _headers) = start_mock_server(http_response(gemini_sse));
         let gemini = ApiExecutor::new(
             ureq::Agent::new_with_defaults(),
             "test-gemini-key".to_string(),
@@ -422,7 +456,7 @@ data: {\"choices\":[{\"delta\":{\"content\":\"<think>plan</think>Answer\"}}]}\n\
 data: {\"choices\":[{\"delta\":{\"content\":\" done\"},\"finish_reason\":\"stop\"}]}\n\n\
 data: [DONE]\n\n\
 ";
-        let (base, recorded) = start_mock_server(http_response(minimax_sse));
+        let (base, recorded, _headers) = start_mock_server(http_response(minimax_sse));
         let minimax = ApiExecutor::new(
             ureq::Agent::new_with_defaults(),
             "test-minimax-key".to_string(),
@@ -455,7 +489,8 @@ data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"finish_reason\":\"stop
 data: {\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":2}}\n\n\
 data: [DONE]\n\n\
 ";
-        let (openai_base, openai_recorded) = start_mock_server(http_response(openai_sse));
+        let (openai_base, openai_recorded, openai_headers) =
+            start_mock_server(http_response(openai_sse));
         let agent = ureq::Agent::new_with_defaults();
         let openai = ApiExecutor::new(
             agent.clone(),
@@ -483,6 +518,8 @@ data: [DONE]\n\n\
             "stream_options": {"include_usage": true},
         });
         assert_eq!(recorded, expected_openai);
+        assert_header(&openai_headers, "authorization", "Bearer test-openai-key");
+        assert_header(&openai_headers, "content-type", "application/json");
 
         // --- Anthropic provider --------------------------------------
         let anthropic_sse = b"\
@@ -494,7 +531,8 @@ data: {\"type\":\"content_block_stop\",\"index\":0}\n\n\
 data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n\
 data: {\"type\":\"message_stop\"}\n\n\
 ";
-        let (anthropic_base, anthropic_recorded) = start_mock_server(http_response(anthropic_sse));
+        let (anthropic_base, anthropic_recorded, anthropic_headers) =
+            start_mock_server(http_response(anthropic_sse));
         let anthropic = AnthropicApiExecutor::new(
             agent,
             "test-anthropic-key".to_string(),
@@ -518,5 +556,8 @@ data: {\"type\":\"message_stop\"}\n\n\
             "stream": true,
         });
         assert_eq!(recorded, expected_anthropic);
+        assert_header(&anthropic_headers, "x-api-key", "test-anthropic-key");
+        assert_header(&anthropic_headers, "anthropic-version", "2023-06-01");
+        assert_header(&anthropic_headers, "content-type", "application/json");
     }
 }
