@@ -10,7 +10,7 @@ use serde::Deserialize;
 use consult_llm_core::monitoring::{ProgressStage, RunSpool};
 use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use super::api_transport::EventHandler;
+use super::api_transport::StreamHandler;
 use super::sse::SseEvent;
 use super::tag_splitter::{Segment, TagSplitter};
 use super::types::Usage;
@@ -47,14 +47,19 @@ struct ApiUsage {
     total_tokens: Option<u64>,
 }
 
-pub struct ChatStreamHandler<'a> {
-    pub splitter: Option<TagSplitter>,
-    pub raw_content: String,
-    pub raw_thinking: String,
+pub struct ChatStreamOutcome {
+    pub response: String,
     pub usage: Option<Usage>,
-    pub current_stage: Option<ProgressStage>,
-    pub finish_reason: Option<String>,
-    pub spool: &'a Mutex<RunSpool>,
+}
+
+pub struct ChatStreamHandler<'a> {
+    splitter: Option<TagSplitter>,
+    raw_content: String,
+    raw_thinking: String,
+    usage: Option<Usage>,
+    current_stage: Option<ProgressStage>,
+    finish_reason: Option<String>,
+    spool: &'a Mutex<RunSpool>,
 }
 
 impl<'a> ChatStreamHandler<'a> {
@@ -71,7 +76,9 @@ impl<'a> ChatStreamHandler<'a> {
     }
 }
 
-impl EventHandler for ChatStreamHandler<'_> {
+impl StreamHandler for ChatStreamHandler<'_> {
+    type Outcome = ChatStreamOutcome;
+
     fn on_event(&mut self, ev: &SseEvent) -> anyhow::Result<bool> {
         if ev.data == "[DONE]" {
             return Ok(true);
@@ -115,9 +122,78 @@ impl EventHandler for ChatStreamHandler<'_> {
         );
         Ok(false)
     }
+
+    fn finish(self, model: &str) -> anyhow::Result<Self::Outcome> {
+        let Self {
+            splitter,
+            mut raw_content,
+            mut raw_thinking,
+            usage,
+            mut current_stage,
+            finish_reason,
+            spool,
+        } = self;
+
+        let unclosed_thought = splitter.as_ref().is_some_and(|s| s.in_thinking());
+        if let Some(s) = splitter
+            && let Some(seg) = s.flush()
+        {
+            emit_segments(
+                vec![seg],
+                &mut raw_content,
+                &mut raw_thinking,
+                &mut current_stage,
+                spool,
+            );
+        }
+
+        if raw_content.trim().is_empty() && unclosed_thought && !raw_thinking.is_empty() {
+            crate::logger::log_to_file(&format!(
+                "WARNING: API response for {model} had unclosed thought tag; treating thinking as response"
+            ));
+            eprintln!("Warning: unclosed thought tag in stream; treating thinking as response");
+            raw_content = std::mem::take(&mut raw_thinking);
+        }
+
+        let response = raw_content.trim().to_string();
+        if response.is_empty() {
+            anyhow::bail!("No response from the model via API");
+        }
+
+        match finish_reason.as_deref() {
+            Some("length") => {
+                crate::logger::log_to_file(&format!(
+                    "WARNING: API response for {model} truncated by max_tokens"
+                ));
+                eprintln!("Warning: response truncated by max_tokens");
+            }
+            Some("content_filter") => {
+                crate::logger::log_to_file(&format!(
+                    "WARNING: API response for {model} stopped by content filter"
+                ));
+                eprintln!("Warning: response stopped by content filter");
+            }
+            _ => {}
+        }
+
+        {
+            let mut s = spool.lock().unwrap();
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
+            });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
+        }
+
+        Ok(ChatStreamOutcome { response, usage })
+    }
 }
 
-pub fn emit_segments(
+fn emit_segments(
     segments: Vec<Segment>,
     raw_content: &mut String,
     raw_thinking: &mut String,
@@ -167,5 +243,28 @@ fn effective_usage(u: ApiUsage) -> Usage {
     Usage {
         prompt_tokens: u.prompt_tokens,
         completion_tokens: effective_completion,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finish_uses_unclosed_thinking_as_response() {
+        let spool = Mutex::new(RunSpool::disabled());
+        let mut handler =
+            ChatStreamHandler::new(Some(TagSplitter::new("<think>", "</think>")), &spool);
+        handler
+            .on_event(&SseEvent {
+                data: r#"{"choices":[{"delta":{"content":"<think>fallback"}}]}"#.to_string(),
+                event: None,
+            })
+            .unwrap();
+
+        let outcome = handler.finish("test-model").unwrap();
+
+        assert_eq!(outcome.response, "fallback");
+        assert!(outcome.usage.is_none());
     }
 }

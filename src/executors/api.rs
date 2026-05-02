@@ -2,9 +2,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use consult_llm_core::stream_events::ParsedStreamEvent;
-
-use super::api_chat::{ChatStreamHandler, emit_segments};
+use super::api_chat::ChatStreamHandler;
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::api_transport::{StreamLabels, StreamRequest, run_stream};
 use super::tag_splitter::TagSplitter;
@@ -165,9 +163,9 @@ impl LlmExecutor for ApiExecutor {
             Dialect::MiniMax => Some(TagSplitter::new("<think>", "</think>")),
             Dialect::Generic => None,
         };
-        let mut handler = ChatStreamHandler::new(splitter, &spool);
+        let handler = ChatStreamHandler::new(splitter, &spool);
 
-        run_stream(
+        let outcome = run_stream(
             StreamRequest {
                 agent: &self.agent,
                 url,
@@ -180,80 +178,10 @@ impl LlmExecutor for ApiExecutor {
                 model: model.clone(),
                 labels: LABELS,
             },
-            &mut handler,
+            handler,
         )?;
 
-        let ChatStreamHandler {
-            splitter,
-            mut raw_content,
-            mut raw_thinking,
-            usage,
-            mut current_stage,
-            finish_reason,
-            ..
-        } = handler;
-
-        // Flush any tag-splitter remainder (e.g. content after the last tag).
-        let unclosed_thought = splitter.as_ref().is_some_and(|s| s.in_thinking());
-        if let Some(s) = splitter
-            && let Some(seg) = s.flush()
-        {
-            emit_segments(
-                vec![seg],
-                &mut raw_content,
-                &mut raw_thinking,
-                &mut current_stage,
-                &spool,
-            );
-        }
-
-        // Recovery: if a `<think>`/`<thought>` tag opened but never closed,
-        // every chunk was misclassified as Thinking and `raw_content` is
-        // empty. Fall back to the streamed thinking text so the user gets
-        // *something* rather than a "No response" error.
-        if raw_content.trim().is_empty() && unclosed_thought && !raw_thinking.is_empty() {
-            crate::logger::log_to_file(&format!(
-                "WARNING: API response for {model} had unclosed thought tag; treating thinking as response"
-            ));
-            eprintln!("Warning: unclosed thought tag in stream; treating thinking as response");
-            raw_content = std::mem::take(&mut raw_thinking);
-        }
-
-        let response = raw_content.trim().to_string();
-        if response.is_empty() {
-            anyhow::bail!("No response from the model via API");
-        }
-
-        match finish_reason.as_deref() {
-            Some("length") => {
-                crate::logger::log_to_file(&format!(
-                    "WARNING: API response for {model} truncated by max_tokens"
-                ));
-                eprintln!("Warning: response truncated by max_tokens");
-            }
-            Some("content_filter") => {
-                crate::logger::log_to_file(&format!(
-                    "WARNING: API response for {model} stopped by content filter"
-                ));
-                eprintln!("Warning: response stopped by content filter");
-            }
-            _ => {}
-        }
-
-        {
-            let mut s = spool.lock().unwrap();
-            s.stream_event(ParsedStreamEvent::AssistantText {
-                text: response.clone(),
-            });
-            if let Some(ref u) = usage {
-                s.stream_event(ParsedStreamEvent::Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                });
-            }
-        }
-
-        session.commit_turn(prompt, model, response, usage)
+        session.commit_turn(prompt, model, outcome.response, outcome.usage)
     }
 }
 

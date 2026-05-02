@@ -31,11 +31,17 @@ pub struct StreamRequest<'a> {
 /// Per-event decoder. Returning `Ok(true)` ends the stream loop early.
 /// Called for every event surfaced by `SseParser::feed` and once more for
 /// any event emitted by `SseParser::flush()` after EOF.
-pub trait EventHandler {
+pub trait StreamHandler {
+    type Outcome;
+
     fn on_event(&mut self, ev: &SseEvent) -> anyhow::Result<bool>;
+    fn finish(self, model: &str) -> anyhow::Result<Self::Outcome>;
 }
 
-pub fn run_stream<H: EventHandler>(req: StreamRequest, handler: &mut H) -> anyhow::Result<()> {
+pub fn run_stream<H: StreamHandler>(
+    req: StreamRequest,
+    mut handler: H,
+) -> anyhow::Result<H::Outcome> {
     let StreamRequest {
         agent,
         url,
@@ -80,6 +86,7 @@ pub fn run_stream<H: EventHandler>(req: StreamRequest, handler: &mut H) -> anyho
     let mut sse = SseParser::new();
     let mut buf = [0u8; 8192];
 
+    let mut stopped = false;
     'outer: loop {
         let n = match reader.read(&mut buf) {
             Ok(0) => break,
@@ -99,14 +106,15 @@ pub fn run_stream<H: EventHandler>(req: StreamRequest, handler: &mut H) -> anyho
             .map_err(|e| anyhow::anyhow!("{} parse error for {model}: {e}", labels.stream))?;
         for ev in events {
             if handler.on_event(&ev)? {
+                stopped = true;
                 break 'outer;
             }
         }
     }
-    if let Some(ev) = sse.flush() {
+    if !stopped && let Some(ev) = sse.flush() {
         let _ = handler.on_event(&ev)?;
     }
-    Ok(())
+    handler.finish(&model)
 }
 
 /// True if the IO error originated from a ureq timeout (or stdlib TimedOut).
@@ -140,6 +148,7 @@ mod tests {
     use super::super::anthropic_api::AnthropicApiExecutor;
     use super::super::api::ApiExecutor;
     use super::super::types::{ExecutionRequest, LlmExecutor};
+    use super::*;
 
     /// Spin up a one-shot HTTP/1.1 server on 127.0.0.1 that accepts a single
     /// POST, records the request body, and replies with `response_bytes`.
@@ -227,6 +236,70 @@ mod tests {
             std::env::set_var("XDG_STATE_HOME", tmp.path());
         }
         tmp
+    }
+
+    struct RecordingHandler {
+        seen: Vec<String>,
+        stop_on: &'static str,
+    }
+
+    impl super::StreamHandler for RecordingHandler {
+        type Outcome = Vec<String>;
+
+        fn on_event(&mut self, ev: &SseEvent) -> anyhow::Result<bool> {
+            self.seen.push(ev.data.clone());
+            Ok(ev.data == self.stop_on)
+        }
+
+        fn finish(self, _model: &str) -> anyhow::Result<Self::Outcome> {
+            Ok(self.seen)
+        }
+    }
+
+    fn recording_stream_request(url: String) -> StreamRequest<'static> {
+        let agent = Box::leak(Box::new(ureq::Agent::new_with_defaults()));
+        StreamRequest {
+            agent,
+            url,
+            headers: vec![("Content-Type", "application/json".to_string())],
+            body: b"{}".to_vec(),
+            idle_timeout: std::time::Duration::from_secs(5),
+            model: "test-model".to_string(),
+            labels: StreamLabels {
+                request: "test request",
+                stream: "test stream",
+            },
+        }
+    }
+
+    #[test]
+    fn run_stream_honors_terminal_event_from_eof_flush() {
+        let response = http_response(b"data: stop");
+        let (base, _recorded) = start_mock_server(response);
+        let seen = run_stream(
+            recording_stream_request(base),
+            RecordingHandler {
+                seen: Vec::new(),
+                stop_on: "stop",
+            },
+        )
+        .unwrap();
+        assert_eq!(seen, vec!["stop"]);
+    }
+
+    #[test]
+    fn run_stream_skips_flush_after_in_loop_stop() {
+        let response = http_response(b"data: stop\n\ndata: later");
+        let (base, _recorded) = start_mock_server(response);
+        let seen = run_stream(
+            recording_stream_request(base),
+            RecordingHandler {
+                seen: Vec::new(),
+                stop_on: "stop",
+            },
+        )
+        .unwrap();
+        assert_eq!(seen, vec!["stop"]);
     }
 
     fn build_request(prompt: &str, model: &str) -> (ExecutionRequest, Arc<Mutex<RunSpool>>) {

@@ -7,9 +7,12 @@ use std::sync::Mutex;
 use serde::Deserialize;
 
 use consult_llm_core::monitoring::{ProgressStage, RunSpool};
+use consult_llm_core::stream_events::ParsedStreamEvent;
 
-use super::api_transport::EventHandler;
+use super::api_transport::StreamHandler;
 use super::sse::SseEvent;
+use super::types::Usage;
+use crate::logger::log_to_file;
 
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -99,22 +102,29 @@ struct AnthropicError {
     message: String,
 }
 
-pub struct AnthropicStreamHandler<'a> {
+#[derive(Debug)]
+pub struct AnthropicStreamOutcome {
     pub response: String,
-    pub thinking: String,
-    pub input_tokens: u64,
-    pub cache_creation_tokens: u64,
-    pub cache_read_tokens: u64,
-    pub output_tokens: u64,
-    pub got_usage: bool,
-    pub stop_reason: Option<String>,
-    pub saw_message_stop: bool,
-    pub current_stage: Option<ProgressStage>,
-    pub spool: &'a Mutex<RunSpool>,
+    pub usage: Option<Usage>,
+}
+
+pub struct AnthropicStreamHandler<'a> {
+    response: String,
+    thinking: String,
+    input_tokens: u64,
+    cache_creation_tokens: u64,
+    cache_read_tokens: u64,
+    output_tokens: u64,
+    got_usage: bool,
+    stop_reason: Option<String>,
+    saw_message_stop: bool,
+    current_stage: Option<ProgressStage>,
+    spool: &'a Mutex<RunSpool>,
+    max_tokens: u32,
 }
 
 impl<'a> AnthropicStreamHandler<'a> {
-    pub fn new(spool: &'a Mutex<RunSpool>) -> Self {
+    pub fn new(spool: &'a Mutex<RunSpool>, max_tokens: u32) -> Self {
         Self {
             response: String::new(),
             thinking: String::new(),
@@ -127,6 +137,7 @@ impl<'a> AnthropicStreamHandler<'a> {
             saw_message_stop: false,
             current_stage: None,
             spool,
+            max_tokens,
         }
     }
 
@@ -144,7 +155,9 @@ impl<'a> AnthropicStreamHandler<'a> {
     }
 }
 
-impl EventHandler for AnthropicStreamHandler<'_> {
+impl StreamHandler for AnthropicStreamHandler<'_> {
+    type Outcome = AnthropicStreamOutcome;
+
     fn on_event(&mut self, ev: &SseEvent) -> anyhow::Result<bool> {
         let Ok(parsed) = serde_json::from_str::<AnthropicEvent>(&ev.data) else {
             return Ok(false);
@@ -197,11 +210,133 @@ impl EventHandler for AnthropicStreamHandler<'_> {
         }
         Ok(false)
     }
+
+    fn finish(self, model: &str) -> anyhow::Result<Self::Outcome> {
+        let Self {
+            response,
+            thinking,
+            input_tokens,
+            cache_creation_tokens,
+            cache_read_tokens,
+            output_tokens,
+            got_usage,
+            stop_reason,
+            saw_message_stop,
+            spool,
+            max_tokens,
+            ..
+        } = self;
+
+        if !saw_message_stop {
+            anyhow::bail!("Anthropic stream for {model} ended without message_stop");
+        }
+
+        match stop_reason.as_deref() {
+            Some("pause_turn") => anyhow::bail!(
+                "Anthropic API returned pause_turn — long-running turn was paused mid-stream"
+            ),
+            Some("max_tokens") => {
+                log_to_file(&format!(
+                    "WARNING: Anthropic response for {model} truncated by max_tokens ({max_tokens})"
+                ));
+                eprintln!("Warning: response truncated by max_tokens ({max_tokens})");
+            }
+            Some("model_context_window_exceeded") => {
+                log_to_file(&format!(
+                    "WARNING: Anthropic response for {model} truncated — model context window exceeded"
+                ));
+                eprintln!("Warning: response truncated — model context window exceeded");
+            }
+            Some("refusal") => {
+                log_to_file(&format!(
+                    "WARNING: Anthropic response for {model} stopped with refusal — model declined to answer"
+                ));
+                eprintln!("Warning: model declined to answer (refusal)");
+            }
+            _ => {}
+        }
+
+        if response.is_empty() {
+            anyhow::bail!("No text content in Anthropic API response");
+        }
+
+        let usage = got_usage.then(|| Usage {
+            prompt_tokens: input_tokens + cache_creation_tokens + cache_read_tokens,
+            completion_tokens: output_tokens,
+        });
+        let thinking_opt = if thinking.is_empty() {
+            None
+        } else {
+            Some(thinking)
+        };
+
+        {
+            let mut s = spool.lock().unwrap();
+            if let Some(ref t) = thinking_opt {
+                s.stream_event(ParsedStreamEvent::Thinking { text: t.clone() });
+            }
+            s.stream_event(ParsedStreamEvent::AssistantText {
+                text: response.clone(),
+            });
+            if let Some(ref u) = usage {
+                s.stream_event(ParsedStreamEvent::Usage {
+                    prompt_tokens: u.prompt_tokens,
+                    completion_tokens: u.completion_tokens,
+                });
+            }
+        }
+
+        Ok(AnthropicStreamOutcome { response, usage })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finish_requires_message_stop() {
+        let spool = Mutex::new(RunSpool::disabled());
+        let mut handler = AnthropicStreamHandler::new(&spool, 32_000);
+        handler
+            .on_event(&SseEvent {
+                data: r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}"#.to_string(),
+                event: None,
+            })
+            .unwrap();
+
+        let err = handler.finish("claude-test").unwrap_err().to_string();
+
+        assert_eq!(
+            err,
+            "Anthropic stream for claude-test ended without message_stop"
+        );
+    }
+
+    #[test]
+    fn finish_bails_on_pause_turn() {
+        let spool = Mutex::new(RunSpool::disabled());
+        let mut handler = AnthropicStreamHandler::new(&spool, 32_000);
+        for data in [
+            r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"partial"}}"#,
+            r#"{"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":1}}"#,
+            r#"{"type":"message_stop"}"#,
+        ] {
+            handler
+                .on_event(&SseEvent {
+                    data: data.to_string(),
+                    event: None,
+                })
+                .unwrap();
+        }
+
+        let err = handler.finish("claude-test").unwrap_err().to_string();
+
+        assert_eq!(
+            err,
+            "Anthropic API returned pause_turn — long-running turn was paused mid-stream"
+        );
+    }
 
     #[test]
     fn parses_content_block_delta_text() {

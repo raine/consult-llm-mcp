@@ -2,13 +2,10 @@ use std::time::Duration;
 
 use serde::Serialize;
 
-use consult_llm_core::stream_events::ParsedStreamEvent;
-
 use super::anthropic_events::AnthropicStreamHandler;
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::api_transport::{StreamLabels, StreamRequest, run_stream};
-use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities, Usage};
-use crate::logger::log_to_file;
+use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const DEFAULT_MAX_TOKENS: u32 = 32_000;
@@ -113,8 +110,8 @@ impl LlmExecutor for AnthropicApiExecutor {
         };
         let body = serde_json::to_vec(&request)?;
 
-        let mut handler = AnthropicStreamHandler::new(&spool);
-        run_stream(
+        let handler = AnthropicStreamHandler::new(&spool, DEFAULT_MAX_TOKENS);
+        let outcome = run_stream(
             StreamRequest {
                 agent: &self.agent,
                 url,
@@ -128,82 +125,10 @@ impl LlmExecutor for AnthropicApiExecutor {
                 model: model.clone(),
                 labels: LABELS,
             },
-            &mut handler,
+            handler,
         )?;
 
-        let AnthropicStreamHandler {
-            response,
-            thinking,
-            input_tokens,
-            cache_creation_tokens,
-            cache_read_tokens,
-            output_tokens,
-            got_usage,
-            stop_reason,
-            saw_message_stop,
-            ..
-        } = handler;
-
-        if !saw_message_stop {
-            anyhow::bail!("Anthropic stream for {model} ended without message_stop");
-        }
-
-        match stop_reason.as_deref() {
-            Some("pause_turn") => anyhow::bail!(
-                "Anthropic API returned pause_turn — long-running turn was paused mid-stream"
-            ),
-            Some("max_tokens") => {
-                log_to_file(&format!(
-                    "WARNING: Anthropic response for {model} truncated by max_tokens ({DEFAULT_MAX_TOKENS})"
-                ));
-                eprintln!("Warning: response truncated by max_tokens ({DEFAULT_MAX_TOKENS})");
-            }
-            Some("model_context_window_exceeded") => {
-                log_to_file(&format!(
-                    "WARNING: Anthropic response for {model} truncated — model context window exceeded"
-                ));
-                eprintln!("Warning: response truncated — model context window exceeded");
-            }
-            Some("refusal") => {
-                log_to_file(&format!(
-                    "WARNING: Anthropic response for {model} stopped with refusal — model declined to answer"
-                ));
-                eprintln!("Warning: model declined to answer (refusal)");
-            }
-            _ => {}
-        }
-
-        if response.is_empty() {
-            anyhow::bail!("No text content in Anthropic API response");
-        }
-
-        let usage = got_usage.then(|| Usage {
-            prompt_tokens: input_tokens + cache_creation_tokens + cache_read_tokens,
-            completion_tokens: output_tokens,
-        });
-        let thinking_opt = if thinking.is_empty() {
-            None
-        } else {
-            Some(thinking)
-        };
-
-        {
-            let mut s = spool.lock().unwrap();
-            if let Some(ref t) = thinking_opt {
-                s.stream_event(ParsedStreamEvent::Thinking { text: t.clone() });
-            }
-            s.stream_event(ParsedStreamEvent::AssistantText {
-                text: response.clone(),
-            });
-            if let Some(ref u) = usage {
-                s.stream_event(ParsedStreamEvent::Usage {
-                    prompt_tokens: u.prompt_tokens,
-                    completion_tokens: u.completion_tokens,
-                });
-            }
-        }
-
-        session.commit_turn(prompt, model, response, usage)
+        session.commit_turn(prompt, model, outcome.response, outcome.usage)
     }
 }
 
