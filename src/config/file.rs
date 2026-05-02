@@ -139,6 +139,12 @@ where
 
 fn validate_provider_block(provider: Provider, block: &ProviderBlock) -> Result<(), String> {
     let spec = provider.spec();
+    if block.opencode_provider.is_some() && !spec.allowed_backends.contains(&"opencode") {
+        return Err(format!(
+            "unsupported provider field `opencode_provider` for provider `{}`",
+            spec.id
+        ));
+    }
     if block.reasoning_effort.is_some() && spec.reasoning_effort_env.is_none() {
         return Err(format!(
             "unsupported provider field `reasoning_effort` for provider `{}`",
@@ -318,10 +324,28 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_rejects_unsupported_opencode_provider_for_provider() {
+        let err = ConfigFile::parse("anthropic:\n  opencode_provider: anthropic\n").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("anthropic"));
+        assert!(msg.contains("opencode_provider"));
+        assert!(msg.contains("unsupported"));
+    }
+
+    #[test]
+    fn test_parse_accepts_opencode_provider_for_opencode_capable_provider_when_backend_is_api() {
+        let cfg =
+            ConfigFile::parse("deepseek:\n  backend: api\n  opencode_provider: custom\n").unwrap();
+        let m = cfg.to_env_map(ApiKeyPolicy::Allow).unwrap();
+        assert_eq!(m["CONSULT_LLM_OPENCODE_DEEPSEEK_PROVIDER"], "custom");
+    }
+
+    #[test]
     fn test_parse_rejects_every_unsupported_provider_specific_field() {
         for spec in PROVIDERS {
-            for field in ["reasoning_effort", "extra_args"] {
+            for field in ["opencode_provider", "reasoning_effort", "extra_args"] {
                 let supported = match field {
+                    "opencode_provider" => spec.allowed_backends.contains(&"opencode"),
                     "reasoning_effort" => spec.reasoning_effort_env.is_some(),
                     "extra_args" => spec.extra_args_env.is_some(),
                     _ => unreachable!(),
