@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use super::anthropic_events::AnthropicStreamHandler;
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
-use super::api_transport::{PreparedStreamRequest, StreamLabels, run_stream};
+use super::api_transport::{StreamLabels, StreamRequest, run_stream};
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 
 const ANTHROPIC_VERSION: &str = "2023-06-01";
@@ -57,55 +57,6 @@ impl AnthropicApiExecutor {
             },
         }
     }
-
-    pub(super) fn build_stream_request(
-        &self,
-        model: String,
-        system_prompt: String,
-        prompt: String,
-        history: impl IntoIterator<Item = (String, String)>,
-    ) -> anyhow::Result<PreparedStreamRequest> {
-        let base = self.base_url.trim_end_matches('/');
-        let url = format!("{base}/v1/messages");
-
-        let mut messages = Vec::new();
-        for (user_prompt, assistant_response) in history {
-            messages.push(Message {
-                role: "user".to_string(),
-                content: user_prompt,
-            });
-            messages.push(Message {
-                role: "assistant".to_string(),
-                content: assistant_response,
-            });
-        }
-        messages.push(Message {
-            role: "user".to_string(),
-            content: prompt,
-        });
-
-        let request = MessagesRequest {
-            model: model.clone(),
-            system: system_prompt,
-            messages,
-            max_tokens: DEFAULT_MAX_TOKENS,
-            stream: true,
-        };
-        let body = serde_json::to_vec(&request)?;
-
-        Ok(PreparedStreamRequest {
-            url,
-            headers: vec![
-                ("x-api-key", self.api_key.clone()),
-                ("anthropic-version", ANTHROPIC_VERSION.to_string()),
-                ("Content-Type", "application/json".to_string()),
-            ],
-            body,
-            idle_timeout: self.idle_timeout,
-            model,
-            labels: LABELS,
-        })
-    }
 }
 
 impl LlmExecutor for AnthropicApiExecutor {
@@ -131,15 +82,51 @@ impl LlmExecutor for AnthropicApiExecutor {
 
         let session = ApiChatSession::start(thread_id, &spool, &system_prompt, &prompt)?;
 
-        let history = session
-            .history()
-            .iter()
-            .map(|turn| (turn.user_prompt.clone(), turn.assistant_response.clone()));
-        let prepared =
-            self.build_stream_request(model.clone(), system_prompt, prompt.clone(), history)?;
+        let base = self.base_url.trim_end_matches('/');
+        let url = format!("{base}/v1/messages");
+
+        let mut messages = Vec::new();
+        for turn in session.history() {
+            messages.push(Message {
+                role: "user".to_string(),
+                content: turn.user_prompt.clone(),
+            });
+            messages.push(Message {
+                role: "assistant".to_string(),
+                content: turn.assistant_response.clone(),
+            });
+        }
+        messages.push(Message {
+            role: "user".to_string(),
+            content: prompt.clone(),
+        });
+
+        let request = MessagesRequest {
+            model: model.clone(),
+            system: system_prompt,
+            messages,
+            max_tokens: DEFAULT_MAX_TOKENS,
+            stream: true,
+        };
+        let body = serde_json::to_vec(&request)?;
 
         let handler = AnthropicStreamHandler::new(&spool, DEFAULT_MAX_TOKENS);
-        let outcome = run_stream(prepared.into_stream_request(&self.agent), handler)?;
+        let outcome = run_stream(
+            StreamRequest {
+                agent: &self.agent,
+                url,
+                headers: vec![
+                    ("x-api-key", self.api_key.clone()),
+                    ("anthropic-version", ANTHROPIC_VERSION.to_string()),
+                    ("Content-Type", "application/json".to_string()),
+                ],
+                body,
+                idle_timeout: self.idle_timeout,
+                model: model.clone(),
+                labels: LABELS,
+            },
+            handler,
+        )?;
 
         session.commit_turn(prompt, model, outcome.response, outcome.usage)
     }

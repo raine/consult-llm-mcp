@@ -252,7 +252,13 @@ mod tests {
 
     #[test]
     fn finish_uses_unclosed_thinking_as_response() {
-        let _state = crate::test_util::XdgStateGuard::temp();
+        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let _state = tempfile::tempdir().unwrap();
+        unsafe {
+            std::env::set_var("XDG_STATE_HOME", _state.path());
+        }
         let spool = Mutex::new(RunSpool::disabled());
         let mut handler =
             ChatStreamHandler::new(Some(TagSplitter::new("<think>", "</think>")), &spool);

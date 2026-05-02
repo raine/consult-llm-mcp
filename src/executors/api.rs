@@ -4,7 +4,7 @@ use serde::Serialize;
 
 use super::api_chat::ChatStreamHandler;
 use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
-use super::api_transport::{PreparedStreamRequest, StreamLabels, run_stream};
+use super::api_transport::{StreamLabels, StreamRequest, run_stream};
 use super::tag_splitter::TagSplitter;
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
 use crate::models::{OpenAiCompatRuntime, OpenAiExtraBody};
@@ -66,63 +66,6 @@ impl ApiExecutor {
             },
         }
     }
-
-    pub(super) fn build_stream_request(
-        &self,
-        model: String,
-        system_prompt: &str,
-        prompt: &str,
-        history: impl IntoIterator<Item = (String, String)>,
-    ) -> anyhow::Result<PreparedStreamRequest> {
-        let base = if self.base_url.ends_with('/') {
-            self.base_url.clone()
-        } else {
-            format!("{}/", self.base_url)
-        };
-        let url = format!("{base}chat/completions");
-
-        let mut messages = vec![ChatMessage {
-            role: "system".to_string(),
-            content: system_prompt.to_string(),
-        }];
-        for (user_prompt, assistant_response) in history {
-            messages.push(ChatMessage {
-                role: "user".to_string(),
-                content: user_prompt,
-            });
-            messages.push(ChatMessage {
-                role: "assistant".to_string(),
-                content: assistant_response,
-            });
-        }
-        messages.push(ChatMessage {
-            role: "user".to_string(),
-            content: prompt.to_string(),
-        });
-
-        let request = ChatRequest {
-            model: model.clone(),
-            messages,
-            stream: true,
-            stream_options: Some(StreamOptions {
-                include_usage: true,
-            }),
-            extra_body: extra_body(self.runtime),
-        };
-        let body = serde_json::to_vec(&request)?;
-
-        Ok(PreparedStreamRequest {
-            url,
-            headers: vec![
-                ("Authorization", format!("Bearer {}", &self.api_key)),
-                ("Content-Type", "application/json".to_string()),
-            ],
-            body,
-            idle_timeout: self.idle_timeout,
-            model,
-            labels: LABELS,
-        })
-    }
 }
 
 fn extra_body(runtime: OpenAiCompatRuntime) -> Option<serde_json::Value> {
@@ -162,12 +105,45 @@ impl LlmExecutor for ApiExecutor {
         warn_unsupported_file_paths(&model, file_paths.as_ref());
 
         let session = ApiChatSession::start(thread_id, &spool, &system_prompt, &prompt)?;
-        let history = session
-            .history()
-            .iter()
-            .map(|turn| (turn.user_prompt.clone(), turn.assistant_response.clone()));
-        let prepared =
-            self.build_stream_request(model.clone(), &system_prompt, &prompt, history)?;
+
+        let base = if self.base_url.ends_with('/') {
+            self.base_url.clone()
+        } else {
+            format!("{}/", self.base_url)
+        };
+        let url = format!("{base}chat/completions");
+
+        let mut messages = vec![ChatMessage {
+            role: "system".to_string(),
+            content: system_prompt.clone(),
+        }];
+        for turn in session.history() {
+            messages.push(ChatMessage {
+                role: "user".to_string(),
+                content: turn.user_prompt.clone(),
+            });
+            messages.push(ChatMessage {
+                role: "assistant".to_string(),
+                content: turn.assistant_response.clone(),
+            });
+        }
+        messages.push(ChatMessage {
+            role: "user".to_string(),
+            content: prompt.clone(),
+        });
+
+        let extra_body = extra_body(self.runtime);
+
+        let request = ChatRequest {
+            model: model.clone(),
+            messages,
+            stream: true,
+            stream_options: Some(StreamOptions {
+                include_usage: true,
+            }),
+            extra_body,
+        };
+        let body = serde_json::to_vec(&request)?;
 
         let splitter = self
             .runtime
@@ -175,7 +151,21 @@ impl LlmExecutor for ApiExecutor {
             .map(|tags| TagSplitter::new(tags.start, tags.end));
         let handler = ChatStreamHandler::new(splitter, &spool);
 
-        let outcome = run_stream(prepared.into_stream_request(&self.agent), handler)?;
+        let outcome = run_stream(
+            StreamRequest {
+                agent: &self.agent,
+                url,
+                headers: vec![
+                    ("Authorization", format!("Bearer {}", &self.api_key)),
+                    ("Content-Type", "application/json".to_string()),
+                ],
+                body,
+                idle_timeout: self.idle_timeout,
+                model: model.clone(),
+                labels: LABELS,
+            },
+            handler,
+        )?;
 
         session.commit_turn(prompt, model, outcome.response, outcome.usage)
     }
