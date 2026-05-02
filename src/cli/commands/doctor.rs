@@ -300,8 +300,8 @@ pub fn run(verbose: bool) -> anyhow::Result<()> {
 
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let home = dirs::home_dir();
-    let disc = crate::config_discovery::discover(&cwd, home.as_deref());
-    let env = match crate::config_loader::LayeredEnv::load(&disc) {
+    let disc = crate::config::discovery::discover(&cwd, home.as_deref());
+    let env = match crate::config::loader::LayeredEnv::load(&disc) {
         Ok(e) => e,
         Err(e) => {
             eprintln!("config error: {}: {}", e.path.display(), e.message);

@@ -342,8 +342,8 @@ fn no_update_check_set() -> bool {
 fn no_update_check_from_config() -> Option<String> {
     let cwd = std::env::current_dir().ok()?;
     let home = dirs::home_dir();
-    let paths = crate::config_discovery::discover(&cwd, home.as_deref());
-    let env = crate::config_loader::LayeredEnv::load(&paths).ok()?;
+    let paths = crate::config::discovery::discover(&cwd, home.as_deref());
+    let env = crate::config::loader::LayeredEnv::load(&paths).ok()?;
     env.lookup("CONSULT_LLM_NO_UPDATE_CHECK").map(|(v, _)| v)
 }
 

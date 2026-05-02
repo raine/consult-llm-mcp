@@ -4,12 +4,15 @@ use std::sync::{Arc, OnceLock};
 pub use crate::catalog::ModelRegistry;
 pub use types::{Backend, Config, ConfigError};
 
+pub mod discovery;
+pub mod file;
+pub mod loader;
 mod migrate;
 pub mod parse;
 pub mod types;
 
-use crate::config_discovery::discover;
-use crate::config_loader::LayeredEnv;
+use discovery::discover;
+use loader::LayeredEnv;
 
 static CONFIG: OnceLock<Config> = OnceLock::new();
 static LAYERED_ENV: OnceLock<LayeredEnv> = OnceLock::new();

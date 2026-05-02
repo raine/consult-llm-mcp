@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::config_file::ApiKeyPolicy;
+use crate::config::file::ApiKeyPolicy;
 
 #[derive(Debug, Clone)]
 pub enum Source {
@@ -36,7 +36,7 @@ pub struct LayeredEnv {
 }
 
 impl LayeredEnv {
-    pub fn load(paths: &crate::config_discovery::DiscoveredPaths) -> Result<Self, LoadError> {
+    pub fn load(paths: &crate::config::discovery::DiscoveredPaths) -> Result<Self, LoadError> {
         let mut file_layers: Vec<(Source, HashMap<String, String>)> = Vec::new();
 
         for (src_ctor, path, policy) in [
@@ -53,7 +53,7 @@ impl LayeredEnv {
                     path: p.clone(),
                     message: e.to_string(),
                 })?;
-                let cfg = crate::config_file::ConfigFile::parse(&yaml).map_err(|e| LoadError {
+                let cfg = crate::config::file::ConfigFile::parse(&yaml).map_err(|e| LoadError {
                     path: p.clone(),
                     message: e.to_string(),
                 })?;
@@ -100,7 +100,7 @@ impl LayeredEnv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config_discovery::DiscoveredPaths;
+    use crate::config::discovery::DiscoveredPaths;
 
     fn write_yaml(dir: &tempfile::TempDir, name: &str, content: &str) -> PathBuf {
         let path = dir.path().join(name);
@@ -263,7 +263,7 @@ mod tests {
             project: None,
             project_local: Some(local_path),
         };
-        // Load must succeed; key-mapping behavior covered in config_file.rs tests
+        // Load must succeed; key-mapping behavior covered in config/file.rs tests
         assert!(LayeredEnv::load(&paths).is_ok());
     }
 
