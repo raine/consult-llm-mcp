@@ -38,6 +38,7 @@ Strip flags from arguments to get the task description.
 - **Coordinator never writes source.** All implementation happens inside spawned worktree agents via `/implement`.
 - **`workmux done` ≠ success.** A phase is successful only when its agent has written a result sentinel reporting `status=success`. See "Phase result sentinel" below.
 - **Merges are serialized.** At most one `/merge` in flight globally.
+- **Drain before dispatch.** `wait --any` returns on the first transition only. Before spawning, re-check `workmux status` and merge every handle in `done` — siblings that finished in the same window must not be left for the next wait.
 - **`/merge` is invoked with `--keep`** so the coordinator can verify success before destroying the worktree. Coordinator runs `workmux remove <handle>` after verification.
 - **Dependents only spawn when all predecessors are `merged`.** No exceptions.
 - **No tight polling.** All waits use `workmux wait` with explicit timeouts.
@@ -171,7 +172,7 @@ Hold the DAG and per-phase status in your own working memory. Use `workmux statu
    workmux wait <all-working-handles> --any --timeout 300
    rc=$?
    if [ $rc -eq 0 ]; then
-     # Some handle became done. Check each.
+     # wait --any returns on the FIRST transition; multiple may be done.
      workmux status <all-working-handles>
    elif [ $rc -eq 1 ]; then
      # Timeout — inspect for stuck waiting agents.
@@ -184,7 +185,7 @@ Hold the DAG and per-phase status in your own working memory. Use `workmux statu
    ```
 
    Treat `done` as **unverified success**: set status to `done-unverified` and proceed to phase verification (Phase 3).
-6. After verification updates one or more phases to `merged` or `failed`, recompute the ready set. Loop to step 1.
+6. **Drain every `done` handle before spawning.** Run Phase 3 verification + merge on each (serial — merges are globally serialized). Only after the working set has no `done` handles do you recompute the ready set and loop to step 1. Skipping the drain spawns dependents against a stale `INTEGRATION_BRANCH`.
 
 **Halt logic.** When any phase becomes `failed` or `blocked`:
 
