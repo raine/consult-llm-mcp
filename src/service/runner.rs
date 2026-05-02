@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use crate::config::Config;
 use crate::executors::types::{ExecutionRequest, LlmExecutor, Usage};
 use crate::llm_query::query_llm;
 use crate::logger::{log_prompt, log_response};
@@ -18,7 +19,9 @@ pub struct SingleResult {
     pub failed: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn run_single_model(
+    config: &Config,
     shared: &SharedInputs,
     model: String,
     executor: Arc<dyn LlmExecutor>,
@@ -93,7 +96,7 @@ pub fn run_single_model(
         );
     }
 
-    let system_prompt = get_system_prompt(executor.capabilities().is_cli, task_mode);
+    let system_prompt = get_system_prompt(config, executor.capabilities().is_cli, task_mode);
 
     let start = std::time::Instant::now();
     let run = query_llm(

@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::catalog::ModelRegistry;
+use crate::config::Config;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
@@ -57,6 +58,7 @@ pub struct ConsultJob {
 }
 
 pub struct ConsultService {
+    config: Arc<Config>,
     registry: Arc<ModelRegistry>,
     executor_provider: Arc<ExecutorProvider>,
 }
@@ -169,11 +171,21 @@ fn assemble_group_markdown(group_id: &str, results: &[SingleResult]) -> String {
 }
 
 impl ConsultService {
-    pub fn new(registry: Arc<ModelRegistry>, executor_provider: Arc<ExecutorProvider>) -> Self {
+    pub fn new(
+        config: Arc<Config>,
+        registry: Arc<ModelRegistry>,
+        executor_provider: Arc<ExecutorProvider>,
+    ) -> Self {
         Self {
+            config,
             registry,
             executor_provider,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn config(&self) -> &Config {
+        &self.config
     }
 
     pub fn consult(&self, args: ConsultLlmArgs) -> anyhow::Result<ConsultOutcome> {
@@ -249,8 +261,10 @@ impl ConsultService {
                 .zip(executors)
                 .map(|(job, exec)| {
                     let shared_ref = &shared;
+                    let config = Arc::clone(&self.config);
                     s.spawn(move || {
                         runner::run_single_model(
+                            &config,
                             shared_ref,
                             job.model,
                             exec,
@@ -361,7 +375,7 @@ impl ConsultService {
         let git_diff = resolve_git_diff(args.git_diff.as_ref());
 
         let prompt = build_prompt(&args.prompt, &context_files, git_diff.as_deref());
-        let system_prompt = get_system_prompt(false, args.task_mode);
+        let system_prompt = get_system_prompt(&self.config, false, args.task_mode);
         let clipboard_text =
             format!("# System Prompt\n\n{system_prompt}\n\n# User Prompt\n\n{prompt}");
         let file_count = context_files.len();
@@ -376,6 +390,35 @@ impl ConsultService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::parse::parse_config;
+    use crate::llm::ExecutorProvider;
+
+    fn build_service(system_prompt_path: &str) -> ConsultService {
+        let path = system_prompt_path.to_string();
+        let env = move |key: &str| match key {
+            "CONSULT_LLM_SYSTEM_PROMPT_PATH" => Some(path.clone()),
+            "OPENAI_API_KEY" => Some("sk-test".into()),
+            _ => None,
+        };
+        let (config, registry) = parse_config(env).expect("parse_config");
+        let config = Arc::new(config);
+        let executor_provider = Arc::new(ExecutorProvider::new(Arc::clone(&config)));
+        ConsultService::new(config, registry, executor_provider)
+    }
+
+    #[test]
+    fn two_services_hold_distinct_configs() {
+        let a = build_service("/tmp/prompt-a.md");
+        let b = build_service("/tmp/prompt-b.md");
+        assert_eq!(
+            a.config().system_prompt_path.as_deref(),
+            Some("/tmp/prompt-a.md")
+        );
+        assert_eq!(
+            b.config().system_prompt_path.as_deref(),
+            Some("/tmp/prompt-b.md")
+        );
+    }
 
     fn result(
         model: &str,

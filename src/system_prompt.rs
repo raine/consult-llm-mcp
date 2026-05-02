@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::config::config;
+use crate::config::Config;
 use crate::logger::log_to_file;
 use crate::schema::TaskMode;
 
@@ -57,9 +57,8 @@ pub fn init_system_prompt() -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn get_system_prompt(is_cli: bool, task_mode: TaskMode) -> String {
-    let cfg = config();
-    let custom_path = cfg.system_prompt_path.clone().unwrap_or_else(|| {
+pub fn get_system_prompt(config: &Config, is_cli: bool, task_mode: TaskMode) -> String {
+    let custom_path = config.system_prompt_path.clone().unwrap_or_else(|| {
         crate::paths::resolve_system_prompt()
             .unwrap_or_else(|| crate::paths::system_prompt_file().unwrap_or_default())
             .to_string_lossy()

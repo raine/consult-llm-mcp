@@ -79,7 +79,8 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
             .collect::<anyhow::Result<_>>()
             .map_err(|e| input::CliError::Generic(e.to_string()))?;
 
-        let registry = config::init_config().map_err(|e| input::CliError::Config(e.to_string()))?;
+        let (cfg, registry) =
+            config::init_config().map_err(|e| input::CliError::Config(e.to_string()))?;
 
         validate_run_threads(&specs).map_err(input::CliError::Generic)?;
 
@@ -103,8 +104,8 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
         }
 
         let git_diff_args = build_git_diff_args(&cli);
-        let executor_provider = Arc::new(ExecutorProvider::new());
-        let service = ConsultService::new(registry, executor_provider);
+        let executor_provider = Arc::new(ExecutorProvider::new(Arc::clone(&cfg)));
+        let service = ConsultService::new(cfg, registry, executor_provider);
 
         let outcome = service
             .consult_jobs(
@@ -131,12 +132,13 @@ pub fn run_ask(cli: Cli) -> Result<(), input::CliError> {
         return Ok(());
     }
 
-    let registry = config::init_config().map_err(|e| input::CliError::Config(e.to_string()))?;
+    let (cfg, registry) =
+        config::init_config().map_err(|e| input::CliError::Config(e.to_string()))?;
     let prompt = input::read_prompt(cli.prompt_file.as_deref())?;
     let args = build_args(&cli, prompt);
 
-    let executor_provider = Arc::new(ExecutorProvider::new());
-    let service = ConsultService::new(registry, executor_provider);
+    let executor_provider = Arc::new(ExecutorProvider::new(Arc::clone(&cfg)));
+    let service = ConsultService::new(cfg, registry, executor_provider);
 
     let outcome = service
         .consult(args)

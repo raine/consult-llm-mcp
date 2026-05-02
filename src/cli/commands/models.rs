@@ -1,9 +1,8 @@
-use crate::config::{self, config};
+use crate::config;
 use crate::models::{ALL_PROVIDERS, Provider};
 
 pub fn run() -> anyhow::Result<()> {
-    let registry = config::init_config().map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    let cfg = config();
+    let (cfg, registry) = config::init_config().map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("Selectors:");
     for p in ALL_PROVIDERS {
         let spec = p.spec();

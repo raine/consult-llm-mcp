@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::config::{Backend, config};
+use crate::config::{Backend, Config};
 use crate::executors::anthropic_api::AnthropicApiExecutor;
 use crate::executors::api::ApiExecutor;
 use crate::executors::codex_cli::CodexCliExecutor;
@@ -15,10 +15,11 @@ pub struct ExecutorProvider {
     cache: Mutex<HashMap<String, Arc<dyn LlmExecutor>>>,
     agent: ureq::Agent,
     idle_timeout: std::time::Duration,
+    config: Arc<Config>,
 }
 
 impl ExecutorProvider {
-    pub fn new() -> Self {
+    pub fn new(config: Arc<Config>) -> Self {
         // Socket read-idle: ureq applies this as a per-read deadline (each
         // blocking read gets a fresh budget), so it's the right knob for
         // "the connection went silent" — heartbeat bytes count as liveness
@@ -53,11 +54,12 @@ impl ExecutorProvider {
             cache: Mutex::new(HashMap::new()),
             agent,
             idle_timeout,
+            config,
         }
     }
 
     pub fn get_executor(&self, model: &str) -> anyhow::Result<Arc<dyn LlmExecutor>> {
-        let cfg = config();
+        let cfg = &*self.config;
         let provider = Provider::from_model(model).ok_or_else(|| {
             anyhow::anyhow!("Unable to determine LLM provider for model: {model}")
         })?;
