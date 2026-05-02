@@ -110,3 +110,101 @@ impl StreamReducer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use consult_llm_core::monitoring::RunSpool;
+    use smallvec::smallvec;
+
+    fn reducer() -> StreamReducer {
+        StreamReducer::new(Arc::new(Mutex::new(RunSpool::disabled())), None, None)
+    }
+
+    #[test]
+    fn complete_stream_session_text_usage() {
+        // Happy path: SessionStarted resolves thread_id, AssistantText chunks
+        // accumulate, Usage is captured.
+        let mut r = reducer();
+        r.process(smallvec![ParsedStreamEvent::SessionStarted {
+            id: "api_thread_xyz".into(),
+        }]);
+        r.process(smallvec![
+            ParsedStreamEvent::AssistantText {
+                text: "Hello ".into()
+            },
+            ParsedStreamEvent::AssistantText {
+                text: "world".into()
+            },
+        ]);
+        r.process(smallvec![ParsedStreamEvent::Usage {
+            prompt_tokens: 10,
+            completion_tokens: 5,
+        }]);
+        assert_eq!(r.thread_id.as_deref(), Some("api_thread_xyz"));
+        assert_eq!(r.response, "Hello world");
+        let u = r.usage.expect("usage captured");
+        assert_eq!(u.prompt_tokens, 10);
+        assert_eq!(u.completion_tokens, 5);
+    }
+
+    #[test]
+    fn heartbeat_only_chunks_are_noop() {
+        // Empty event batches (e.g. SSE heartbeats that produced no parsed
+        // events) must not change reducer state.
+        let mut r = reducer();
+        r.process(smallvec![]);
+        r.process(smallvec![]);
+        assert!(r.thread_id.is_none());
+        assert!(r.response.is_empty());
+        assert!(r.usage.is_none());
+    }
+
+    #[test]
+    fn usage_event_captured_standalone() {
+        let mut r = reducer();
+        r.process(smallvec![ParsedStreamEvent::Usage {
+            prompt_tokens: 1,
+            completion_tokens: 2,
+        }]);
+        let u = r.usage.expect("usage present");
+        assert_eq!(u.prompt_tokens, 1);
+        assert_eq!(u.completion_tokens, 2);
+        assert!(r.response.is_empty());
+        assert!(r.thread_id.is_none());
+    }
+
+    #[test]
+    fn assistant_text_before_session_started_leaves_thread_id_unset() {
+        // Failure-path / out-of-order case: a backend that streams text
+        // before announcing its session ID still has its text accumulated,
+        // but thread_id stays None until SessionStarted arrives.
+        let mut r = reducer();
+        r.process(smallvec![ParsedStreamEvent::AssistantText {
+            text: "leak".into(),
+        }]);
+        assert!(r.thread_id.is_none());
+        assert_eq!(r.response, "leak");
+        // Late SessionStarted still resolves.
+        r.process(smallvec![ParsedStreamEvent::SessionStarted {
+            id: "api_late".into(),
+        }]);
+        assert_eq!(r.thread_id.as_deref(), Some("api_late"));
+    }
+
+    #[test]
+    fn tool_lifecycle_drops_unmatched_finish() {
+        // ToolFinished without a prior ToolStarted is silently ignored —
+        // pin this so refactors can't turn it into a panic.
+        let mut r = reducer();
+        r.process(smallvec![ParsedStreamEvent::ToolFinished {
+            call_id: "missing".into(),
+            success: false,
+            error: None,
+        }]);
+        // No assertion target other than "did not panic"; reducer state
+        // remains pristine.
+        assert!(r.response.is_empty());
+        assert!(r.thread_id.is_none());
+    }
+}

@@ -285,6 +285,23 @@ mod tests {
     }
 
     #[test]
+    fn usage_event_payload_preserved() {
+        // Backends emit a final terminal frame whose data payload carries
+        // usage. SseParser is JSON-blind — pin that the data text comes
+        // through verbatim so downstream usage extraction has stable input.
+        let mut p = SseParser::new();
+        let payload = r#"{"choices":[],"usage":{"prompt_tokens":12,"completion_tokens":34}}"#;
+        let mut frame = format!("data: {payload}\n\n").into_bytes();
+        // Append a `[DONE]` frame to mimic what real OpenAI-compatible
+        // streams emit and prove both frames decode independently.
+        frame.extend_from_slice(b"data: [DONE]\n\n");
+        let evts = feed(&mut p, &frame);
+        assert_eq!(evts.len(), 2);
+        assert_eq!(evts[0].data, payload);
+        assert_eq!(evts[1].data, "[DONE]");
+    }
+
+    #[test]
     fn errors_when_buffer_exceeds_cap() {
         let mut p = SseParser::new();
         // Stream bytes without ever closing a frame.

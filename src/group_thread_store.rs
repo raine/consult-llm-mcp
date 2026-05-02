@@ -200,6 +200,17 @@ mod tests {
     }
 
     #[test]
+    fn current_schema_json_byte_for_byte_roundtrip() {
+        // Pin the on-disk write format. If a refactor changes the
+        // serialization shape (field order, naming, structure), this test
+        // fails before any persisted group file silently shifts.
+        let fixture = r#"{"id":"group_abc","entries":[{"model":"gpt-5.4","thread_id":"api_x"},{"model":"gemini-2.5-pro","thread_id":"api_y"}]}"#;
+        let group: StoredGroup = serde_json::from_str(fixture).unwrap();
+        let serialized = serde_json::to_string(&group).unwrap();
+        assert_eq!(serialized, fixture);
+    }
+
+    #[test]
     fn legacy_group_loads_from_member_order() {
         let json = r#"{
             "id":"group_abc",

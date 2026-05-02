@@ -112,3 +112,22 @@ pub fn cleanup_expired(ttl_days: u64) -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_schema_json_byte_for_byte_roundtrip() {
+        // Pin the on-disk write format for API thread files. NOTE: the phase
+        // brief calls this "JSONL" but the actual format is a single JSON
+        // object per file; this test encodes the current behaviour.
+        // `unify-api-executors` should fail this test before changing the
+        // wire shape.
+        // XXX: phase brief mismatch — see plan note. No fix here (test-only phase).
+        let fixture = r#"{"id":"api_abc","turns":[{"user_prompt":"hi","assistant_response":"hello","model":"gpt-5.4","usage":{"prompt_tokens":5,"completion_tokens":3}},{"user_prompt":"again","assistant_response":"sure","model":"gpt-5.4","usage":null}]}"#;
+        let thread: StoredThread = serde_json::from_str(fixture).unwrap();
+        let serialized = serde_json::to_string(&thread).unwrap();
+        assert_eq!(serialized, fixture);
+    }
+}

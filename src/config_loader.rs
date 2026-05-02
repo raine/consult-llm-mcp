@@ -280,6 +280,89 @@ mod tests {
     }
 
     #[test]
+    fn test_three_layer_precedence_project_local_beats_project_beats_user() {
+        // All three file layers populated simultaneously, single fixture.
+        // Pins precedence project_local > project > user (file layers only;
+        // env precedence is asserted separately).
+        let dir = tempfile::tempdir().unwrap();
+        let local_path = write_yaml(&dir, "local.yaml", "default_model: from-local\n");
+        let project_path = write_yaml(&dir, "project.yaml", "default_model: from-project\n");
+        let user_path = write_yaml(&dir, "user.yaml", "default_model: from-user\n");
+        let paths = DiscoveredPaths {
+            user: Some(user_path),
+            project: Some(project_path),
+            project_local: Some(local_path),
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+
+        // Top layer wins.
+        let (val, src) = env.lookup("CONSULT_LLM_DEFAULT_MODEL").unwrap();
+        assert_eq!(val, "from-local");
+        assert!(matches!(src, Source::ProjectLocal(_)));
+
+        // Drop the top file layer: project layer wins.
+        let paths = DiscoveredPaths {
+            user: paths.user.clone(),
+            project: paths.project.clone(),
+            project_local: None,
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+        let (val, src) = env.lookup("CONSULT_LLM_DEFAULT_MODEL").unwrap();
+        assert_eq!(val, "from-project");
+        assert!(matches!(src, Source::Project(_)));
+
+        // Drop the project layer too: user layer wins.
+        let paths = DiscoveredPaths {
+            user: paths.user.clone(),
+            project: None,
+            project_local: None,
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+        let (val, src) = env.lookup("CONSULT_LLM_DEFAULT_MODEL").unwrap();
+        assert_eq!(val, "from-user");
+        assert!(matches!(src, Source::User(_)));
+    }
+
+    #[test]
+    fn test_env_overrides_all_file_layers() {
+        // Real process env wins over every file layer. Uses
+        // CONSULT_LLM_TEST_ENV_OVERRIDE_KEY — a unique key not consumed by
+        // anything in the binary so it cannot collide with parallel tests.
+        let key = "CONSULT_LLM_TEST_ENV_OVERRIDE_KEY";
+        let dir = tempfile::tempdir().unwrap();
+        // Use a config-known key in the file (default_model maps to
+        // CONSULT_LLM_DEFAULT_MODEL); separately set the unique env key and
+        // assert it surfaces with Source::Env. We test both directions:
+        //   (a) a real env override on a config-known key beats every file.
+        //   (b) an env-only key with no file backing is observed.
+        let local_path = write_yaml(&dir, "local.yaml", "default_model: from-local\n");
+        let project_path = write_yaml(&dir, "project.yaml", "default_model: from-project\n");
+        let user_path = write_yaml(&dir, "user.yaml", "default_model: from-user\n");
+        let paths = DiscoveredPaths {
+            user: Some(user_path),
+            project: Some(project_path),
+            project_local: Some(local_path),
+        };
+        let env = LayeredEnv::load(&paths).unwrap();
+
+        // (a) override the config-known key from the real process env.
+        // SAFETY: tests in this binary run on multiple threads but no other
+        // test reads/writes CONSULT_LLM_DEFAULT_MODEL during its body.
+        unsafe { std::env::set_var("CONSULT_LLM_DEFAULT_MODEL", "from-real-env") };
+        let (val, src) = env.lookup("CONSULT_LLM_DEFAULT_MODEL").unwrap();
+        assert_eq!(val, "from-real-env");
+        assert!(matches!(src, Source::Env));
+        unsafe { std::env::remove_var("CONSULT_LLM_DEFAULT_MODEL") };
+
+        // (b) env-only unique key surfaces with Source::Env.
+        unsafe { std::env::set_var(key, "env-only-value") };
+        let (val, src) = env.lookup(key).unwrap();
+        assert_eq!(val, "env-only-value");
+        assert!(matches!(src, Source::Env));
+        unsafe { std::env::remove_var(key) };
+    }
+
+    #[test]
     fn test_api_key_project_local_beats_user_in_file_layers() {
         // Tests file-layer precedence using a CONSULT_LLM_* key (not a real API key
         // var) to avoid interference from real environment variables.

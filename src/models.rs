@@ -227,10 +227,6 @@ pub fn all_builtin_models() -> Vec<&'static str> {
         .collect()
 }
 
-/// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
-/// When a user passes e.g. "gemini", the server picks the first available model from the list.
-/// Kept separate from the provider registry — selectors are a routing concept that may
-/// eventually span multiple providers (e.g. "reasoning" -> models from different providers).
 pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
     (
         "gemini",
@@ -255,3 +251,56 @@ pub const SELECTOR_PRIORITIES: &[(&str, &[&str])] = &[
     ("anthropic", &["claude-opus-4-7"]),
     ("grok", &["grok-4.3"]),
 ];
+
+/// Abstract selectors mapped to ordered lists of concrete model IDs (best first).
+/// When a user passes e.g. "gemini", the server picks the first available model from the list.
+/// Kept separate from the provider registry — selectors are a routing concept that may
+/// eventually span multiple providers (e.g. "reasoning" -> models from different providers).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Golden table mapping every builtin model to its expected provider.
+    /// This is the stability anchor for the `provider-registry` phase: if
+    /// model→provider routing changes for any current model, this test
+    /// fails before the change ships.
+    #[test]
+    fn model_to_provider_golden() {
+        let expected: &[(&str, Provider)] = &[
+            ("gemini-2.5-pro", Provider::Gemini),
+            ("gemini-3-pro-preview", Provider::Gemini),
+            ("gemini-3.1-pro-preview", Provider::Gemini),
+            ("deepseek-v4-pro", Provider::DeepSeek),
+            ("gpt-5.2", Provider::OpenAI),
+            ("gpt-5.4", Provider::OpenAI),
+            ("gpt-5.5", Provider::OpenAI),
+            ("gpt-5.3-codex", Provider::OpenAI),
+            ("gpt-5.2-codex", Provider::OpenAI),
+            ("MiniMax-M2.7", Provider::MiniMax),
+            ("claude-opus-4-7", Provider::Anthropic),
+            ("grok-4.3", Provider::Grok),
+        ];
+
+        // Every builtin model the catalogue currently produces must be in
+        // the expected table — no unaccounted-for entries.
+        let builtins = all_builtin_models();
+        let expected_models: Vec<&str> = expected.iter().map(|(m, _)| *m).collect();
+        for m in &builtins {
+            assert!(
+                expected_models.contains(m),
+                "builtin model {m:?} missing from golden table; add it"
+            );
+        }
+        assert_eq!(
+            builtins.len(),
+            expected.len(),
+            "golden table size drifted from builtin catalogue"
+        );
+
+        for (model, want) in expected {
+            let got =
+                Provider::from_model(model).unwrap_or_else(|| panic!("no provider for {model:?}"));
+            assert_eq!(got, *want, "provider mismatch for {model:?}");
+        }
+    }
+}
