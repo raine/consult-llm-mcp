@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,12 +6,13 @@ use crate::config::Config;
 use crate::executors::types::{LlmExecutor, Usage};
 use crate::file::process_files;
 use crate::git::generate_git_diff;
-use crate::group_thread_store::{self, GroupEntry, StoredGroup, is_group_id};
+use crate::group_thread_store::{self, StoredGroup, is_group_id};
 use crate::llm::ExecutorProvider;
 use crate::prompt_builder::build_prompt;
 use crate::schema::{ConsultLlmArgs, GitDiffArgs, TaskMode};
 use crate::system_prompt::get_system_prompt;
 
+mod group;
 pub mod plan;
 pub mod runner;
 
@@ -115,69 +115,6 @@ fn build_shared_inputs_from_files(
     })
 }
 
-fn merge_group_entries(
-    existing_group: Option<&StoredGroup>,
-    results: &[SingleResult],
-) -> anyhow::Result<Vec<GroupEntry>> {
-    let mut entries = existing_group
-        .map(|g| g.entries.clone())
-        .unwrap_or_default();
-
-    for r in results {
-        if r.failed {
-            continue;
-        }
-        let Some(tid) = &r.thread_id else {
-            continue;
-        };
-        let entry = GroupEntry {
-            model: r.model.clone(),
-            thread_id: tid.clone(),
-        };
-        if let Some(idx) = r.entry_index {
-            let Some(slot) = entries.get_mut(idx) else {
-                anyhow::bail!("matched group entry index {idx} is out of bounds");
-            };
-            *slot = entry;
-        } else {
-            entries.push(entry);
-        }
-    }
-
-    Ok(entries)
-}
-
-fn assemble_group_markdown(group_id: &str, results: &[SingleResult]) -> String {
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for r in results {
-        *counts.entry(&r.model).or_default() += 1;
-    }
-
-    let mut seen: HashMap<&str, usize> = HashMap::new();
-    let mut out = format!("[thread_id:{group_id}]");
-    for (idx, r) in results.iter().enumerate() {
-        if idx == 0 {
-            out.push_str("\n\n");
-        } else {
-            out.push_str("\n\n---\n\n");
-        }
-        let label = if counts[&r.model.as_str()] > 1 {
-            let n = seen.entry(&r.model).or_default();
-            *n += 1;
-            format!("{}#{}", r.model, *n)
-        } else {
-            r.model.clone()
-        };
-        out.push_str(&format!("## Model: {label}\n[model:{label}]"));
-        if let Some(tid) = &r.thread_id {
-            out.push_str(&format!(" [thread_id:{tid}]"));
-        }
-        out.push_str("\n\n");
-        out.push_str(r.body.trim_end());
-    }
-    out
-}
-
 /// Single-model output assembly: surface the worker error directly.
 fn single_outcome(outcomes: Vec<anyhow::Result<SingleResult>>) -> anyhow::Result<ConsultOutcome> {
     let r = outcomes
@@ -190,37 +127,6 @@ fn single_outcome(outcomes: Vec<anyhow::Result<SingleResult>>) -> anyhow::Result
         model: r.model,
         thread_id: r.thread_id,
     })
-}
-
-/// Group output assembly: render per-model errors inline; only bail when
-/// every model failed.
-fn collect_group_results(
-    jobs: &[ConsultJob],
-    outcomes: Vec<anyhow::Result<SingleResult>>,
-) -> anyhow::Result<Vec<SingleResult>> {
-    let mut results: Vec<SingleResult> = Vec::with_capacity(outcomes.len());
-    for (job, outcome) in jobs.iter().zip(outcomes) {
-        match outcome {
-            Ok(r) => results.push(r),
-            Err(e) => results.push(SingleResult {
-                model: job.model.clone(),
-                body: format!("**Error:** {e:#}"),
-                usage: None,
-                thread_id: None,
-                entry_index: job.entry_index,
-                failed: true,
-            }),
-        }
-    }
-    if results.iter().all(|r| r.failed) {
-        let details = results
-            .iter()
-            .map(|r| format!("{}: {}", r.model, r.body))
-            .collect::<Vec<_>>()
-            .join("\n");
-        anyhow::bail!("all model consultations failed\n{details}");
-    }
-    Ok(results)
 }
 
 impl ConsultService {
@@ -313,7 +219,7 @@ impl ConsultService {
         match output {
             OutputShape::Single => single_outcome(outcomes),
             OutputShape::Group { existing_id } => {
-                let results = collect_group_results(&jobs, outcomes)?;
+                let results = group::collect_group_results(&jobs, outcomes)?;
                 self.persist_group_and_render(existing_id, results)
             }
         }
@@ -395,7 +301,7 @@ impl ConsultService {
 
             group_thread_store::save(&StoredGroup {
                 id: group_id.clone(),
-                entries: merge_group_entries(existing_group.as_ref(), &results)?,
+                entries: group::merge_group_entries(existing_group.as_ref(), &results)?,
             })
         })?;
 
@@ -407,7 +313,7 @@ impl ConsultService {
         }
 
         Ok(ConsultOutcome::GroupResponse {
-            body: assemble_group_markdown(&group_id, &results),
+            body: group::assemble_group_markdown(&group_id, &results),
             usage: None,
         })
     }
@@ -436,209 +342,4 @@ impl ConsultService {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::parse::parse_config;
-    use crate::llm::ExecutorProvider;
-
-    fn build_service(system_prompt_path: &str) -> ConsultService {
-        let path = system_prompt_path.to_string();
-        let env = move |key: &str| match key {
-            "CONSULT_LLM_SYSTEM_PROMPT_PATH" => Some(path.clone()),
-            "OPENAI_API_KEY" => Some("sk-test".into()),
-            _ => None,
-        };
-        let (config, registry) = parse_config(env).expect("parse_config");
-        let config = Arc::new(config);
-        let executor_provider = Arc::new(ExecutorProvider::new(Arc::clone(&config)));
-        ConsultService::new(config, registry, executor_provider)
-    }
-
-    #[test]
-    fn two_services_hold_distinct_configs() {
-        let a = build_service("/tmp/prompt-a.md");
-        let b = build_service("/tmp/prompt-b.md");
-        assert_eq!(
-            a.config().system_prompt_path.as_deref(),
-            Some("/tmp/prompt-a.md")
-        );
-        assert_eq!(
-            b.config().system_prompt_path.as_deref(),
-            Some("/tmp/prompt-b.md")
-        );
-    }
-
-    fn result(
-        model: &str,
-        thread_id: Option<&str>,
-        entry_index: Option<usize>,
-        failed: bool,
-    ) -> SingleResult {
-        SingleResult {
-            model: model.into(),
-            body: format!("body for {model}"),
-            usage: None,
-            thread_id: thread_id.map(str::to_string),
-            entry_index,
-            failed,
-        }
-    }
-
-    fn job(model: &str) -> ConsultJob {
-        ConsultJob {
-            model: model.into(),
-            prompt: "p".into(),
-            thread_id: None,
-            entry_index: None,
-        }
-    }
-
-    #[test]
-    fn group_markdown_suffixes_only_duplicate_models() {
-        let out = assemble_group_markdown(
-            "group_abc",
-            &[
-                result("gpt-5.2", Some("api_1"), None, false),
-                result("gemini-2.5-pro", Some("api_g"), None, false),
-                result("gpt-5.2", Some("api_2"), None, false),
-            ],
-        );
-        assert!(out.contains("## Model: gpt-5.2#1\n[model:gpt-5.2#1] [thread_id:api_1]"));
-        assert!(out.contains("## Model: gemini-2.5-pro\n[model:gemini-2.5-pro] [thread_id:api_g]"));
-        assert!(out.contains("## Model: gpt-5.2#2\n[model:gpt-5.2#2] [thread_id:api_2]"));
-    }
-
-    #[test]
-    fn group_markdown_distinct_models_stays_plain() {
-        let out = assemble_group_markdown(
-            "group_abc",
-            &[
-                result("gpt-5.2", Some("api_1"), None, false),
-                result("gemini-2.5-pro", Some("api_g"), None, false),
-            ],
-        );
-        assert!(out.contains("## Model: gpt-5.2\n[model:gpt-5.2] [thread_id:api_1]"));
-        assert!(out.contains("## Model: gemini-2.5-pro\n[model:gemini-2.5-pro] [thread_id:api_g]"));
-        assert!(!out.contains("#1"));
-    }
-
-    #[test]
-    fn merge_group_entries_preserves_failed_resume_position() {
-        let existing = StoredGroup {
-            id: "group_abc".into(),
-            entries: vec![
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_old_1".into(),
-                },
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_old_2".into(),
-                },
-            ],
-        };
-        let entries = merge_group_entries(
-            Some(&existing),
-            &[
-                result("gpt-5.2", None, Some(0), true),
-                result("gpt-5.2", Some("api_new_2"), Some(1), false),
-            ],
-        )
-        .unwrap();
-        assert_eq!(
-            entries,
-            vec![
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_old_1".into(),
-                },
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_new_2".into(),
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn merge_group_entries_appends_first_turn_successes() {
-        let entries = merge_group_entries(
-            None,
-            &[
-                result("gpt-5.2", Some("api_1"), None, false),
-                result("gpt-5.2", None, None, true),
-                result("gpt-5.2", Some("api_3"), None, false),
-            ],
-        )
-        .unwrap();
-        assert_eq!(
-            entries,
-            vec![
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_1".into(),
-                },
-                GroupEntry {
-                    model: "gpt-5.2".into(),
-                    thread_id: "api_3".into(),
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn single_outcome_propagates_worker_error() {
-        let err = match single_outcome(vec![Err(anyhow::anyhow!("boom"))]) {
-            Ok(_) => panic!("expected error"),
-            Err(e) => e,
-        };
-        assert!(err.to_string().contains("boom"));
-    }
-
-    #[test]
-    fn single_outcome_returns_response_on_success() {
-        let outcome =
-            single_outcome(vec![Ok(result("gpt-5.2", Some("api_1"), None, false))]).unwrap();
-        match outcome {
-            ConsultOutcome::Response {
-                model, thread_id, ..
-            } => {
-                assert_eq!(model, "gpt-5.2");
-                assert_eq!(thread_id.as_deref(), Some("api_1"));
-            }
-            _ => panic!("expected Response"),
-        }
-    }
-
-    #[test]
-    fn multi_outcome_renders_partial_failures_inline() {
-        let jobs = vec![job("gpt-5.2"), job("gemini-2.5-pro")];
-        let outcomes = vec![
-            Ok(result("gpt-5.2", Some("api_1"), None, false)),
-            Err(anyhow::anyhow!("network kaput")),
-        ];
-        let results = collect_group_results(&jobs, outcomes).unwrap();
-        assert_eq!(results.len(), 2);
-        assert!(!results[0].failed);
-        assert!(results[1].failed);
-        assert!(results[1].body.contains("network kaput"));
-        assert_eq!(results[1].model, "gemini-2.5-pro");
-    }
-
-    #[test]
-    fn multi_outcome_bails_when_all_fail() {
-        let jobs = vec![job("gpt-5.2"), job("gemini-2.5-pro")];
-        let outcomes = vec![
-            Err(anyhow::anyhow!("first failed")),
-            Err(anyhow::anyhow!("second failed")),
-        ];
-        let err = match collect_group_results(&jobs, outcomes) {
-            Ok(_) => panic!("expected error"),
-            Err(e) => e,
-        };
-        let msg = err.to_string();
-        assert!(msg.contains("all model consultations failed"));
-        assert!(msg.contains("first failed"));
-        assert!(msg.contains("second failed"));
-    }
-}
+mod tests;
