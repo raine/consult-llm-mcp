@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod test_util;
+
 mod catalog;
 mod cli;
 mod clipboard;

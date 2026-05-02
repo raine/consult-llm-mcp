@@ -1,6 +1,9 @@
 pub mod anthropic_api;
+pub mod anthropic_events;
 pub mod api;
+pub mod api_chat;
 pub mod api_common;
+pub mod api_transport;
 pub mod child_guard;
 pub mod cli_runner;
 pub mod codex_cli;
@@ -10,6 +13,7 @@ pub mod gemini_cli;
 pub mod opencode_cli;
 pub mod sse;
 pub mod stream;
+pub mod tag_splitter;
 pub mod thread_store;
 pub mod types;
 
