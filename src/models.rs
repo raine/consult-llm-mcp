@@ -400,6 +400,14 @@ mod tests {
                     spec.id
                 );
             }
+            if let Some(env) = spec.reasoning_effort_env {
+                assert!(!env.is_empty());
+                assert_eq!(spec.provider, Provider::OpenAI);
+            }
+            if let Some(env) = spec.extra_args_env {
+                assert!(!env.is_empty());
+                assert!(matches!(spec.provider, Provider::Gemini | Provider::OpenAI));
+            }
         }
 
         // Provider model prefixes must not overlap so `Provider::from_model` is unambiguous.

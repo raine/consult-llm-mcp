@@ -119,6 +119,7 @@ impl<'de> Deserialize<'de> for ConfigFile {
                         return Err(D::Error::custom(format!("duplicate field `{key}`")));
                     }
                     let block: ProviderBlock = parse_inner(&key, v)?;
+                    validate_provider_block(provider, &block).map_err(D::Error::custom)?;
                     cfg.providers.insert(provider, block);
                 }
             }
@@ -134,6 +135,23 @@ where
 {
     serde_yaml::from_value(value)
         .map_err(|err| E::custom(format!("invalid value for `{field}`: {err}")))
+}
+
+fn validate_provider_block(provider: Provider, block: &ProviderBlock) -> Result<(), String> {
+    let spec = provider.spec();
+    if block.reasoning_effort.is_some() && spec.reasoning_effort_env.is_none() {
+        return Err(format!(
+            "unsupported provider field `reasoning_effort` for provider `{}`",
+            spec.id
+        ));
+    }
+    if block.extra_args.is_some() && spec.extra_args_env.is_none() {
+        return Err(format!(
+            "unsupported provider field `extra_args` for provider `{}`",
+            spec.id
+        ));
+    }
+    Ok(())
 }
 
 /// Hint shown to users when an unknown top-level key is encountered. Combines the
@@ -279,6 +297,57 @@ mod tests {
         // block must still be rejected by ProviderBlock's deny_unknown_fields.
         let yaml = "openai:\n  not_a_real_field: oops\n";
         assert!(ConfigFile::parse(yaml).is_err());
+    }
+
+    #[test]
+    fn test_parse_rejects_unsupported_reasoning_effort_for_provider() {
+        let err = ConfigFile::parse("anthropic:\n  reasoning_effort: high\n").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("anthropic"));
+        assert!(msg.contains("reasoning_effort"));
+        assert!(msg.contains("unsupported"));
+    }
+
+    #[test]
+    fn test_parse_rejects_unsupported_extra_args_for_provider() {
+        let err = ConfigFile::parse("deepseek:\n  extra_args: --verbose\n").unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("deepseek"));
+        assert!(msg.contains("extra_args"));
+        assert!(msg.contains("unsupported"));
+    }
+
+    #[test]
+    fn test_parse_rejects_every_unsupported_provider_specific_field() {
+        for spec in PROVIDERS {
+            for field in ["reasoning_effort", "extra_args"] {
+                let supported = match field {
+                    "reasoning_effort" => spec.reasoning_effort_env.is_some(),
+                    "extra_args" => spec.extra_args_env.is_some(),
+                    _ => unreachable!(),
+                };
+                if supported {
+                    continue;
+                }
+
+                let yaml = format!("{}:\n  {field}: value\n", spec.id);
+                let err = ConfigFile::parse(&yaml).unwrap_err();
+                let msg = err.to_string();
+                assert!(
+                    msg.contains(spec.id),
+                    "{field} error should name {}: {msg}",
+                    spec.id
+                );
+                assert!(
+                    msg.contains(field),
+                    "{field} error should name field: {msg}"
+                );
+                assert!(
+                    msg.contains("unsupported"),
+                    "{field} error should say unsupported: {msg}"
+                );
+            }
+        }
     }
 
     #[test]
