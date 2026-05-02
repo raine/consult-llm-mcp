@@ -76,11 +76,12 @@ impl ExecutorProvider {
                 let base = provider.api_base_url().map(|s| s.to_string());
                 let idle_timeout = self.idle_timeout;
                 match provider.api_protocol() {
-                    ApiProtocol::OpenAiCompat => Arc::new(ApiExecutor::new(
+                    ApiProtocol::OpenAiCompat(runtime) => Arc::new(ApiExecutor::new(
                         self.agent.clone(),
                         key.to_string(),
                         base,
                         idle_timeout,
+                        runtime,
                     )),
                     ApiProtocol::AnthropicMessages => Arc::new(AnthropicApiExecutor::new(
                         self.agent.clone(),

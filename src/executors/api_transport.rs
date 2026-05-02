@@ -143,12 +143,14 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
 
-    use consult_llm_core::monitoring::RunSpool;
+    use consult_llm_core::monitoring::{RunEvent, RunEventKind, RunMeta, RunSpool};
+    use consult_llm_core::stream_events::ParsedStreamEvent;
 
     use super::super::anthropic_api::AnthropicApiExecutor;
     use super::super::api::ApiExecutor;
     use super::super::types::{ExecutionRequest, LlmExecutor};
     use super::*;
+    use crate::models::{ApiProtocol, Provider};
 
     /// Spin up a one-shot HTTP/1.1 server on 127.0.0.1 that accepts a single
     /// POST, records the request body, and replies with `response_bytes`.
@@ -303,7 +305,15 @@ mod tests {
     }
 
     fn build_request(prompt: &str, model: &str) -> (ExecutionRequest, Arc<Mutex<RunSpool>>) {
-        let spool = Arc::new(Mutex::new(RunSpool::disabled()));
+        build_request_with_spool(prompt, model, RunSpool::disabled())
+    }
+
+    fn build_request_with_spool(
+        prompt: &str,
+        model: &str,
+        spool: RunSpool,
+    ) -> (ExecutionRequest, Arc<Mutex<RunSpool>>) {
+        let spool = Arc::new(Mutex::new(spool));
         let req = ExecutionRequest {
             prompt: prompt.to_string(),
             model: model.to_string(),
@@ -313,6 +323,122 @@ mod tests {
             spool: Arc::clone(&spool),
         };
         (req, spool)
+    }
+
+    fn runtime_for(provider: Provider) -> crate::models::OpenAiCompatRuntime {
+        let ApiProtocol::OpenAiCompat(runtime) = provider.api_protocol() else {
+            panic!("{provider:?} is not OpenAI-compatible");
+        };
+        runtime
+    }
+
+    fn active_spool(model: &str) -> (tempfile::TempDir, RunSpool) {
+        let state = isolate_state_dir();
+        let spool = RunSpool::new(RunMeta {
+            v: 1,
+            run_id: format!("run-{model}"),
+            pid: std::process::id(),
+            started_at: "t".into(),
+            project: "p".into(),
+            cwd: "/tmp".into(),
+            model: model.into(),
+            backend: "api".into(),
+            thread_id: None,
+            task_mode: None,
+            reasoning_effort: None,
+        });
+        (state, spool)
+    }
+
+    fn recorded_thinking_events(run_id: &str) -> Vec<String> {
+        let path = consult_llm_core::monitoring::runs_dir().join(format!("{run_id}.events.jsonl"));
+        let events = std::fs::read_to_string(path).unwrap();
+        events
+            .lines()
+            .filter_map(|line| serde_json::from_str::<RunEvent>(line).ok())
+            .filter_map(|event| match event.kind {
+                RunEventKind::Stream {
+                    event: ParsedStreamEvent::Thinking { text },
+                } => Some(text),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn mock_server_gemini_runtime_metadata_ignores_base_url() {
+        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let (state, spool) = active_spool("gemini-2.5-pro");
+
+        let gemini_sse = b"\
+data: {\"choices\":[{\"delta\":{\"content\":\"<thought>check\"}}]}\n\n\
+data: {\"choices\":[{\"delta\":{\"content\":\"ing</thought>Hello\"}}]}\n\n\
+data: {\"choices\":[{\"delta\":{\"content\":\" world\"},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n\
+";
+        let (base, recorded) = start_mock_server(http_response(gemini_sse));
+        let gemini = ApiExecutor::new(
+            ureq::Agent::new_with_defaults(),
+            "test-gemini-key".to_string(),
+            Some(format!("{base}/custom/")),
+            std::time::Duration::from_secs(5),
+            runtime_for(Provider::Gemini),
+        );
+        let (req, _spool) = build_request_with_spool("hi", "gemini-2.5-pro", spool);
+        let result = gemini.execute(req).expect("gemini execute");
+        assert_eq!(result.response, "Hello world");
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&recorded.lock().unwrap()).expect("gemini req json");
+        assert_eq!(
+            body["extra_body"],
+            serde_json::json!({
+                "google": {
+                    "thinking_config": {
+                        "thinking_level": "high",
+                        "include_thoughts": true
+                    }
+                }
+            })
+        );
+        assert_eq!(
+            recorded_thinking_events("run-gemini-2.5-pro"),
+            vec!["check", "ing"]
+        );
+        drop(state);
+    }
+
+    #[test]
+    fn mock_server_minimax_runtime_metadata_ignores_base_url() {
+        let _xdg_guard = crate::test_util::XDG_STATE_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let (state, spool) = active_spool("MiniMax-M2.7");
+
+        let minimax_sse = b"\
+data: {\"choices\":[{\"delta\":{\"content\":\"<think>plan</think>Answer\"}}]}\n\n\
+data: {\"choices\":[{\"delta\":{\"content\":\" done\"},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n\
+";
+        let (base, recorded) = start_mock_server(http_response(minimax_sse));
+        let minimax = ApiExecutor::new(
+            ureq::Agent::new_with_defaults(),
+            "test-minimax-key".to_string(),
+            Some(format!("{base}/custom/")),
+            std::time::Duration::from_secs(5),
+            runtime_for(Provider::MiniMax),
+        );
+        let (req, _spool) = build_request_with_spool("hi", "MiniMax-M2.7", spool);
+        let result = minimax.execute(req).expect("minimax execute");
+        assert_eq!(result.response, "Answer done");
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&recorded.lock().unwrap()).expect("minimax req json");
+        assert!(body.get("extra_body").is_none());
+        assert_eq!(recorded_thinking_events("run-MiniMax-M2.7"), vec!["plan"]);
+        drop(state);
     }
 
     #[test]
@@ -336,6 +462,7 @@ data: [DONE]\n\n\
             "test-openai-key".to_string(),
             Some(format!("{openai_base}/v1/")),
             std::time::Duration::from_secs(5),
+            runtime_for(Provider::OpenAI),
         );
         let (req, _spool) = build_request("hi there", "gpt-test");
         let result = openai.execute(req).expect("openai execute");

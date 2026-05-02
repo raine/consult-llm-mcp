@@ -7,6 +7,7 @@ use super::api_common::{ApiChatSession, warn_unsupported_file_paths};
 use super::api_transport::{StreamLabels, StreamRequest, run_stream};
 use super::tag_splitter::TagSplitter;
 use super::types::{ExecuteResult, ExecutionRequest, LlmExecutor, LlmExecutorCapabilities};
+use crate::models::{OpenAiCompatRuntime, OpenAiExtraBody};
 
 const LABELS: StreamLabels = StreamLabels {
     request: "API request",
@@ -35,32 +36,12 @@ struct StreamOptions {
     include_usage: bool,
 }
 
-/// Per-provider quirks of the OpenAI-compatible chat-completions stream.
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Dialect {
-    /// No tag-based thinking in content.
-    Generic,
-    /// Gemini wraps thought summaries in <thought>...</thought> in `delta.content`.
-    Gemini,
-    /// MiniMax M2 embeds <think>...</think> in `delta.content`.
-    MiniMax,
-}
-
-fn detect_dialect(base_url: &str) -> Dialect {
-    if base_url.contains("generativelanguage.googleapis.com") {
-        Dialect::Gemini
-    } else if base_url.contains("api.minimax.io") {
-        Dialect::MiniMax
-    } else {
-        Dialect::Generic
-    }
-}
-
 pub struct ApiExecutor {
     agent: ureq::Agent,
     api_key: String,
     base_url: String,
     idle_timeout: Duration,
+    runtime: OpenAiCompatRuntime,
     capabilities: LlmExecutorCapabilities,
 }
 
@@ -70,12 +51,14 @@ impl ApiExecutor {
         api_key: String,
         base_url: Option<String>,
         idle_timeout: Duration,
+        runtime: OpenAiCompatRuntime,
     ) -> Self {
         Self {
             agent,
             api_key,
             base_url: base_url.unwrap_or_else(|| "https://api.openai.com/v1/".to_string()),
             idle_timeout,
+            runtime,
             capabilities: LlmExecutorCapabilities {
                 is_cli: false,
                 supports_threads: true,
@@ -83,6 +66,21 @@ impl ApiExecutor {
             },
         }
     }
+}
+
+fn extra_body(runtime: OpenAiCompatRuntime) -> Option<serde_json::Value> {
+    runtime
+        .extra_body
+        .map(|OpenAiExtraBody::GoogleThinkingConfig| {
+            serde_json::json!({
+                "google": {
+                    "thinking_config": {
+                        "thinking_level": "high",
+                        "include_thoughts": true
+                    }
+                }
+            })
+        })
 }
 
 impl LlmExecutor for ApiExecutor {
@@ -134,18 +132,7 @@ impl LlmExecutor for ApiExecutor {
             content: prompt.clone(),
         });
 
-        let dialect = detect_dialect(&self.base_url);
-        let extra_body = match dialect {
-            Dialect::Gemini => Some(serde_json::json!({
-                "google": {
-                    "thinking_config": {
-                        "thinking_level": "high",
-                        "include_thoughts": true
-                    }
-                }
-            })),
-            _ => None,
-        };
+        let extra_body = extra_body(self.runtime);
 
         let request = ChatRequest {
             model: model.clone(),
@@ -158,11 +145,10 @@ impl LlmExecutor for ApiExecutor {
         };
         let body = serde_json::to_vec(&request)?;
 
-        let splitter = match dialect {
-            Dialect::Gemini => Some(TagSplitter::new("<thought>", "</thought>")),
-            Dialect::MiniMax => Some(TagSplitter::new("<think>", "</think>")),
-            Dialect::Generic => None,
-        };
+        let splitter = self
+            .runtime
+            .think_tags
+            .map(|tags| TagSplitter::new(tags.start, tags.end));
         let handler = ChatStreamHandler::new(splitter, &spool);
 
         let outcome = run_stream(
@@ -182,27 +168,5 @@ impl LlmExecutor for ApiExecutor {
         )?;
 
         session.commit_turn(prompt, model, outcome.response, outcome.usage)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn detect_dialect_known_providers() {
-        assert_eq!(
-            detect_dialect("https://generativelanguage.googleapis.com/v1beta/openai/"),
-            Dialect::Gemini
-        );
-        assert_eq!(
-            detect_dialect("https://api.minimax.io/v1"),
-            Dialect::MiniMax
-        );
-        assert_eq!(
-            detect_dialect("https://api.openai.com/v1/"),
-            Dialect::Generic
-        );
-        assert_eq!(detect_dialect("https://api.deepseek.com"), Dialect::Generic);
     }
 }

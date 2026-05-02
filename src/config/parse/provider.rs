@@ -237,7 +237,10 @@ mod tests {
             Provider::MiniMax,
             Provider::Grok,
         ] {
-            assert_eq!(p.api_protocol(), crate::models::ApiProtocol::OpenAiCompat);
+            assert!(matches!(
+                p.api_protocol(),
+                crate::models::ApiProtocol::OpenAiCompat(_)
+            ));
         }
     }
 

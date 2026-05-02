@@ -27,12 +27,29 @@ pub enum Provider {
     Grok,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThinkTagSpec {
+    pub start: &'static str,
+    pub end: &'static str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenAiExtraBody {
+    GoogleThinkingConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct OpenAiCompatRuntime {
+    pub extra_body: Option<OpenAiExtraBody>,
+    pub think_tags: Option<ThinkTagSpec>,
+}
+
 /// HTTP wire-format family used when calling the provider's native API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ApiProtocol {
     /// OpenAI-compatible `/chat/completions` — used by OpenAI, Gemini (OpenAI-compat
     /// endpoint), DeepSeek, MiniMax.
-    OpenAiCompat,
+    OpenAiCompat(OpenAiCompatRuntime),
     /// Anthropic `/v1/messages` — `x-api-key` auth, top-level `system`, content-block
     /// responses, distinct usage shape.
     AnthropicMessages,
@@ -102,7 +119,13 @@ pub static PROVIDERS: &[ProviderSpec] = &[
         id: "gemini",
         model_prefixes: &["gemini-"],
         api_base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai/"),
-        api_protocol: ApiProtocol::OpenAiCompat,
+        api_protocol: ApiProtocol::OpenAiCompat(OpenAiCompatRuntime {
+            extra_body: Some(OpenAiExtraBody::GoogleThinkingConfig),
+            think_tags: Some(ThinkTagSpec {
+                start: "<thought>",
+                end: "</thought>",
+            }),
+        }),
         builtin_models: &[
             "gemini-2.5-pro",
             "gemini-3-pro-preview",
@@ -129,7 +152,10 @@ pub static PROVIDERS: &[ProviderSpec] = &[
         id: "deepseek",
         model_prefixes: &["deepseek-"],
         api_base_url: Some("https://api.deepseek.com"),
-        api_protocol: ApiProtocol::OpenAiCompat,
+        api_protocol: ApiProtocol::OpenAiCompat(OpenAiCompatRuntime {
+            extra_body: None,
+            think_tags: None,
+        }),
         builtin_models: &["deepseek-v4-pro"],
         selector_priorities: &["deepseek-v4-pro"],
         api_key_env: "DEEPSEEK_API_KEY",
@@ -148,7 +174,10 @@ pub static PROVIDERS: &[ProviderSpec] = &[
         id: "openai",
         model_prefixes: &["gpt-"],
         api_base_url: None,
-        api_protocol: ApiProtocol::OpenAiCompat,
+        api_protocol: ApiProtocol::OpenAiCompat(OpenAiCompatRuntime {
+            extra_body: None,
+            think_tags: None,
+        }),
         builtin_models: &[
             "gpt-5.2",
             "gpt-5.4",
@@ -179,7 +208,13 @@ pub static PROVIDERS: &[ProviderSpec] = &[
         id: "minimax",
         model_prefixes: &["MiniMax-"],
         api_base_url: Some("https://api.minimax.io/v1"),
-        api_protocol: ApiProtocol::OpenAiCompat,
+        api_protocol: ApiProtocol::OpenAiCompat(OpenAiCompatRuntime {
+            extra_body: None,
+            think_tags: Some(ThinkTagSpec {
+                start: "<think>",
+                end: "</think>",
+            }),
+        }),
         builtin_models: &["MiniMax-M2.7"],
         selector_priorities: &["MiniMax-M2.7"],
         api_key_env: "MINIMAX_API_KEY",
@@ -217,7 +252,10 @@ pub static PROVIDERS: &[ProviderSpec] = &[
         id: "grok",
         model_prefixes: &["grok-"],
         api_base_url: Some("https://api.x.ai/v1"),
-        api_protocol: ApiProtocol::OpenAiCompat,
+        api_protocol: ApiProtocol::OpenAiCompat(OpenAiCompatRuntime {
+            extra_body: None,
+            think_tags: None,
+        }),
         builtin_models: &["grok-4.3"],
         selector_priorities: &["grok-4.3"],
         api_key_env: "XAI_API_KEY",
