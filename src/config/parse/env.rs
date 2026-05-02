@@ -17,6 +17,13 @@ pub fn parse_extra_args(raw: Option<&str>, env_var: &str) -> Result<Vec<String>,
     })
 }
 
+pub fn resolve_api_idle_timeout(env: &impl Fn(&str) -> Option<String>) -> std::time::Duration {
+    let secs = env("CONSULT_LLM_API_IDLE_TIMEOUT_SECS")
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(300);
+    std::time::Duration::from_secs(secs)
+}
+
 pub fn resolve_codex_reasoning_effort(
     env: &impl Fn(&str) -> Option<String>,
 ) -> Result<String, ConfigError> {
@@ -137,5 +144,32 @@ mod tests {
             config.system_prompt_path,
             Some("/tmp/prompt.txt".to_string())
         );
+    }
+
+    #[test]
+    fn test_parse_config_api_idle_timeout_valid() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_API_IDLE_TIMEOUT_SECS", "42"),
+        ]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(config.api_idle_timeout, std::time::Duration::from_secs(42));
+    }
+
+    #[test]
+    fn test_parse_config_api_idle_timeout_defaults_when_absent() {
+        let env = env_from(&[("OPENAI_API_KEY", "key")]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(config.api_idle_timeout, std::time::Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_parse_config_api_idle_timeout_defaults_when_invalid() {
+        let env = env_from(&[
+            ("OPENAI_API_KEY", "key"),
+            ("CONSULT_LLM_API_IDLE_TIMEOUT_SECS", "not-a-number"),
+        ]);
+        let (config, _) = parse_config(env).unwrap();
+        assert_eq!(config.api_idle_timeout, std::time::Duration::from_secs(300));
     }
 }

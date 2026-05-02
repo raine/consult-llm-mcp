@@ -22,6 +22,7 @@ pub fn parse_config(
     let resolved_default = defaults::resolve_default_model(&env, &enabled_models)?;
     let resolved_default_models = defaults::resolve_default_models(&env, &enabled_models)?;
 
+    let api_idle_timeout = env::resolve_api_idle_timeout(&env);
     let codex_reasoning_effort = env::resolve_codex_reasoning_effort(&env)?;
     let codex_extra_args = parse_extra_args(
         env("CONSULT_LLM_CODEX_EXTRA_ARGS").as_deref(),
@@ -39,6 +40,7 @@ pub fn parse_config(
         codex_reasoning_effort,
         codex_extra_args,
         gemini_extra_args,
+        api_idle_timeout,
         system_prompt_path: env("CONSULT_LLM_SYSTEM_PROMPT_PATH"),
         allowed_models: enabled_models.clone(),
     };

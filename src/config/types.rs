@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::models::Provider;
 use crate::models::selector_priorities;
@@ -54,6 +55,7 @@ pub struct Config {
     pub codex_reasoning_effort: String,
     pub codex_extra_args: Vec<String>,
     pub gemini_extra_args: Vec<String>,
+    pub api_idle_timeout: Duration,
     pub system_prompt_path: Option<String>,
     pub allowed_models: Vec<String>,
 }
