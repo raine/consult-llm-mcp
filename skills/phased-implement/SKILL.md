@@ -241,9 +241,7 @@ context but do **not** modify it.
 
 ## What to do
 
-1. Run `/implement <implement_flags...> <description>` to plan and implement
-   this phase. The /implement skill will write its own per-phase plan,
-   review it, implement it, run a red-team pass, and commit on success.
+1. Invoke the `/implement` slash command exactly as `/implement <implement_flags...> <description>` to plan and implement this phase. Do not inline, summarize, emulate, or manually perform the `/implement` workflow yourself. If the slash command cannot be invoked, stop and write `status=failed` in the sentinel. The /implement skill will write its own per-phase plan, run mandatory plan and verification reviews unless `--no-review` is explicitly present in `implement_flags`, implement it, and commit on success.
 2. **Do not initiate `/merge` yourself.** After your work is committed and
    the sentinel is written (step 3), wait. The coordinator will send you
    `/merge --keep` as an explicit instruction once it has verified your

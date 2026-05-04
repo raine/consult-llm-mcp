@@ -173,7 +173,7 @@ Guidelines: exact paths only, never "somewhere in src/". Each task small (2-5 mi
 
 ## Phase 3: Plan review
 
-Skip if `--no-review`. Reviewers receive the plan file and relevant source files; they must produce structured output.
+Review is mandatory unless `--no-review` was explicitly passed. Do not skip plan review because the task seems small, obvious, mechanical, or already validated locally. Reviewers receive the plan file and relevant source files; they must produce structured output.
 
 Invoke `consult-llm` once with one `-m <selector>` per reviewer, `-f <plan path>`, `-f <relevant source>`. With `--consult-first`, continue from `CONSULT_THREAD_ID` via `-t <id>` and additionally attach `-f <context bundle>`, `-f <ADR>`.
 
@@ -340,7 +340,7 @@ If the third hypothesis fails, stop. Record blocker, hypotheses, and unanswered 
 
 ## Phase 6: Verification review
 
-Skip if `--no-review`, or if the diff is mechanically trivial (renames, version bumps, comment/string typo fixes, formatting/whitespace only). The agent decides this — not the reviewer.
+Verification review is mandatory unless `--no-review` was explicitly passed. Do not skip verification because the task seems small, because tests passed, or because the implementation appears low-risk. The only non-flag exception is a strictly mechanical diff: renames, version bumps, comment/string typo fixes, or formatting/whitespace only. If any executable behavior, tests, public contract, generated output, or control flow changed, run Phase 6. When using the mechanical exception, state the exact reason in the Phase 7 summary.
 
 Re-list changed files against `START_HEAD`:
 
