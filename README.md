@@ -42,6 +42,8 @@ is cheap, and sometimes the other model is the one that finds the path forward.
 2. Trigger with a slash command: `/consult`, `/debate`, `/collab`
 3. The skill pipes your prompt into `consult-llm`, which calls the backend and streams the response back inline
 
+For the more detailed flow, [continue below](#how-it-really-works).
+
 ```
 > The hint unlocking is still broken after your fix. Ask gemini
 
@@ -802,6 +804,59 @@ consult-llm-monitor
 
 It reads the per-run spool written by `consult-llm`, including active snapshots,
 run metadata, event streams, and shared history.
+
+## How it really works
+
+`consult-llm` keeps orchestration in the host agent and uses the CLI as a
+small transport boundary. Instead of manually copying context into a browser LLM
+or juggling another agent TUI, your current agent can hand off a focused prompt,
+stream the answer back inline, and continue the conversation from there.
+
+That boundary also lets the host agent and external model talk to each other in
+multi-turn workflows. `/consult` can ask for a second opinion, `/debate` can
+have models critique each other, and threaded CLI backends can continue the same
+conversation without leaving the agent session.
+
+The installed skills are reusable workflow definitions; the backend is just
+configuration. You can use Codex CLI for personal projects, Cursor CLI at work,
+direct APIs in CI, or different default model lists per repo while keeping the
+same `/consult`, `/debate`, and `/review-panel` habits.
+
+At runtime, the installed skill decides what context to include, formats the
+prompt, and invokes `consult-llm` with stdin plus `-f` file attachments. API
+backends receive only that explicit prompt and file context. CLI-agent backends
+such as Gemini CLI, Codex CLI etc. can also inspect the working tree themselves,
+depending on their own tools and permissions. The CLI resolves layered
+configuration, selects the requested backend, streams the model response to
+stdout, and records run metadata for logging and monitoring.
+
+If you like sequence diagrams, here's one for you:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as Host agent<br/>(Claude Code, Codex, OpenCode)
+    participant Skill as Workflow skill<br/>(/consult, /debate, /collab)
+    participant CLI as consult-llm CLI
+    participant Config as Config resolver
+    participant Backend as Backend adapter<br/>(API or local CLI)
+    participant Model as External model
+    participant Logs as Logs / monitor spool
+
+    User->>Agent: Ask for a second opinion
+    Agent->>Skill: Load matching workflow skill
+    Skill->>Skill: Gather prompt and file context
+    Skill->>CLI: Pipe prompt via stdin<br/>pass files with -f
+    CLI->>Config: Resolve layered config and model selectors
+    Config-->>CLI: Backend, model, prompt settings
+    CLI->>Backend: Dispatch normalized request
+    Backend->>Model: API request or local CLI invocation
+    Model-->>Backend: Streaming response
+    Backend-->>CLI: Normalized stream and metadata
+    CLI-->>Logs: Write prompt, response, usage, run state
+    CLI-->>Agent: Stream response on stdout
+    Agent-->>User: Summarize and apply next steps
+```
 
 ## Skills
 
