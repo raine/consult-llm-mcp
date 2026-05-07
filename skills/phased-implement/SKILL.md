@@ -38,6 +38,7 @@ Strip flags from arguments to get the task description.
 - **Coordinator never writes source.** All implementation happens inside spawned worktree agents via `/implement`.
 - **`workmux done` ≠ success.** A phase is successful only when its agent has written a result sentinel reporting `status=success`. See "Phase result sentinel" below.
 - **Merges are serialized.** At most one `/merge` in flight globally.
+- **Conflicts are acceptable.** Phase boundaries prevent duplicate feature ownership, not every textual conflict. Do not forbid a phase from touching a file just because another phase may also edit it; only split or sequence phases when they would implement the same behavior or require incompatible designs.
 - **Drain before dispatch.** `wait --any` returns on the first transition only. Before spawning, re-check `workmux status` and merge every handle in `done` — siblings that finished in the same window must not be left for the next wait.
 - **`/merge` is invoked with `--keep`** so the coordinator can verify success before destroying the worktree. Coordinator runs `workmux remove <handle>` after verification.
 - **Dependents only spawn when all predecessors are `merged`.** No exceptions.
@@ -80,7 +81,7 @@ If `--plan <path>` was provided: copy the file to `$PLAN_DIR/plan.md`. Skip 1.b.
 
 Otherwise generate via `consult-llm`. With `--consult-first`, mirror `implement` Phase 2A: write a context bundle, consult all selectors with `--task plan`, capture the group `thread_id`, write proposals + ADR, then synthesize. Without `--consult-first`, do a single `consult-llm --task plan` call.
 
-The generated plan must be a markdown file with a fenced YAML block defining the phase DAG (schema below). Write it to `$PLAN_DIR/plan.md`.
+The generated plan must be a markdown file with a fenced YAML block defining the phase DAG (schema below). Write it to `$PLAN_DIR/plan.md`. Plan phases around coherent behavior and ownership. Do not add hard exclusions or TODO-only deferrals merely to avoid possible merge conflicts; LLM agents are expected to resolve ordinary conflicts during the serialized `/merge --keep` step.
 
 ### 1.b — Plan review
 
@@ -325,7 +326,7 @@ When a handle transitions to `done`:
 
    The sentinel's pre-rebase sha is **never** the ancestry-check input.
 
-6. **Drift check.** If `INTEGRATION_BRANCH` advanced by commits not authored by phased-implement (external commits during the run), note it and continue. If a parallel sibling has produced conflicts, the next sibling's `/merge --keep` will surface them; treat that as a normal failure.
+6. **Drift check.** If `INTEGRATION_BRANCH` advanced by commits not authored by phased-implement (external commits during the run), note it and continue. If a parallel sibling has produced conflicts, the next sibling's `/merge --keep` will surface them for resolution. Treat unresolved or abandoned conflicts as a merge failure, not the mere existence of conflicts.
 
 ## Phase 4 — Summary
 
