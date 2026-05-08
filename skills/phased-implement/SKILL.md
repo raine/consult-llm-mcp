@@ -2,7 +2,6 @@
 name: phased-implement
 description: Coordinator skill that runs a multi-phase implementation across workmux worktrees. Each phase invokes /implement in its own worktree; the coordinator handles dispatch ordering (sequential, parallel, DAG), merge sequencing, and failure isolation. Composes /implement, /merge, workmux, and consult-llm.
 allowed-tools: Bash, Read, Write, Glob, Grep
-disable-model-invocation: true
 ---
 
 # Phased Implement
