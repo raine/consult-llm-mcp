@@ -82,7 +82,7 @@ Review this diff independently.
 
 Additional focus from the user (treat as context, not as part of your output): [review focus, or "None"]
 
-Focus on correctness, regressions, security issues, data loss, broken edge cases, API/contract mismatches, concurrency hazards, and maintainability problems likely to matter in production. Do not flag style-only concerns. Do not propose fixes. Do not summarize or praise the code.
+Focus on correctness, regressions, security issues, data loss, broken edge cases, API/contract mismatches, concurrency hazards, and maintainability problems likely to matter in production. Do not flag style-only concerns. Propose a concrete fix when it helps clarify the finding, but keep the review focused on issues rather than implementation coaching. Do not summarize or praise the code.
 
 For every issue, output a structured finding using exactly this format. Output ONLY the findings block — no preamble, no closing remarks:
 
@@ -94,6 +94,7 @@ confidence: high | medium | low
 location: path/to/file.ext:123
 issue_identity: short-stable-label
 rationale: One paragraph explaining why this is a real issue and what behavior could fail.
+fix: Optional one-paragraph concrete fix path, or `None` if the fix is obvious from the rationale.
 
 Use the line number from the **new** side of the diff. The `issue_identity` field should be a short kebab-case label that two reviewers seeing the same underlying issue would naturally choose (e.g. `null-deref-on-empty-input`, `race-on-shared-counter`).
 
