@@ -433,7 +433,7 @@ Apply only `Verified Findings` that survived verification, are `must-fix`, have 
 
 1. Re-read the file and apply the smallest correct change.
 2. Run the validation command for the touched scope.
-3. **Commit each fix separately** with a lowercase imperative subject and a body that names the failure mode prevented.
+3. **Commit each logical fix separately, one by one.** Use a lowercase imperative subject and a body that names the failure mode prevented.
 
 Do **not** auto-fix `should-fix`, `Unverified Hypotheses`, `Test Coverage Gaps`, or `Maintainability Notes`. List them in the Phase 7 summary.
 
