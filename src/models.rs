@@ -38,6 +38,20 @@ pub enum OpenAiExtraBody {
     GoogleThinkingConfig,
 }
 
+impl OpenAiExtraBody {
+    pub fn applies_to_model(self, model: &str) -> bool {
+        match self {
+            Self::GoogleThinkingConfig => is_gemini_3_model(model),
+        }
+    }
+}
+
+fn is_gemini_3_model(model: &str) -> bool {
+    model
+        .strip_prefix("gemini-")
+        .is_some_and(|rest| rest == "3" || rest.starts_with("3-") || rest.starts_with("3."))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct OpenAiCompatRuntime {
     pub extra_body: Option<OpenAiExtraBody>,
@@ -369,6 +383,19 @@ mod tests {
                 Provider::from_model(model).unwrap_or_else(|| panic!("no provider for {model:?}"));
             assert_eq!(got, *want, "provider mismatch for {model:?}");
         }
+    }
+
+    #[test]
+    fn google_thinking_config_applies_only_to_gemini_3_family() {
+        let policy = OpenAiExtraBody::GoogleThinkingConfig;
+        assert!(policy.applies_to_model("gemini-3"));
+        assert!(policy.applies_to_model("gemini-3-pro-preview"));
+        assert!(policy.applies_to_model("gemini-3.1-pro-preview"));
+        assert!(policy.applies_to_model("gemini-3-flash-preview"));
+        assert!(!policy.applies_to_model("gemini-2.5-pro"));
+        assert!(!policy.applies_to_model("gemini-30-pro-preview"));
+        assert!(!policy.applies_to_model("notgemini-3-pro-preview"));
+        assert!(!policy.applies_to_model("gpt-5.5"));
     }
 
     #[test]

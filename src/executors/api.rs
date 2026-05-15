@@ -68,19 +68,21 @@ impl ApiExecutor {
     }
 }
 
-fn extra_body(runtime: OpenAiCompatRuntime) -> Option<serde_json::Value> {
-    runtime
-        .extra_body
-        .map(|OpenAiExtraBody::GoogleThinkingConfig| {
-            serde_json::json!({
-                "google": {
-                    "thinking_config": {
-                        "thinking_level": "high",
-                        "include_thoughts": true
+fn extra_body(runtime: OpenAiCompatRuntime, model: &str) -> Option<serde_json::Value> {
+    runtime.extra_body.and_then(|extra_body| {
+        extra_body
+            .applies_to_model(model)
+            .then(|| match extra_body {
+                OpenAiExtraBody::GoogleThinkingConfig => serde_json::json!({
+                    "google": {
+                        "thinking_config": {
+                            "thinking_level": "high",
+                            "include_thoughts": true
+                        }
                     }
-                }
+                }),
             })
-        })
+    })
 }
 
 impl LlmExecutor for ApiExecutor {
@@ -132,7 +134,7 @@ impl LlmExecutor for ApiExecutor {
             content: prompt.clone(),
         });
 
-        let extra_body = extra_body(self.runtime);
+        let extra_body = extra_body(self.runtime, &model);
 
         let request = ChatRequest {
             model: model.clone(),

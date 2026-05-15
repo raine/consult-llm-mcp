@@ -400,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn mock_server_gemini_runtime_metadata_ignores_base_url() {
+    fn mock_server_gemini_25_keeps_thought_tags_without_google_thinking_config() {
         let _xdg_guard = crate::test_util::XDG_STATE_LOCK
             .lock()
             .unwrap_or_else(|p| p.into_inner());
@@ -426,6 +426,34 @@ data: [DONE]\n\n\
 
         let body: serde_json::Value =
             serde_json::from_slice(&recorded.lock().unwrap()).expect("gemini req json");
+        assert!(body.get("extra_body").is_none());
+        assert_eq!(
+            recorded_thinking_events("run-gemini-2.5-pro"),
+            vec!["check", "ing"]
+        );
+        drop(state);
+    }
+
+    #[test]
+    fn mock_server_gemini_3_includes_google_thinking_level() {
+        let gemini_sse = b"\
+data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"finish_reason\":\"stop\"}]}\n\n\
+data: [DONE]\n\n\
+";
+        let (base, recorded, _headers) = start_mock_server(http_response(gemini_sse));
+        let gemini = ApiExecutor::new(
+            ureq::Agent::new_with_defaults(),
+            "test-gemini-key".to_string(),
+            Some(format!("{base}/custom/")),
+            std::time::Duration::from_secs(5),
+            runtime_for(Provider::Gemini),
+        );
+        let (req, _spool) = build_request("hi", "gemini-3.1-pro-preview");
+        let result = gemini.execute(req).expect("gemini 3 execute");
+        assert_eq!(result.response, "Hello");
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&recorded.lock().unwrap()).expect("gemini 3 req json");
         assert_eq!(
             body["extra_body"],
             serde_json::json!({
@@ -437,11 +465,6 @@ data: [DONE]\n\n\
                 }
             })
         );
-        assert_eq!(
-            recorded_thinking_events("run-gemini-2.5-pro"),
-            vec!["check", "ing"]
-        );
-        drop(state);
     }
 
     #[test]
