@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.0.12 (2026-05-15)
+
+- Gemini 2.5 API calls no longer receive Gemini 3 thinking configuration
+
 ## v3.0.10 (2026-05-01)
 
 - Added Grok 4.3 as a first-class API model, including configuration docs and cost estimates for xAI runs
